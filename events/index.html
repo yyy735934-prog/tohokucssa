@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>活动管理平台</title>
+</head>
+<body>
+  <div id="app">加载中…</div>
+  <noscript>请启用 JavaScript</noscript>
+  <script type="module" src="/src/main.js"></script>
+  <script type="module">
+    window.addEventListener('error', (e) => {
+      document.getElementById('app').innerHTML = '<pre style="color:red;padding:20px">JS Error: ' + e.message + '\n' + (e.filename||'') + ':' + (e.lineno||'') + '</pre>'
+    })
+  </script>
+</body>
+</html>

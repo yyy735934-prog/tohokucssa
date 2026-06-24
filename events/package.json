@@ -1,0 +1,25 @@
+{
+  "name": "event-platform",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev:web": "vite --config web/vite.config.js",
+    "dev:admin": "vite --config admin/vite.config.js",
+    "build:web": "vite build --config web/vite.config.js",
+    "build:admin": "vite build --config admin/vite.config.js",
+    "build": "npm run build:web && npm run build:admin",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "hono": "^4.7.10",
+    "vite": "^6.3.5",
+    "wrangler": "^4.14.0"
+  }
+}

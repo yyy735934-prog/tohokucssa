@@ -1,0 +1,37 @@
+name = "event-platform"
+main = "worker/index.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+not_found_handling = "none"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "event-platform-db"
+database_id = "68a64b77-9303-4349-b6b5-d4a4c61ef4c3"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "be453d45637e4240a5dfa3768485c387"
+
+[ai]
+binding = "AI"
+
+# Custom domain (zone must be in the same Cloudflare account)
+[[routes]]
+pattern = "events.tohokucssa.org"
+custom_domain = true
+
+# Cron: daily 9am JST (0:00 UTC) — send event reminders + check-in codes
+[triggers]
+crons = ["0 0 * * *"]
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "event-images"
+
+# Email: set RESEND_API_KEY and EMAIL_FROM as secrets via wrangler secret put
+
