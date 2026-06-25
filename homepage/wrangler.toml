@@ -1,0 +1,13 @@
+name = "tohokucssa-homepage"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[routes]]
+pattern = "tohokucssa.org"
+custom_domain = true

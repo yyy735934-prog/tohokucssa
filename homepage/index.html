@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>我们在東北</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>" />
+  <style>
+    :root {
+      --bg: #f6f8fc;
+      --card: rgba(255,255,255,.92);
+      --text: #172033;
+      --muted: #64748b;
+      --line: rgba(148,163,184,.22);
+      --primary: #2563eb;
+      --primary-2: #7c3aed;
+      --danger: #ef4444;
+      --safe: #16a34a;
+      --warn: #f97316;
+      --shadow: 0 12px 32px rgba(15,23,42,.08);
+      --radius: 22px;
+      --nav-h: 78px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(37,99,235,.16), transparent 34rem),
+        linear-gradient(180deg, #eef4ff 0, var(--bg) 22rem);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    a { color: inherit; text-decoration: none; }
+
+    .app {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding: max(12px, env(safe-area-inset-top)) 12px calc(var(--nav-h) + 26px);
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 2px 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      object-fit: contain;
+      flex: 0 0 auto;
+    }
+    .brand h1 { margin: 0; font-size: clamp(16px, 4vw, 22px); line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .brand p { margin: 3px 0 0; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lang {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.72);
+      padding: 9px 11px;
+      border-radius: 999px;
+      font-weight: 750;
+      color: #334155;
+      flex: 0 0 auto;
+    }
+
+    .search {
+      position: sticky;
+      top: max(8px, env(safe-area-inset-top));
+      z-index: 5;
+      margin-bottom: 12px;
+    }
+    .search input {
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: rgba(255,255,255,.96);
+      border-radius: 18px;
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+      font-size: 15px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .section { padding: 16px; }
+    .head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .head h2 { margin: 0; font-size: 18px; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      color: white;
+      background: var(--primary);
+      border-radius: 999px;
+      padding: 6px 9px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .tag.danger { background: var(--danger); }
+    .tag.safe { background: var(--safe); }
+    .tag.warn { background: var(--warn); }
+    .muted { color: var(--muted); }
+
+    .hero {
+      display: grid;
+      gap: 12px;
+    }
+    .main-alert {
+      padding: 18px;
+      background: linear-gradient(135deg, #fff7ed, #fff 52%, #eff6ff);
+    }
+    .main-alert h2 { margin: 0 0 6px; font-size: clamp(22px, 6vw, 34px); letter-spacing: -.04em; }
+    .main-alert p { margin: 0 0 14px; color: var(--muted); line-height: 1.55; }
+    .btn-row { display: flex; gap: 9px; flex-wrap: wrap; }
+    .btn {
+      border: 0;
+      border-radius: 14px;
+      padding: 11px 14px;
+      color: white;
+      background: var(--primary);
+      font-weight: 850;
+      box-shadow: 0 10px 22px rgba(37,99,235,.18);
+    }
+    .btn.light {
+      color: var(--primary);
+      background: #fff;
+      border: 1px solid rgba(37,99,235,.22);
+      box-shadow: none;
+    }
+
+    .priority {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .priority-card {
+      min-height: 92px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+      transition: .18s ease;
+    }
+    .priority-card:active, .entry:active, .quick:active { transform: scale(.985); }
+    .priority-card span { color: var(--muted); font-size: 12px; }
+    .priority-card b { font-size: 16px; }
+
+    .quick-row {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 38%;
+      gap: 10px;
+      overflow-x: auto;
+      padding: 1px 2px 10px;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+    }
+    .quick-row::-webkit-scrollbar { display: none; }
+    .quick {
+      scroll-snap-align: start;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 18px;
+      padding: 13px;
+      min-height: 96px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .quick i, .entry i { font-style: normal; font-size: 24px; line-height: 1; }
+    .quick b { font-size: 15px; }
+    .quick small { color: var(--muted); font-size: 12px; }
+
+
+    .service-tabs {
+      display: flex;
+      gap: 9px;
+      overflow-x: auto;
+      padding: 2px 2px 10px;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+    }
+    .service-tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      scroll-snap-align: start;
+      min-width: 122px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 17px;
+      padding: 11px;
+      text-align: left;
+      transition: .18s ease;
+    }
+    .tab.active {
+      border-color: rgba(37,99,235,.36);
+      background: linear-gradient(135deg, #eff6ff, #fff);
+      box-shadow: 0 8px 18px rgba(37,99,235,.12);
+    }
+    .tab:active, .service-card:active { transform: scale(.985); }
+    .tab b { display: block; font-size: 14px; margin-bottom: 3px; }
+    .tab small { display: block; color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .service-panel {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 9px;
+      margin-top: 2px;
+    }
+    .service-card {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 18px;
+      padding: 12px;
+      min-height: 88px;
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      align-items: center;
+      gap: 11px;
+      text-align: left;
+    }
+    .service-card .icon {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: #eff6ff;
+      font-size: 22px;
+    }
+    .service-copy b { display: block; margin-bottom: 4px; font-size: 15px; }
+    .service-copy small { display: block; color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+    .portal {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .entry {
+      min-height: 86px;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 18px;
+      padding: 12px 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      text-align: center;
+    }
+    .entry b { font-size: 13px; }
+
+    .assist textarea {
+      width: 100%;
+      min-height: 94px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 13px;
+      outline: 0;
+      line-height: 1.55;
+      background: #fff;
+    }
+    .assist-note {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 10px 0 12px;
+    }
+    .assist-note div {
+      background: #f8fafc;
+      border-radius: 14px;
+      padding: 9px;
+      color: #475569;
+      font-size: 12px;
+    }
+    .result {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      border-left: 4px solid var(--primary);
+      background: #fff;
+      border-radius: 14px;
+      color: #334155;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .map {
+      height: 280px;
+      margin-top: 10px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 20px;
+      background:
+        linear-gradient(90deg, rgba(37,99,235,.08) 1px, transparent 1px),
+        linear-gradient(rgba(37,99,235,.08) 1px, transparent 1px),
+        radial-gradient(circle at 68% 34%, rgba(22,163,74,.2), transparent 15%),
+        radial-gradient(circle at 30% 70%, rgba(249,115,22,.18), transparent 16%),
+        #eef6ff;
+      background-size: 30px 30px, 30px 30px, auto, auto, auto;
+    }
+    .road {
+      position: absolute;
+      background: rgba(255,255,255,.88);
+      border-radius: 999px;
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .r1 { width: 86%; height: 14px; left: 8%; top: 48%; transform: rotate(-18deg); }
+    .r2 { width: 70%; height: 12px; left: 16%; top: 64%; transform: rotate(16deg); }
+    .r3 { width: 13px; height: 72%; left: 55%; top: 12%; transform: rotate(8deg); }
+    .pin {
+      position: absolute;
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 15px 15px 15px 4px;
+      transform: rotate(-45deg);
+      box-shadow: 0 12px 18px rgba(15,23,42,.16);
+      border: 2px solid #fff;
+    }
+    .pin span { transform: rotate(45deg); font-size: 17px; }
+    .p1 { left: 18%; top: 22%; background: #dbeafe; }
+    .p2 { left: 62%; top: 24%; background: #dcfce7; }
+    .p3 { left: 42%; top: 56%; background: #ffedd5; }
+    .p4 { left: 70%; top: 68%; background: #f3e8ff; }
+    .p5 { left: 24%; top: 72%; background: #fee2e2; }
+    .chips { display: flex; gap: 7px; flex-wrap: wrap; }
+    .chip {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: #334155;
+      border-radius: 999px;
+      padding: 7px 9px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .market { display: grid; gap: 9px; }
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 17px;
+    }
+    .item i {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: #eff6ff;
+      font-style: normal;
+      font-size: 22px;
+      flex: 0 0 auto;
+    }
+    .item b { display: block; font-size: 14px; margin-bottom: 3px; }
+    .item span { color: var(--muted); font-size: 12px; }
+
+    .bottom-nav {
+      position: fixed;
+      z-index: 20;
+      left: 50%;
+      bottom: max(10px, env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      width: min(560px, calc(100% - 22px));
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
+      background: rgba(255,255,255,.94);
+      border: 1px solid var(--line);
+      backdrop-filter: blur(18px);
+      border-radius: 24px;
+      box-shadow: 0 18px 44px rgba(15,23,42,.18);
+      padding: 7px;
+    }
+    .nav-btn {
+      border: 0;
+      background: transparent;
+      color: #64748b;
+      border-radius: 17px;
+      padding: 7px 3px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .nav-btn.active { background: #eff6ff; color: var(--primary); }
+    .nav-btn span { display: block; font-size: 19px; margin-bottom: 2px; }
+
+    .toast {
+      position: fixed;
+      z-index: 30;
+      left: 50%;
+      bottom: calc(var(--nav-h) + 24px);
+      transform: translate(-50%, 18px);
+      opacity: 0;
+      max-width: calc(100% - 34px);
+      padding: 11px 14px;
+      background: rgba(15,23,42,.92);
+      color: white;
+      border-radius: 999px;
+      font-size: 13px;
+      text-align: center;
+      pointer-events: none;
+      transition: .2s ease;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .modal-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 14px;
+      background: rgba(15,23,42,.48);
+    }
+    .modal {
+      width: min(520px, 100%);
+      background: white;
+      border-radius: 26px;
+      padding: 18px;
+      box-shadow: 0 28px 80px rgba(15,23,42,.28);
+    }
+    .modal h3 { margin: 0 0 8px; }
+    .modal p { margin: 0 0 14px; color: var(--muted); line-height: 1.6; }
+    .close {
+      float: right;
+      width: 32px;
+      height: 32px;
+      border: 0;
+      border-radius: 999px;
+      background: #f1f5f9;
+      font-size: 20px;
+    }
+
+    @media (min-width: 680px) {
+      .app { padding-left: 18px; padding-right: 18px; }
+      .hero { grid-template-columns: 1.2fr .8fr; }
+      .quick-row { grid-auto-columns: 180px; }
+      .service-panel { grid-template-columns: repeat(2, 1fr); }
+      .portal { grid-template-columns: repeat(8, 1fr); }
+      .modal-mask { align-items: center; }
+    }
+
+    @media (min-width: 980px) {
+      .desktop-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        gap: 16px;
+        align-items: start;
+      }
+      .side { position: sticky; top: 82px; }
+      .priority { grid-template-columns: repeat(4, 1fr); }
+      .quick-row { grid-auto-flow: initial; grid-template-columns: repeat(5, 1fr); overflow: visible; padding-bottom: 0; }
+      .service-tabs { overflow: visible; flex-wrap: nowrap; }
+      .tab { flex: 1 1 0; min-width: 0; }
+      .service-panel { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      .service-card { display: flex; min-height: 118px; flex-direction: column; align-items: flex-start; justify-content: space-between; }
+    }
+
+    @media (max-width: 430px) {
+      .app { padding-left: 10px; padding-right: 10px; }
+      .logo { width: 38px; height: 38px; }
+      .brand p { display: none; }
+      .lang { padding: 8px 9px; font-size: 13px; }
+      .priority { grid-template-columns: 1fr 1fr; }
+      .quick-row { grid-auto-columns: 46%; }
+      .tab { min-width: 118px; padding: 10px; }
+      .service-card { min-height: 82px; padding: 11px; grid-template-columns: 40px minmax(0, 1fr); }
+      .service-card .icon { width: 40px; height: 40px; font-size: 21px; }
+      .portal { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+      .entry { min-height: 78px; padding: 9px 4px; border-radius: 16px; }
+      .entry i { font-size: 22px; }
+      .entry b { font-size: 12px; }
+      .assist-note { grid-template-columns: 1fr; }
+      .map { height: 240px; }
+      .section { padding: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" id="home">
+    <header class="top">
+      <div class="brand">
+        <img class="logo" src="/logo.png" alt="東北CSSA" />
+        <div>
+          <h1>我们在東北</h1>
+          <p>東北地区中国学友会</p>
+        </div>
+      </div>
+      <button class="lang" onclick="toast('Demo：可切换中 / 日 / 英')">中文 ▾</button>
+    </header>
+
+    <div class="search">
+      <input type="search" placeholder="搜索活动、二手、巴士、防灾、翻译……" onkeydown="if(event.key==='Enter') toast('Demo：搜索信息库、地图和功能入口')" />
+    </div>
+
+    <section class="hero">
+      <article class="card main-alert">
+        <span class="tag danger">重要</span>
+        <h2>龙舟赛报名中</h2>
+        <p>新手友好。住宿、参赛费、餐饮由学友会支持。</p>
+        <div class="btn-row">
+          <button class="btn" onclick="location.href='https://events.tohokucssa.org/square'">立即报名</button>
+          <button class="btn light" onclick="location.href='https://events.tohokucssa.org/square'">查看活动</button>
+        </div>
+      </article>
+
+      <aside class="priority">
+        <button class="priority-card" onclick="openModal('应急通知', '地震、大雪、台风、停电、领保提醒。')"><span>应急</span><b>暂无重大警报</b></button>
+        <button class="priority-card" onclick="openModal('二手平台', '家具、家电、自行车、教材。')"><span>二手</span><b>23 件在售</b></button>
+        <button class="priority-card" onclick="go('assist')"><span>匿名</span><b>立即求助</b></button>
+        <button class="priority-card" onclick="go('map')"><span>地图</span><b>生活服务</b></button>
+      </aside>
+    </section>
+
+    <div class="desktop-layout" style="margin-top:14px;">
+      <div class="grid">
+        <section class="card section" id="services">
+          <div class="head">
+            <h2>便利功能入口</h2>
+            <span class="tag">左右滑动</span>
+          </div>
+          <div class="service-tabs" aria-label="服务分类 tabs">
+            <button class="tab active" data-group="daily" onclick="switchTab(this)"><b>日常生活</b><small>设备 / 巴士 / 美食</small></button>
+            <button class="tab" data-group="mobility" onclick="switchTab(this)"><b>出行交通</b><small>租车 / 自行车</small></button>
+            <button class="tab" data-group="study" onclick="switchTab(this)"><b>学习科研</b><small>翻译 / 沙龙</small></button>
+            <button class="tab" data-group="safety" onclick="switchTab(this)"><b>安全应急</b><small>防灾 / 求助</small></button>
+            <button class="tab" data-group="community" onclick="switchTab(this)"><b>社区互助</b><small>二手 / 聊天室</small></button>
+          </div>
+          <div class="service-panel" id="servicePanel"></div>
+        </section>
+
+        <section class="card section assist" id="assist">
+          <div class="head">
+            <h2>匿名求助</h2>
+            <span class="tag warn">AI 分流</span>
+          </div>
+          <textarea id="helpText" placeholder="直接输入问题：手机卡、医院、心理压力、失联、签证、被骗……"></textarea>
+          <div class="assist-note">
+            <div>AI 先查信息库</div>
+            <div>普通问题给入口</div>
+            <div>复杂问题转人工</div>
+          </div>
+          <button class="btn" onclick="assist()">提交求助</button>
+          <div class="result" id="result"></div>
+        </section>
+
+        <section class="card section" id="entries">
+          <div class="head">
+            <h2>全部入口</h2>
+            <span class="tag safe">保留接口</span>
+          </div>
+          <div class="portal">
+            <button class="entry" onclick="location.href='https://events.tohokucssa.org/square'"><i>🎫</i><b>活动</b></button>
+            <button class="entry" onclick="openModal('翻译', '学校、医院、租房、车检、邮件模板。')"><i>🌐</i><b>翻译</b></button>
+            <button class="entry" onclick="openModal('租车', '攻略、保险、拼车、路线。')"><i>🚗</i><b>租车</b></button>
+            <button class="entry" onclick="openModal('匿名聊天室', '树洞、互助、关键词风控。')"><i>💬</i><b>聊天室</b></button>
+            <button class="entry" onclick="openModal('二手平台', '发布、搜索、附近取货、认证。')"><i>♻️</i><b>二手</b></button>
+            <button class="entry" onclick="go('map')"><i>🗺️</i><b>地图</b></button>
+            <button class="entry" onclick="openModal('博协沙龙', '讲座报名、回放、讲者征集。')"><i>🎓</i><b>沙龙</b></button>
+            <button class="entry" onclick="openModal('防灾与天气', '天气预警、避难所、地震指南。')"><i>🌦️</i><b>防灾</b></button>
+          </div>
+        </section>
+
+        <section class="card section" id="market">
+          <div class="head">
+            <h2>二手精选</h2>
+            <button class="lang" onclick="openModal('二手平台', '进入完整二手平台。')">更多</button>
+          </div>
+          <div class="market">
+            <button class="item" onclick="openModal('折叠桌', '500 円，三条附近自取。')"><i>🪑</i><div><b>折叠桌</b><span>500 円 · 三条附近</span></div></button>
+            <button class="item" onclick="openModal('通学自行车', '6,000 円，可试骑。')"><i>🚲</i><div><b>通学自行车</b><span>6,000 円 · 北山附近</span></div></button>
+          </div>
+        </section>
+      </div>
+
+      <aside class="grid side">
+        <section class="card section" id="map">
+          <div class="head">
+            <h2>服务地图</h2>
+            <span class="tag safe">聚合</span>
+          </div>
+          <div class="chips">
+            <button class="chip" onclick="toast('筛选：巴士')">🚌 巴士</button>
+            <button class="chip" onclick="toast('筛选：美食')">🍜 美食</button>
+            <button class="chip" onclick="toast('筛选：设备')">🎙️ 设备</button>
+            <button class="chip" onclick="toast('筛选：出行')">🚲 出行</button>
+            <button class="chip" onclick="toast('筛选：防灾')">🏫 防灾</button>
+          </div>
+          <div class="map">
+            <div class="road r1"></div><div class="road r2"></div><div class="road r3"></div>
+            <button class="pin p1" onclick="openModal('校园巴士', '显示时刻表、末班车、雨雪提醒。')"><span>🚌</span></button>
+            <button class="pin p2" onclick="openModal('美食点', '价格、人数、营业时间。')"><span>🍜</span></button>
+            <button class="pin p3" onclick="openModal('设备点', '活动物资预约。')"><span>🎙️</span></button>
+            <button class="pin p4" onclick="openModal('出行', '租车、自行车、维修点。')"><span>🚲</span></button>
+            <button class="pin p5" onclick="openModal('避难所', '最近避难所和紧急联系人。')"><span>🏫</span></button>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" onclick="go('home', this)"><span>🏠</span>首页</button>
+    <button class="nav-btn" onclick="go('services', this)"><span>🧩</span>服务</button>
+    <button class="nav-btn" onclick="go('assist', this)"><span>🆘</span>求助</button>
+    <button class="nav-btn" onclick="go('map', this)"><span>🗺️</span>地图</button>
+    <button class="nav-btn" onclick="go('entries', this)"><span>☰</span>全部</button>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+  <div class="modal-mask" id="mask" onclick="if(event.target.id==='mask') closeModal()">
+    <div class="modal">
+      <button class="close" onclick="closeModal()">×</button>
+      <h3 id="modalTitle">入口</h3>
+      <p id="modalText">Demo</p>
+      <div class="btn-row">
+        <button class="btn" onclick="toast('Demo：跳转到子系统或小程序页面')">进入</button>
+        <button class="btn light" onclick="closeModal()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+
+    const serviceData = {
+      daily: [
+        { icon: '🎙️', title: '设备租赁', desc: '麦克风、投影、旗帜、桌游。' },
+        { icon: '🚌', title: '校园巴士', desc: '校区巴士、末班车、雨雪提醒。' },
+        { icon: '🍜', title: '美食地图', desc: '按校区、价格、人数筛选。' }
+      ],
+      mobility: [
+        { icon: '🚗', title: '租车攻略', desc: '保险、ETC、拼车、路线。' },
+        { icon: '🚲', title: '租自行车', desc: '短租、二手、防盗登记。' },
+        { icon: '🧰', title: '维修点', desc: '自行车、手机、电脑维修。' }
+      ],
+      study: [
+        { icon: '🌐', title: '翻译助手', desc: '学校、医院、租房、邮件模板。' },
+        { icon: '🎓', title: '博协沙龙', desc: '报名、回放、讲者征集。' },
+        { icon: '📚', title: '资料库', desc: '新生、签证、奖学金 FAQ。' }
+      ],
+      safety: [
+        { icon: '🌦️', title: '防灾天气', desc: '地震、大雪、台风、停电。' },
+        { icon: '🏥', title: '医院药局', desc: '夜间急诊、就诊流程。' },
+        { icon: '🛡️', title: '领保失联', desc: '失联协助、紧急联系人。' }
+      ],
+      community: [
+        { icon: '♻️', title: '二手平台', desc: '买卖、赠送、附近取货。' },
+        { icon: '💬', title: '匿名聊天室', desc: '树洞、互助、关键词风控。' },
+        { icon: '🤝', title: '兴趣小组', desc: '桌游、徒步、厨艺、电影。' }
+      ]
+    };
+
+    function renderServices(group = 'daily') {
+      const panel = document.getElementById('servicePanel');
+      if (!panel) return;
+      panel.innerHTML = serviceData[group].map(item => `
+        <button class="service-card" onclick="openModal('${item.title}', '${item.desc} 这里只保留入口，未来可接入对应表单、地图或子系统。')">
+          <span class="icon">${item.icon}</span>
+          <span class="service-copy"><b>${item.title}</b><small>${item.desc}</small></span>
+        </button>
+      `).join('');
+    }
+
+    function switchTab(el) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      renderServices(el.dataset.group);
+    }
+
+    function toast(text) {
+      const el = document.getElementById('toast');
+      el.textContent = text;
+      el.classList.add('show');
+      clearTimeout(window.toastTimer);
+      window.toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
+    }
+
+    function openModal(title, text) {
+      document.getElementById('modalTitle').textContent = title;
+      document.getElementById('modalText').textContent = text;
+      document.getElementById('mask').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('mask').style.display = 'none';
+    }
+
+    function go(id, btn) {
+      document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (btn) {
+        document.querySelectorAll('.nav-btn').forEach(x => x.classList.remove('active'));
+        btn.classList.add('active');
+      }
+    }
+
+    function assist() {
+      const text = document.getElementById('helpText').value.trim();
+      const result = document.getElementById('result');
+      if (!text) return toast('请先输入求助内容');
+      const needHuman = /心理|抑郁|压力|自杀|疾病|发烧|疼|失联|报警|被骗|骚扰|签证|法律/.test(text);
+      result.style.display = 'block';
+      result.innerHTML = needHuman
+        ? '<b>AI 判断：</b>可能需要人工协助。先展示相关指南，并询问是否匿名转交负责人。'
+        : '<b>AI 判断：</b>可先由信息库回答。推荐 FAQ、地图、翻译模板或对应入口。';
+    }
+
+    renderServices();
+  </script>
+</body>
+</html>
