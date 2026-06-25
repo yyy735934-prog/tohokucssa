@@ -2,8 +2,8 @@
   <div class="page">
     <div v-if="done" class="card center-card">
       <div class="icon-circle icon-success">✓</div>
-      <h1 class="title">注册成功</h1>
-      <p class="sub">你的主理人账号已创建，活动已绑定到你的名下</p>
+      <h1 class="title">{{ merged ? '账号已关联' : '注册成功' }}</h1>
+      <p class="sub">{{ merged ? '密码已设置，角色已升级' : '你的账号已创建' }}，可以使用邮箱密码或 Google 登录管理后台</p>
       <a :href="adminUrl" class="btn btn-primary" style="margin-top:20px;display:inline-block">进入管理后台</a>
     </div>
 
@@ -15,8 +15,11 @@
     </div>
 
     <template v-else-if="invite">
-      <h1 class="page-title">注册活动主理人</h1>
-      <p class="page-sub">注册后你可以管理活动、查看报名、签到等</p>
+      <h1 class="page-title">{{ invite.hasAccount ? '关联已有账号' : ('注册' + (invite.role === 'reviewer' ? '审核管理员' : '活动主理人')) }}</h1>
+      <p v-if="invite.hasAccount" class="page-sub">
+        你已有账号（当前角色：{{ roleLabel(invite.currentRole) }}），设置密码后将升级为「{{ roleLabel(invite.role) }}」并支持邮箱密码登录
+      </p>
+      <p v-else class="page-sub">注册后你可以{{ invite.role === 'reviewer' ? '审核活动、管理用户和活动' : '管理活动、查看报名、签到等' }}</p>
 
       <form class="card" @submit.prevent="submit" style="margin-top:16px">
         <div class="field">
@@ -37,7 +40,7 @@
         </div>
         <p v-if="error" class="error">{{ error }}</p>
         <button type="submit" class="btn btn-primary" :disabled="busy" style="margin-top:8px">
-          {{ busy ? '注册中…' : '注册' }}
+          {{ busy ? '处理中…' : (invite.hasAccount ? '设置密码并升级' : '注册') }}
         </button>
       </form>
     </template>
@@ -56,9 +59,13 @@ const invite = ref(null)
 const invalid = ref(false)
 const invalidMsg = ref('')
 const done = ref(false)
+const merged = ref(false)
 const error = ref('')
 const busy = ref(false)
 const form = reactive({ display_name: '', password: '', confirm: '' })
+
+const roleLabels = { user: '普通用户', host: '活动主理人', reviewer: '审核管理员' }
+function roleLabel(r) { return roleLabels[r] || r }
 
 const adminUrl = computed(() => `${location.origin}/admin/`)
 
@@ -88,6 +95,7 @@ async function submit() {
     localStorage.setItem('auth', JSON.stringify({
       token: data.token, email: data.email, role: data.role, is_super: data.is_super
     }))
+    merged.value = !!data.merged
     done.value = true
   } catch (e) { error.value = e.message }
   busy.value = false

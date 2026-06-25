@@ -1,9 +1,27 @@
 import { sendEmail, eventReminderEmail } from './lib/email.js'
+import { audit } from './lib/audit.js'
 
 const ORIGIN = 'https://events.tohokucssa.org'
 
 export async function handleScheduled(env) {
+  await closeExpiredEvents(env)
   await sendEventReminders(env)
+}
+
+async function closeExpiredEvents(env) {
+  const now = new Date()
+  const jstNow = new Date(now.getTime() + 9 * 3600 * 1000)
+  const todayStr = jstNow.toISOString().slice(0, 10)
+
+  const expired = await env.DB.prepare(
+    "SELECT id, title, event_date FROM events WHERE status IN ('open', 'active') AND event_date < ?"
+  ).bind(todayStr).all()
+
+  for (const e of expired.results) {
+    await env.DB.prepare('UPDATE events SET status = ? WHERE id = ?').bind('closed', e.id).run()
+    await audit(env.DB, 'auto_close', 'event', e.id, `活动「${e.title}」已过期，自动关闭`, 'system')
+    console.log(`[cron] Auto-closed expired event: "${e.title}" (${e.event_date})`)
+  }
 }
 
 // Find events happening tomorrow (JST) and send reminders with check-in codes

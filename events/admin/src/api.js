@@ -78,7 +78,9 @@ export const api = {
   rejectRole: (email, role) => request('POST', '/users/reject-role', { email, role }),
   listRoleHistory: () => request('GET', '/users/role-history'),
   revokeRole: (email, role) => request('POST', '/users/revoke-role', { email, role }),
-  inviteUser: (email, name) => request('POST', '/users/invite', { email, name }),
+  inviteUsers: (emails, role) => request('POST', '/users/invite', { emails, role }),
+  inviteSignup: (eventId, emails) => request('POST', `/events/${eventId}/invite-signup`, { emails }),
+  getAuditLogs: (limit = 50) => request('GET', `/events/audit-logs?limit=${limit}`),
 
   uploadEventImage: async (eventId, file) => {
     const form = new FormData()

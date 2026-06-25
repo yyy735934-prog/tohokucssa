@@ -25,6 +25,70 @@
       <router-link to="/" class="btn btn-primary btn-sm" style="align-self:flex-start">浏览活动</router-link>
     </div>
 
+    <!-- Profile section -->
+    <div v-if="auth.isLoggedIn" class="section">
+      <div class="section-head" style="display:flex;justify-content:space-between;align-items:center">
+        <h2 class="section-title" style="margin-bottom:0">个人信息</h2>
+        <button v-if="!editingProfile" class="btn btn-outline btn-sm" @click="startEditProfile">编辑</button>
+      </div>
+      <p class="section-desc">保存常用信息，报名活动时自动填充</p>
+
+      <div v-if="!editingProfile" class="card profile-view">
+        <div v-if="hasProfile">
+          <div v-if="profile.name" class="profile-row"><span class="profile-label">姓名</span><span>{{ profile.name }}</span></div>
+          <div v-if="profile.name_kana" class="profile-row"><span class="profile-label">姓名假名</span><span>{{ profile.name_kana }}</span></div>
+          <div v-if="profile.school" class="profile-row"><span class="profile-label">所属学校</span><span>{{ profile.school }}</span></div>
+          <div v-if="profile.student_id" class="profile-row"><span class="profile-label">学号/工号</span><span>{{ profile.student_id }}</span></div>
+          <div v-if="profile.phone_cn" class="profile-row"><span class="profile-label">中国手机号</span><span>{{ profile.phone_cn }}</span></div>
+          <div v-if="profile.phone_jp" class="profile-row"><span class="profile-label">日本电话号</span><span>{{ profile.phone_jp }}</span></div>
+          <div v-if="profile.wechat" class="profile-row"><span class="profile-label">微信号</span><span>{{ profile.wechat }}</span></div>
+        </div>
+        <p v-else class="empty-profile">尚未填写，点击「编辑」保存常用信息</p>
+      </div>
+
+      <form v-else class="card" @submit.prevent="saveProfileData">
+        <div class="field">
+          <label class="label">姓名</label>
+          <input v-model="profileForm.name" placeholder="你的姓名" />
+        </div>
+        <div class="field">
+          <label class="label">姓名假名</label>
+          <input v-model="profileForm.name_kana" placeholder="シメイ" />
+        </div>
+        <div class="field">
+          <label class="label">所属学校</label>
+          <select v-model="profileForm.school">
+            <option value="">请选择</option>
+            <option v-for="s in schoolList" :key="s" :value="s">{{ s }}</option>
+          </select>
+        </div>
+        <div v-if="profileForm.school === '其他学校'" class="field">
+          <label class="label">学校名称</label>
+          <input v-model="profileForm.school_other" placeholder="请输入学校名称" />
+        </div>
+        <div v-if="profileForm.school === '東北大学'" class="field">
+          <label class="label">学号/工号</label>
+          <input v-model="profileForm.student_id" placeholder="東北大学学友填写" />
+        </div>
+        <div class="field">
+          <label class="label">中国手机号</label>
+          <input v-model="profileForm.phone_cn" type="tel" placeholder="选填" />
+        </div>
+        <div class="field">
+          <label class="label">日本电话号</label>
+          <input v-model="profileForm.phone_jp" type="tel" placeholder="選択入力" />
+        </div>
+        <div class="field">
+          <label class="label">微信号</label>
+          <input v-model="profileForm.wechat" placeholder="选填" />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" @click="editingProfile = false">取消</button>
+          <button type="submit" class="btn btn-primary" :disabled="savingProfile">{{ savingProfile ? '保存中…' : '保存' }}</button>
+        </div>
+      </form>
+    </div>
+
     <!-- Role upgrade section -->
     <div v-if="auth.isLoggedIn && (auth.role === 'user' || auth.role === 'host')" class="section">
       <h2 class="section-title">身份升级</h2>
@@ -175,6 +239,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '../api.js'
 import { auth } from '../auth.js'
+import { showToast } from '../lib/toast.js'
 
 const email = ref('')
 const savedEmail = ref('')
@@ -190,6 +255,14 @@ const editCustomFields = ref([])
 const editError = ref('')
 const saving = ref(false)
 const requested = ref(JSON.parse(localStorage.getItem('role_requested') || '{}'))
+
+const profile = ref({})
+const editingProfile = ref(false)
+const savingProfile = ref(false)
+const profileForm = ref({})
+const schoolList = ['東北大学', '山形大学', '福島大学', '会津大学', '宮城大学', '仙台大学', '東北医科薬科大学', '東北学院大学', '東北工業大学', '福島県立医科大学', '東北芸術工科大学', '其他学校']
+
+const hasProfile = computed(() => Object.values(profile.value).some(v => v))
 
 function isWithin(eventDate, days) {
   if (!eventDate) return false
@@ -223,6 +296,7 @@ function loadForCurrentUser() {
     searchSignups()
     loadCreatedEvents()
     syncPendingRequests()
+    loadProfile()
   } else {
     const stored = localStorage.getItem('user_email')
     if (stored) {
@@ -239,6 +313,39 @@ async function syncPendingRequests() {
     requested.value = data.pending || {}
     localStorage.setItem('role_requested', JSON.stringify(requested.value))
   } catch {}
+}
+
+async function loadProfile() {
+  try {
+    const data = await api.getProfile()
+    profile.value = data.profile || {}
+  } catch {}
+}
+
+function startEditProfile() {
+  const p = { ...profile.value }
+  if (p.school && !schoolList.includes(p.school)) {
+    p.school_other = p.school
+    p.school = '其他学校'
+  }
+  profileForm.value = p
+  editingProfile.value = true
+}
+
+async function saveProfileData() {
+  savingProfile.value = true
+  try {
+    const data = { ...profileForm.value }
+    if (data.school === '其他学校') {
+      data.school = data.school_other || ''
+    }
+    delete data.school_other
+    await api.saveProfile(data)
+    profile.value = { ...data }
+    editingProfile.value = false
+    showToast('个人信息已保存')
+  } catch (err) { showToast(err.message, 'error') }
+  savingProfile.value = false
 }
 
 onMounted(loadForCurrentUser)
@@ -291,10 +398,10 @@ async function requestRole(role) {
   try {
     const data = await api.requestRole(role)
     markRequested(role)
-    alert(data.message)
+    showToast(data.message)
   } catch (err) {
     if (err.message && err.message.includes('已提交')) markRequested(role)
-    alert(err.message)
+    showToast(err.message, 'error')
   }
   requesting.value = false
 }
@@ -337,7 +444,7 @@ async function saveEdit() {
     t.name = editForm.value.name
     t.data = JSON.stringify(editForm.value.extra)
     editTarget.value = null
-    alert('报名信息已更新')
+    showToast('报名信息已更新')
   } catch (err) { editError.value = err.message }
   saving.value = false
 }
@@ -348,7 +455,8 @@ async function cancelSignup(e) {
   try {
     await api.cancelSignup(e.token)
     signups.value = signups.value.filter(ev => ev.signup_id !== e.signup_id)
-  } catch (err) { alert(err.message) }
+    showToast('已取消报名')
+  } catch (err) { showToast(err.message, 'error') }
   cancelling.value = false
 }
 </script>
@@ -422,4 +530,11 @@ async function cancelSignup(e) {
 }
 .modal-title { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+.section-desc { font-size: 13px; color: var(--c-text-2); margin: 4px 0 12px; }
+.profile-view { font-size: 14px; }
+.profile-row { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--c-border); }
+.profile-row:last-child { border-bottom: none; }
+.profile-label { color: var(--c-text-2); min-width: 72px; flex-shrink: 0; }
+.empty-profile { font-size: 13px; color: var(--c-text-3); text-align: center; padding: 12px 0; }
 </style>

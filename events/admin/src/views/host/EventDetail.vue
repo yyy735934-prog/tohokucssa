@@ -295,6 +295,7 @@
       <div class="flex items-center justify-between mb-16" style="flex-wrap:wrap;gap:8px">
         <h2 style="font-size:16px;font-weight:600">报名列表</h2>
         <div class="flex gap-8" style="flex-wrap:wrap">
+          <button v-if="event.status === 'open'" class="btn btn-primary btn-sm" @click="showInviteSignup = true; inviteTab = 'email'">邀请报名</button>
           <button class="btn btn-outline btn-sm" @click="showAddSignup = true">手动添加</button>
           <button v-if="['open','active'].includes(event.status)" class="btn btn-success btn-sm" @click="batchCheckin" :disabled="busy">全部签到</button>
           <button class="btn btn-outline btn-sm" @click="doExport('csv')">导出 CSV</button>
@@ -322,7 +323,7 @@
               <td>{{ i + 1 }}</td>
               <td style="font-weight:500">{{ s.name }}</td>
               <td>{{ s.email }}</td>
-              <td>{{ s.phone || '—' }}</td>
+              <td>{{ phoneDisplay(s) }}</td>
               <td>
                 <span v-if="s.checked_in" class="badge badge-open">已签到</span>
                 <span v-else class="badge badge-draft">未签到</span>
@@ -377,44 +378,80 @@
             <router-link to="/admin/scan" class="btn btn-primary btn-sm">去扫码 →</router-link>
           </div>
         </div>
-        <div class="link-row">
-          <div>
-            <div class="link-title">邀请主理人注册</div>
-            <div class="link-desc">生成邀请链接，发给新主理人注册账号</div>
-          </div>
-          <div class="flex gap-8">
-            <button class="btn btn-outline btn-sm" @click="showInviteModal = true">生成邀请链接</button>
-          </div>
-        </div>
       </div>
     </div>
 
-    <!-- Invite modal -->
-    <div v-if="showInviteModal" class="modal-overlay" @click.self="showInviteModal = false">
+    <!-- Invite signup modal -->
+    <div v-if="showInviteSignup" class="modal-overlay" @click.self="showInviteSignup = false">
       <div class="modal">
-        <h3 class="modal-title">邀请主理人注册</h3>
-        <p style="font-size:13px;color:var(--c-text-2);margin-bottom:12px">
-          输入对方邮箱生成邀请链接，对方通过链接注册后即成为活动主理人。链接有效期 7 天。
-        </p>
-        <div class="field">
-          <label class="label">邮箱 *</label>
-          <input v-model="inviteForm.email" type="email" required placeholder="对方的邮箱地址" />
+        <h3 class="modal-title">邀请报名</h3>
+        <div class="invite-tabs">
+          <button class="invite-tab" :class="{ active: inviteTab === 'email' }" @click="inviteTab = 'email'">邮件邀请</button>
+          <button class="invite-tab" :class="{ active: inviteTab === 'link' }" @click="inviteTab = 'link'">分享链接</button>
+          <button class="invite-tab" :class="{ active: inviteTab === 'direct' }" @click="inviteTab = 'direct'">直接报名</button>
         </div>
-        <div class="field">
-          <label class="label">姓名（选填）</label>
-          <input v-model="inviteForm.name" placeholder="对方姓名，选填" />
-        </div>
-        <div v-if="inviteUrl" class="invite-result">
-          <div class="label" style="margin-bottom:4px">邀请链接（已生成）</div>
-          <div class="flex gap-8" style="flex-wrap:wrap">
-            <input :value="inviteUrl" readonly @click="$event.target.select()" class="link-input" style="flex:1" />
-            <button class="btn btn-primary btn-sm" @click="copyInviteUrl">复制链接</button>
+
+        <div v-if="inviteTab === 'email'">
+          <p style="font-size:13px;color:var(--c-text-2);margin-bottom:12px">
+            输入邮箱地址，系统将发送活动邀请邮件。支持批量粘贴，格式不限。
+          </p>
+          <div class="field">
+            <textarea v-model="inviteEmails" rows="4" placeholder="粘贴邮箱地址，支持逗号、空格、换行分隔&#10;例如：a@example.com, b@example.com&#10;或直接粘贴通讯录文本"></textarea>
+          </div>
+          <div v-if="inviteSignupResult" class="invite-result-box">
+            <p v-if="inviteSignupResult.sent.length" style="font-size:13px;margin-bottom:4px">
+              <strong style="color:var(--c-success)">已发送 {{ inviteSignupResult.sent.length }} 封邀请邮件</strong>
+            </p>
+            <p v-if="inviteSignupResult.skipped.length" style="font-size:13px;color:var(--c-text-2)">
+              已报名跳过：{{ inviteSignupResult.skipped.join('、') }}
+            </p>
+          </div>
+          <p v-if="inviteSignupError" class="error">{{ inviteSignupError }}</p>
+          <div class="modal-actions">
+            <button class="btn btn-outline" @click="closeInviteSignup">关闭</button>
+            <button v-if="!inviteSignupResult" class="btn btn-primary" @click="sendSignupInvites" :disabled="busy">
+              {{ busy ? '发送中…' : '发送邀请' }}
+            </button>
           </div>
         </div>
-        <p v-if="inviteError" class="error">{{ inviteError }}</p>
-        <div class="modal-actions">
-          <button class="btn btn-outline" @click="closeInviteModal">关闭</button>
-          <button v-if="!inviteUrl" class="btn btn-primary" @click="generateInvite" :disabled="busy">生成链接</button>
+
+        <div v-if="inviteTab === 'link'" class="invite-tab-body">
+          <p style="font-size:13px;color:var(--c-text-2);margin-bottom:12px">复制报名链接发送给想邀请的人</p>
+          <div class="flex gap-8" style="flex-wrap:wrap">
+            <input :value="shareUrl" readonly @click="$event.target.select()" class="link-input" style="flex:1" />
+            <button class="btn btn-primary btn-sm" @click="copyLink">复制链接</button>
+          </div>
+          <div class="invite-msg-box">
+            <div class="label" style="margin-bottom:4px">邀请文案（可复制发送）</div>
+            <textarea :value="inviteText" readonly @click="$event.target.select()" rows="4" class="invite-textarea"></textarea>
+            <button class="btn btn-outline btn-sm" style="margin-top:6px" @click="copyInviteText">复制文案</button>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-outline" @click="showInviteSignup = false">关闭</button>
+          </div>
+        </div>
+
+        <div v-if="inviteTab === 'direct'">
+          <p style="font-size:13px;color:var(--c-text-2);margin-bottom:12px">直接为对方填写报名信息</p>
+          <form @submit.prevent="addManualSignup">
+            <div class="field">
+              <label class="label">姓名 *</label>
+              <input v-model="addForm.name" required />
+            </div>
+            <div class="field">
+              <label class="label">邮箱 *</label>
+              <input v-model="addForm.email" type="email" required />
+            </div>
+            <div class="field">
+              <label class="label">手机号</label>
+              <input v-model="addForm.phone" />
+            </div>
+            <p v-if="addError" class="error">{{ addError }}</p>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-outline" @click="showInviteSignup = false">取消</button>
+              <button type="submit" class="btn btn-primary" :disabled="busy">添加报名</button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
@@ -615,33 +652,45 @@ const addError = ref('')
 const showNotifyModal = ref(false)
 const notifyMessage = ref('')
 
-const showInviteModal = ref(false)
-const inviteForm = ref({ email: '', name: '' })
-const inviteUrl = ref('')
-const inviteError = ref('')
+const showInviteSignup = ref(false)
+const inviteTab = ref('email')
+const inviteEmails = ref('')
+const inviteSignupResult = ref(null)
+const inviteSignupError = ref('')
 
-async function generateInvite() {
-  inviteError.value = ''
-  if (!inviteForm.value.email) { inviteError.value = '请输入邮箱'; return }
+const inviteText = computed(() => {
+  if (!event.value) return ''
+  const e = event.value
+  let text = `邀请你参加「${e.title}」`
+  if (e.event_date) text += `\n时间：${e.event_date}`
+  if (e.location) text += `\n地点：${e.location}`
+  text += `\n\n报名链接：${shareUrl.value}`
+  return text
+})
+
+function copyInviteText() {
+  navigator.clipboard.writeText(inviteText.value)
+  showToast('邀请文案已复制')
+}
+
+async function sendSignupInvites() {
+  inviteSignupError.value = ''
+  if (!inviteEmails.value.trim()) { inviteSignupError.value = '请输入邮箱'; return }
   busy.value = true
   try {
-    const data = await api.inviteUser(inviteForm.value.email, inviteForm.value.name)
-    inviteUrl.value = data.url
-    showToast('邀请链接已生成')
-  } catch (e) { inviteError.value = e.message }
+    const data = await api.inviteSignup(event.value.id, inviteEmails.value)
+    inviteSignupResult.value = data
+    if (data.sent.length) showToast(`已发送 ${data.sent.length} 封邀请邮件`)
+    else showToast('没有新邮箱需要邀请', 'error')
+  } catch (e) { inviteSignupError.value = e.message }
   busy.value = false
 }
 
-function copyInviteUrl() {
-  navigator.clipboard.writeText(inviteUrl.value)
-  showToast('邀请链接已复制')
-}
-
-function closeInviteModal() {
-  showInviteModal.value = false
-  inviteForm.value = { email: '', name: '' }
-  inviteUrl.value = ''
-  inviteError.value = ''
+function closeInviteSignup() {
+  showInviteSignup.value = false
+  inviteEmails.value = ''
+  inviteSignupResult.value = null
+  inviteSignupError.value = ''
 }
 
 const showAiModal = ref(false)
@@ -677,6 +726,15 @@ function formatExtra(data) {
     const obj = typeof data === 'string' ? JSON.parse(data) : data
     return Object.entries(obj).map(([k, v]) => `${k}: ${v}`).join('; ')
   } catch { return String(data) }
+}
+
+function phoneDisplay(s) {
+  if (s.phone) return s.phone
+  try {
+    const obj = typeof s.data === 'string' ? JSON.parse(s.data || '{}') : (s.data || {})
+    const parts = [obj['中国手机号'], obj['日本电话号']].filter(Boolean)
+    return parts.join(' / ') || '—'
+  } catch { return '—' }
 }
 
 async function load() {
@@ -811,6 +869,7 @@ async function addManualSignup() {
     })
     showToast('已添加')
     showAddSignup.value = false
+    showInviteSignup.value = false
     addForm.value = { name: '', email: '', phone: '' }
     await load()
   } catch (e) { addError.value = e.message }
@@ -1036,8 +1095,29 @@ function copyCheckinLink() {
 }
 .cf-required-label input { width: auto; }
 .cf-options { margin-top: 4px; margin-bottom: 8px; padding-left: 8px; border-left: 2px solid var(--c-border); }
-.invite-result {
-  margin-top: 12px; padding: 12px; background: var(--c-bg);
+.invite-tabs {
+  display: flex; gap: 0; margin-bottom: 16px;
+  border-bottom: 2px solid var(--c-border);
+}
+.invite-tab {
+  padding: 8px 16px; font-size: 14px; font-weight: 500;
+  background: none; border: none; cursor: pointer;
+  color: var(--c-text-2); border-bottom: 2px solid transparent;
+  margin-bottom: -2px; transition: all .15s;
+}
+.invite-tab.active { color: var(--c-primary); border-bottom-color: var(--c-primary); }
+.invite-tab-body {}
+.invite-msg-box {
+  margin-top: 16px; padding: 12px; background: var(--c-bg);
+  border-radius: 8px; border: 1px solid var(--c-border);
+}
+.invite-textarea {
+  width: 100%; resize: none; font-size: 13px; line-height: 1.6;
+  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: 6px;
+  padding: 8px; cursor: text;
+}
+.invite-result-box {
+  margin-top: 8px; padding: 12px; background: var(--c-bg);
   border: 1px solid var(--c-success); border-radius: 8px;
 }
 

@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { getSession, extractToken } from '../lib/session.js'
-import { sendEmail, eventApprovedEmail, eventRejectedEmail, eventApprovedInviteEmail, eventChangedEmail, eventReminderEmail, eventSubmittedEmail } from '../lib/email.js'
+import { sendEmail, eventApprovedEmail, eventRejectedEmail, eventApprovedInviteEmail, eventChangedEmail, eventReminderEmail, eventSubmittedEmail, inviteSignupEmail } from '../lib/email.js'
 import { createNotification, notifyReviewers } from './notifications.js'
+import { audit } from '../lib/audit.js'
 
 const events = new Hono()
 
@@ -52,13 +53,20 @@ events.get('/dashboard-stats', async (c) => {
   const session = await requireAuth(c)
   if (session.role !== 'reviewer') return c.json({ ok: false, message: '仅审核员可查看' }, 403)
 
-  const [pending, open, active, closed, totalSignups, totalCheckins] = await Promise.all([
+  const [pending, open, active, closed, totalSignups, totalCheckins, perEvent] = await Promise.all([
     c.env.DB.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'pending'").first(),
     c.env.DB.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'open'").first(),
     c.env.DB.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'active'").first(),
     c.env.DB.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'closed'").first(),
     c.env.DB.prepare("SELECT COUNT(*) as c FROM signups").first(),
     c.env.DB.prepare("SELECT COUNT(*) as c FROM signups WHERE checked_in = 1").first(),
+    c.env.DB.prepare(
+      `SELECT e.id, e.title, e.event_date, e.status, e.capacity,
+              COUNT(s.id) as signups, SUM(CASE WHEN s.checked_in = 1 THEN 1 ELSE 0 END) as checkins
+       FROM events e LEFT JOIN signups s ON s.event_id = e.id
+       WHERE e.status IN ('open', 'active', 'closed')
+       GROUP BY e.id ORDER BY e.event_date DESC`
+    ).all(),
   ])
 
   return c.json({
@@ -66,8 +74,21 @@ events.get('/dashboard-stats', async (c) => {
     stats: {
       pending: pending.c, open: open.c, active: active.c, closed: closed.c,
       totalSignups: totalSignups.c, totalCheckins: totalCheckins.c
-    }
+    },
+    perEvent: perEvent.results,
   })
+})
+
+// GET /api/events/audit-logs — reviewer only
+events.get('/audit-logs', async (c) => {
+  const session = await requireAuth(c)
+  if (session.role !== 'reviewer') return c.json({ ok: false, message: '仅管理员可查看' }, 403)
+
+  const limit = Math.min(Number(c.req.query('limit')) || 50, 200)
+  const rows = await c.env.DB.prepare(
+    'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ?'
+  ).bind(limit).all()
+  return c.json({ ok: true, logs: rows.results })
 })
 
 // GET /api/events — public or admin listing
@@ -239,6 +260,7 @@ events.post('/:id/approve', async (c) => {
     await createNotification(c.env.DB, event.created_by, 'approved', '活动审核通过', `「${event.title}」已通过审核，开放报名`, id)
   }
 
+  await audit(c.env.DB, 'approve', 'event', id, `审核通过「${event.title}」`, session.email)
   return c.json({ ok: true })
 })
 
@@ -272,6 +294,7 @@ events.post('/:id/reject', async (c) => {
     await createNotification(c.env.DB, event.created_by, 'rejected', '活动审核被驳回', `「${event.title}」未通过审核${reason ? '：' + reason : ''}`, id)
   }
 
+  await audit(c.env.DB, 'reject', 'event', id, `驳回「${event.title}」${reason ? '：' + reason : ''}`, session.email)
   return c.json({ ok: true })
 })
 
@@ -300,6 +323,7 @@ events.post('/:id/activate', async (c) => {
   if (event.status !== 'open') return c.json({ ok: false, message: '只有报名中的活动可以开始' }, 400)
 
   await c.env.DB.prepare('UPDATE events SET status = ? WHERE id = ?').bind('active', id).run()
+  await audit(c.env.DB, 'activate', 'event', id, `开始活动「${event.title}」`, session.email)
   return c.json({ ok: true })
 })
 
@@ -333,6 +357,7 @@ events.post('/:id/close', async (c) => {
   if (event.status !== 'active') return c.json({ ok: false, message: '只有进行中的活动可以结束' }, 400)
 
   await c.env.DB.prepare('UPDATE events SET status = ? WHERE id = ?').bind('closed', id).run()
+  await audit(c.env.DB, 'close', 'event', id, `结束活动「${event.title}」`, session.email)
   return c.json({ ok: true })
 })
 
@@ -463,6 +488,50 @@ events.patch('/:id/plan', async (c) => {
   const { plan } = await c.req.json()
   await c.env.DB.prepare('UPDATE events SET plan = ? WHERE id = ?').bind(plan || '', id).run()
   return c.json({ ok: true })
+})
+
+function parseEmails(raw) {
+  if (!raw) return []
+  return [...new Set(
+    raw.replace(/[,;，；\n\r\t]+/g, ' ')
+      .split(/\s+/)
+      .map(s => s.replace(/^[<(【「"']+|[>)】」"']+$/g, '').trim().toLowerCase())
+      .filter(s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+  )]
+}
+
+// POST /api/events/:id/invite-signup — batch invite people to sign up
+events.post('/:id/invite-signup', async (c) => {
+  const session = await requireAuth(c)
+  if (!['host', 'reviewer'].includes(session.role)) return c.json({ ok: false, message: '无权限' }, 403)
+
+  const id = Number(c.req.param('id'))
+  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
+  if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
+  if (event.status !== 'open') return c.json({ ok: false, message: '活动未在报名中' }, 400)
+  if (event.created_by && event.created_by !== session.id && session.role !== 'reviewer') {
+    return c.json({ ok: false, message: '无权限' }, 403)
+  }
+
+  const { emails: rawEmails } = await c.req.json()
+  if (!rawEmails || !rawEmails.trim()) return c.json({ ok: false, message: '请输入邮箱' }, 400)
+
+  const emailList = parseEmails(rawEmails)
+  if (!emailList.length) return c.json({ ok: false, message: '未识别到有效邮箱' }, 400)
+
+  const origin = new URL(c.req.url).origin
+  const signupUrl = `${origin}/e/${id}`
+  const sent = [], skipped = []
+  for (const email of emailList) {
+    const existing = await c.env.DB.prepare('SELECT id FROM signups WHERE event_id = ? AND email = ?').bind(id, email).first()
+    if (existing) { skipped.push(email); continue }
+
+    const content = inviteSignupEmail(event, signupUrl)
+    c.executionCtx.waitUntil(sendEmail(c.env, { to: email, ...content }))
+    sent.push(email)
+  }
+
+  return c.json({ ok: true, sent, skipped })
 })
 
 export { events }

@@ -232,6 +232,45 @@ export function roleChangedEmail(user, newRole) {
   }
 }
 
+// 邀请注册（管理员邀请新用户注册为主理人/管理员）
+export function inviteRegisterEmail(invite, registerUrl) {
+  const roleNames = { host: '活动主理人', reviewer: '审核管理员' }
+  const roleName = roleNames[invite.role] || '活动主理人'
+  return {
+    subject: `邀请你加入学友会活动平台 — ${roleName}`,
+    html: baseHtml('邀请注册', `
+      <h1>你被邀请加入活动平台</h1>
+      <p class="sub">${esc(invite.invited_by)} 邀请你注册为「${esc(roleName)}」</p>
+      <dl class="info">
+        <dt>注册角色</dt><dd>${esc(roleName)}</dd>
+        <dt>邮箱</dt><dd>${esc(invite.email)}</dd>
+      </dl>
+      <p style="margin:24px 0 8px;font-size:14px">点击下方按钮完成注册，设置密码后即可使用管理后台</p>
+      <p><a href="${registerUrl}" class="btn">注册账号</a></p>
+      <p style="margin-top:16px;font-size:12px;color:#aeaeb2">此链接7天内有效</p>
+    `),
+  }
+}
+
+// 邀请报名活动
+export function inviteSignupEmail(event, signupUrl) {
+  return {
+    subject: `邀请你参加 — ${event.title}`,
+    html: baseHtml('活动邀请', `
+      <h1>你被邀请参加活动</h1>
+      <p class="sub">活动主理人邀请你参加以下活动</p>
+      <dl class="info">
+        <dt>活动</dt><dd>${esc(event.title)}</dd>
+        <dt>时间</dt><dd>${esc(event.event_date)}</dd>
+        ${event.location ? `<dt>地点</dt><dd>${esc(event.location)}</dd>` : ''}
+        ${event.content ? `<dt>详情</dt><dd>${esc(event.content.slice(0, 200))}${event.content.length > 200 ? '…' : ''}</dd>` : ''}
+      </dl>
+      <p style="margin:24px 0 8px;font-size:14px">点击下方按钮填写报名信息</p>
+      <p><a href="${signupUrl}" class="btn">立即报名</a></p>
+    `),
+  }
+}
+
 function signupInfoBlock(signup) {
   let html = `<dt>姓名</dt><dd>${esc(signup.name)}</dd>`
   html += `<dt>邮箱</dt><dd>${esc(signup.email)}</dd>`

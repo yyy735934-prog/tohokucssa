@@ -1,16 +1,10 @@
 import { Hono } from 'hono'
 import { hashPassword } from '../lib/password.js'
 import { getSession, extractToken } from '../lib/session.js'
-import { sendEmail, roleRequestEmail, roleChangedEmail } from '../lib/email.js'
+import { sendEmail, roleRequestEmail, roleChangedEmail, inviteRegisterEmail } from '../lib/email.js'
+import { audit } from '../lib/audit.js'
 
 const users = new Hono()
-
-async function requireHost(c) {
-  const session = await getSession(c.env.SESSIONS, extractToken(c.req), c.env.DB)
-  if (!session) throw new Error('未登录')
-  if (!['host', 'reviewer'].includes(session.role)) throw new Error('仅主理人或管理员可操作')
-  return session
-}
 
 async function requireReviewer(c) {
   const session = await getSession(c.env.SESSIONS, extractToken(c.req), c.env.DB)
@@ -19,25 +13,48 @@ async function requireReviewer(c) {
   return session
 }
 
-// POST /api/users/invite — host/reviewer generates an invite registration link
+function parseEmails(raw) {
+  if (!raw) return []
+  return [...new Set(
+    raw.replace(/[,;，；\n\r\t]+/g, ' ')
+      .split(/\s+/)
+      .map(s => s.replace(/^[<(【「"']+|[>)】」"']+$/g, '').trim().toLowerCase())
+      .filter(s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+  )]
+}
+
+// POST /api/users/invite — batch invite registration with email
 users.post('/invite', async (c) => {
-  const session = await requireHost(c)
-  const { email, name } = await c.req.json()
-  if (!email || !email.trim()) return c.json({ ok: false, message: '邮箱必填' }, 400)
+  const session = await requireReviewer(c)
+  const { emails: rawEmails, role } = await c.req.json()
+  if (!rawEmails || !rawEmails.trim()) return c.json({ ok: false, message: '请输入邮箱' }, 400)
 
-  const normalizedEmail = email.trim().toLowerCase()
-  const existing = await c.env.DB.prepare('SELECT id FROM admin_users WHERE email = ?').bind(normalizedEmail).first()
-  if (existing) return c.json({ ok: false, message: '该邮箱已有账号' }, 400)
+  const inviteRole = role || 'host'
+  if (!['host', 'reviewer'].includes(inviteRole)) return c.json({ ok: false, message: '无效角色' }, 400)
+  if (inviteRole === 'reviewer' && !session.is_super) {
+    return c.json({ ok: false, message: '仅超级管理员可邀请审核员' }, 403)
+  }
 
-  const token = crypto.randomUUID()
-  await c.env.SESSIONS.put(`invite:${token}`, JSON.stringify({
-    email: normalizedEmail, name: (name || '').trim(),
-    invited_by: session.email,
-  }), { expirationTtl: 7 * 24 * 3600 })
+  const emailList = parseEmails(rawEmails)
+  if (!emailList.length) return c.json({ ok: false, message: '未识别到有效邮箱' }, 400)
 
   const origin = new URL(c.req.url).origin
-  const url = `${origin}/register?token=${token}`
-  return c.json({ ok: true, url })
+  const sent = [], skipped = []
+  for (const email of emailList) {
+    const existing = await c.env.DB.prepare('SELECT id FROM admin_users WHERE email = ?').bind(email).first()
+    if (existing) { skipped.push(email); continue }
+
+    const token = crypto.randomUUID()
+    const invite = { email, name: '', role: inviteRole, invited_by: session.email }
+    await c.env.SESSIONS.put(`invite:${token}`, JSON.stringify(invite), { expirationTtl: 7 * 24 * 3600 })
+
+    const url = `${origin}/register?token=${token}`
+    const content = inviteRegisterEmail(invite, url)
+    c.executionCtx.waitUntil(sendEmail(c.env, { to: email, ...content }))
+    sent.push(email)
+  }
+
+  return c.json({ ok: true, sent, skipped })
 })
 
 users.get('/', async (c) => {
@@ -224,6 +241,7 @@ users.post('/approve-role', async (c) => {
     decision: 'approved', decided_by: session.email, decided_at: Date.now(),
   }), { expirationTtl: 30 * 24 * 3600 })
 
+  await audit(c.env.DB, 'approve_role', 'user', user.id, `批准 ${email} 为${roleName}`, session.email)
   return c.json({ ok: true })
 })
 
@@ -244,6 +262,7 @@ users.post('/reject-role', async (c) => {
     decision: 'rejected', decided_by: session.email, decided_at: Date.now(),
   }), { expirationTtl: 30 * 24 * 3600 })
 
+  await audit(c.env.DB, 'reject_role', 'user', null, `拒绝 ${email} 的${roleName}申请`, session.email)
   return c.json({ ok: true })
 })
 

@@ -78,30 +78,44 @@ auth.post('/register-invite', async (c) => {
 
   const invite = JSON.parse(raw)
 
-  const existing = await c.env.DB.prepare('SELECT id FROM admin_users WHERE email = ?').bind(invite.email).first()
+  const hash = await hashPassword(password)
+  const inviteRole = invite.role || 'host'
+  const roleOrder = { user: 0, host: 1, reviewer: 2 }
+
+  const existing = await c.env.DB.prepare('SELECT * FROM admin_users WHERE email = ?').bind(invite.email).first()
   if (existing) {
-    await c.env.DB.prepare('UPDATE events SET created_by = ? WHERE id = ? AND created_by IS NULL')
-      .bind(existing.id, invite.event_id).run()
+    const newRole = roleOrder[inviteRole] > roleOrder[existing.role] ? inviteRole : existing.role
+    const newName = (display_name || existing.display_name || invite.name || '').trim()
+    await c.env.DB.prepare('UPDATE admin_users SET password_hash = ?, role = ?, display_name = ? WHERE id = ?')
+      .bind(hash, newRole, newName, existing.id).run()
+    if (invite.event_id) {
+      await c.env.DB.prepare('UPDATE events SET created_by = ? WHERE id = ? AND created_by IS NULL')
+        .bind(existing.id, invite.event_id).run()
+    }
     await c.env.SESSIONS.delete(`invite:${token}`)
-    return c.json({ ok: false, message: '该邮箱已有账号，活动已绑定到你的账号，请直接登录' }, 400)
+
+    const user = { id: existing.id, email: invite.email, role: newRole, display_name: newName, is_super: !!existing.is_super }
+    const sessionToken = await createSession(c.env.SESSIONS, user)
+    return c.json({ ok: true, token: sessionToken, email: invite.email, role: newRole, is_super: !!existing.is_super, merged: true })
   }
 
-  const hash = await hashPassword(password)
   const name = (display_name || invite.name || '').trim()
   const result = await c.env.DB.prepare(
     'INSERT INTO admin_users (email, password_hash, role, display_name) VALUES (?, ?, ?, ?)'
-  ).bind(invite.email, hash, 'host', name).run()
+  ).bind(invite.email, hash, inviteRole, name).run()
 
   const userId = result.meta.last_row_id
-  await c.env.DB.prepare('UPDATE events SET created_by = ? WHERE id = ? AND created_by IS NULL')
-    .bind(userId, invite.event_id).run()
+  if (invite.event_id) {
+    await c.env.DB.prepare('UPDATE events SET created_by = ? WHERE id = ? AND created_by IS NULL')
+      .bind(userId, invite.event_id).run()
+  }
 
   await c.env.SESSIONS.delete(`invite:${token}`)
 
-  const user = { id: userId, email: invite.email, role: 'host', display_name: name, is_super: false }
+  const user = { id: userId, email: invite.email, role: inviteRole, display_name: name, is_super: false }
   const sessionToken = await createSession(c.env.SESSIONS, user)
 
-  return c.json({ ok: true, token: sessionToken, email: invite.email, role: 'host', is_super: false })
+  return c.json({ ok: true, token: sessionToken, email: invite.email, role: inviteRole, is_super: false })
 })
 
 // GET /api/auth/google — redirect to Google OAuth
@@ -185,6 +199,38 @@ auth.get('/google/callback', async (c) => {
   return c.redirect(`/my?${params}&new=${isNew ? 1 : 0}`)
 })
 
+// GET /api/auth/profile — get saved profile
+auth.get('/profile', async (c) => {
+  const token = extractToken(c.req)
+  const session = await getSession(c.env.SESSIONS, token, c.env.DB)
+  if (!session) return c.json({ ok: false, message: '未登录' }, 401)
+
+  const user = await c.env.DB.prepare('SELECT profile FROM admin_users WHERE id = ?').bind(session.id).first()
+  let profile = {}
+  try { profile = JSON.parse(user?.profile || '{}') } catch {}
+  return c.json({ ok: true, profile })
+})
+
+// POST /api/auth/profile — save profile
+auth.post('/profile', async (c) => {
+  const token = extractToken(c.req)
+  const session = await getSession(c.env.SESSIONS, token, c.env.DB)
+  if (!session) return c.json({ ok: false, message: '未登录' }, 401)
+
+  const { profile } = await c.req.json()
+  if (!profile || typeof profile !== 'object') return c.json({ ok: false, message: '无效数据' }, 400)
+
+  const allowed = ['name', 'name_kana', 'school', 'school_other', 'student_id', 'phone', 'phone_cn', 'phone_jp', 'wechat']
+  const clean = {}
+  for (const k of allowed) {
+    if (profile[k] !== undefined && profile[k] !== null) clean[k] = String(profile[k]).trim()
+  }
+
+  await c.env.DB.prepare('UPDATE admin_users SET profile = ? WHERE id = ?')
+    .bind(JSON.stringify(clean), session.id).run()
+  return c.json({ ok: true })
+})
+
 // GET /api/auth/invite-info?token=xxx — validate invite token
 auth.get('/invite-info', async (c) => {
   const token = c.req.query('token')
@@ -194,7 +240,8 @@ auth.get('/invite-info', async (c) => {
   if (!raw) return c.json({ ok: false, message: '邀请链接无效或已过期' }, 400)
 
   const invite = JSON.parse(raw)
-  return c.json({ ok: true, email: invite.email, name: invite.name })
+  const existing = await c.env.DB.prepare('SELECT role FROM admin_users WHERE email = ?').bind(invite.email).first()
+  return c.json({ ok: true, email: invite.email, name: invite.name, role: invite.role || 'host', hasAccount: !!existing, currentRole: existing?.role })
 })
 
 export { auth }

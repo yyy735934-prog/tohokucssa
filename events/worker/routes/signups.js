@@ -20,21 +20,31 @@ signups.post('/', async (c) => {
   if (!event || event.status !== 'open') return c.json({ ok: false, message: '活动未开放报名' }, 400)
 
   const emailNorm = email.trim().toLowerCase()
-  const dup = await c.env.DB.prepare('SELECT id FROM signups WHERE event_id = ? AND email = ?')
-    .bind(event_id, emailNorm).first()
-  if (dup) return c.json({ ok: false, message: '该邮箱已报名此活动' }, 400)
+  const token = crypto.randomUUID()
+  const nameTrim = name.trim()
+  const phoneTrim = (phone || '').trim()
+  const dataJson = JSON.stringify(extra || {})
 
-  if (event.capacity) {
-    const count = await c.env.DB.prepare('SELECT COUNT(*) as c FROM signups WHERE event_id = ?').bind(event_id).first()
-    if (count.c >= event.capacity) return c.json({ ok: false, message: '报名已满' }, 400)
+  let result
+  try {
+    if (event.capacity) {
+      result = await c.env.DB.prepare(
+        `INSERT INTO signups (event_id, name, email, phone, data, token)
+         SELECT ?, ?, ?, ?, ?, ?
+         WHERE (SELECT COUNT(*) FROM signups WHERE event_id = ?) < ?`
+      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token, event_id, event.capacity).run()
+      if (!result.meta.changes) return c.json({ ok: false, message: '报名已满' }, 400)
+    } else {
+      result = await c.env.DB.prepare(
+        'INSERT INTO signups (event_id, name, email, phone, data, token) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token).run()
+    }
+  } catch (e) {
+    if (e.message?.includes('UNIQUE')) return c.json({ ok: false, message: '该邮箱已报名此活动' }, 400)
+    throw e
   }
 
-  const token = crypto.randomUUID()
-  const result = await c.env.DB.prepare(
-    'INSERT INTO signups (event_id, name, email, phone, data, token) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(event_id, name.trim(), emailNorm, (phone || '').trim(), JSON.stringify(extra || {}), token).run()
-
-  const emailContent = signupConfirmEmail(event, { name: name.trim(), email: emailNorm, phone: (phone || '').trim(), data: extra || {} })
+  const emailContent = signupConfirmEmail(event, { name: nameTrim, email: emailNorm, phone: phoneTrim, data: extra || {} })
   c.executionCtx.waitUntil(sendEmail(c.env, { to: emailNorm, ...emailContent }))
 
   return c.json({ ok: true, id: result.meta.last_row_id, token })
@@ -83,7 +93,7 @@ signups.get('/export', async (c) => {
         let extra = {}
         try { extra = JSON.parse(s.data || '{}') } catch {}
         return {
-          name: s.name, email: s.email, phone: s.phone,
+          name: s.name, email: s.email, phone: s.phone || [extra['中国手机号'], extra['日本电话号']].filter(Boolean).join(' / ') || '',
           checked_in: !!s.checked_in,
           checked_in_at: s.checked_in_at ? new Date(s.checked_in_at).toISOString() : null,
           signup_at: s.created_at ? new Date(s.created_at).toISOString() : null,
@@ -112,7 +122,8 @@ signups.get('/export', async (c) => {
     try { extra = JSON.parse(s.data || '{}') } catch {}
 
     const cfValues = cfLabels.map(label => extra[label] ?? '')
-    const row = [i + 1, signupTime, s.name, s.email, s.phone || '', s.checked_in ? '已签到' : '未签到', checkinTime, ...cfValues]
+    const phone = s.phone || [extra['中国手机号'], extra['日本电话号']].filter(Boolean).join(' / ') || ''
+    const row = [i + 1, signupTime, s.name, s.email, phone, s.checked_in ? '已签到' : '未签到', checkinTime, ...cfValues]
     lines.push(row.map(esc).join(','))
   }
 
@@ -289,19 +300,29 @@ signups.post('/manual', async (c) => {
   }
 
   const emailNorm = email.trim().toLowerCase()
-  const dup = await c.env.DB.prepare('SELECT id FROM signups WHERE event_id = ? AND email = ?')
-    .bind(event_id, emailNorm).first()
-  if (dup) return c.json({ ok: false, message: '该邮箱已报名此活动' }, 400)
-
-  if (event.capacity) {
-    const count = await c.env.DB.prepare('SELECT COUNT(*) as c FROM signups WHERE event_id = ?').bind(event_id).first()
-    if (count.c >= event.capacity) return c.json({ ok: false, message: '报名已满，无法添加' }, 400)
-  }
-
   const token = crypto.randomUUID()
-  const result = await c.env.DB.prepare(
-    'INSERT INTO signups (event_id, name, email, phone, data, token) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(event_id, name.trim(), emailNorm, (phone || '').trim(), JSON.stringify(extra || {}), token).run()
+  const nameTrim = name.trim()
+  const phoneTrim = (phone || '').trim()
+  const dataJson = JSON.stringify(extra || {})
+
+  let result
+  try {
+    if (event.capacity) {
+      result = await c.env.DB.prepare(
+        `INSERT INTO signups (event_id, name, email, phone, data, token)
+         SELECT ?, ?, ?, ?, ?, ?
+         WHERE (SELECT COUNT(*) FROM signups WHERE event_id = ?) < ?`
+      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token, event_id, event.capacity).run()
+      if (!result.meta.changes) return c.json({ ok: false, message: '报名已满，无法添加' }, 400)
+    } else {
+      result = await c.env.DB.prepare(
+        'INSERT INTO signups (event_id, name, email, phone, data, token) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token).run()
+    }
+  } catch (e) {
+    if (e.message?.includes('UNIQUE')) return c.json({ ok: false, message: '该邮箱已报名此活动' }, 400)
+    throw e
+  }
   return c.json({ ok: true, id: result.meta.last_row_id, token })
 })
 

@@ -53,8 +53,8 @@
       <form v-else-if="event.status === 'open' && !isFull" class="card" @submit.prevent="doSignup">
         <h2 class="form-title">填写报名信息</h2>
         <div class="field">
-          <label class="label">姓名 *</label>
-          <input v-model="form.name" required placeholder="你的姓名" />
+          <label class="label">姓名 * <span class="label-hint">（中文优先，英文亦可）</span></label>
+          <input v-model="form.name" required placeholder="请填写中文姓名" />
         </div>
         <div class="field">
           <label class="label">姓名假名 *</label>
@@ -80,8 +80,12 @@
           <input v-model="form.email" type="email" required placeholder="用于接收活动通知和签到" />
         </div>
         <div class="field">
-          <label class="label">手机号 (选填)</label>
-          <input v-model="form.phone" type="tel" placeholder="选填" />
+          <label class="label">中国手机号 (选填)</label>
+          <input v-model="builtIn.phone_cn" type="tel" placeholder="选填" />
+        </div>
+        <div class="field">
+          <label class="label">日本电话号 (选填)</label>
+          <input v-model="builtIn.phone_jp" type="tel" placeholder="選択入力" />
         </div>
         <div class="field">
           <label class="label">微信号 (选填)</label>
@@ -128,6 +132,7 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api.js'
+import { auth } from '../auth.js'
 
 const route = useRoute()
 const event = ref(null)
@@ -135,9 +140,8 @@ const error = ref('')
 const form = ref({
   name: localStorage.getItem('user_name') || '',
   email: localStorage.getItem('user_email') || '',
-  phone: ''
 })
-const builtIn = reactive({ student_id: '', name_kana: '', wechat: '', school: '', school_other: '' })
+const builtIn = reactive({ student_id: '', name_kana: '', wechat: '', school: '', school_other: '', phone_cn: '', phone_jp: '' })
 const schools = ['東北大学', '山形大学', '福島大学', '会津大学', '宮城大学', '仙台大学', '東北医科薬科大学', '東北学院大学', '東北工業大学', '福島県立医科大学', '東北芸術工科大学', '其他学校']
 const extra = reactive({})
 const formError = ref('')
@@ -170,6 +174,25 @@ onMounted(async () => {
     const data = await api.getEvent(route.params.id)
     event.value = data.event
   } catch (e) { error.value = e.message }
+
+  if (auth.isLoggedIn) {
+    if (!form.value.email) form.value.email = auth.email
+    try {
+      const data = await api.getProfile()
+      const p = data.profile || {}
+      if (p.name && !form.value.name) form.value.name = p.name
+      if (p.name_kana && !builtIn.name_kana) builtIn.name_kana = p.name_kana
+      if (p.phone_cn && !builtIn.phone_cn) builtIn.phone_cn = p.phone_cn
+      if (p.phone_jp && !builtIn.phone_jp) builtIn.phone_jp = p.phone_jp
+      if (p.wechat && !builtIn.wechat) builtIn.wechat = p.wechat
+      if (p.student_id && !builtIn.student_id) builtIn.student_id = p.student_id
+      if (p.school && !builtIn.school) {
+        const isKnown = schools.includes(p.school)
+        builtIn.school = isKnown ? p.school : '其他学校'
+        if (!isKnown) builtIn.school_other = p.school
+      }
+    } catch {}
+  }
 })
 
 async function doSignup() {
@@ -180,11 +203,13 @@ async function doSignup() {
       event_id: Number(route.params.id),
       name: form.value.name,
       email: form.value.email,
-      phone: form.value.phone,
+      phone: '',
       extra: {
         姓名假名: builtIn.name_kana,
         所属学校: builtIn.school === '其他学校' ? builtIn.school_other : builtIn.school,
         ...(builtIn.student_id ? { '学号/工号': builtIn.student_id } : {}),
+        ...(builtIn.phone_cn ? { 中国手机号: builtIn.phone_cn } : {}),
+        ...(builtIn.phone_jp ? { 日本电话号: builtIn.phone_jp } : {}),
         ...(builtIn.wechat ? { 微信号: builtIn.wechat } : {}),
         ...extra
       }
@@ -250,4 +275,5 @@ async function doSignup() {
   background: var(--c-primary); opacity: .35;
 }
 .roster-more { font-size: 12px; color: var(--c-text-3); margin-left: 2px; }
+.label-hint { font-weight: 400; font-size: 12px; color: var(--c-text-3); }
 </style>

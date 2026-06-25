@@ -14,20 +14,22 @@
       </div>
     </div>
   </nav>
-  <div v-if="toast" class="pub-toast">{{ toast }}</div>
+  <div class="toast-container">
+    <div v-for="t in toasts" :key="t.id" class="pub-toast" :class="'toast-' + t.type">{{ t.message }}</div>
+  </div>
   <main>
     <router-view />
   </main>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { auth } from './auth.js'
+import { toasts, showToast } from './lib/toast.js'
 
 const route = useRoute()
 const router = useRouter()
-const toast = ref('')
 
 watch(() => route.query.google_token, (token) => {
   if (!token) return
@@ -40,8 +42,7 @@ watch(() => route.query.google_token, (token) => {
     display_name: q.display_name || '',
   })
   localStorage.setItem('user_email', q.email || '')
-  toast.value = q.new === '1' ? '注册成功，欢迎加入！' : '登录成功'
-  setTimeout(() => toast.value = '', 3000)
+  showToast(q.new === '1' ? '注册成功，欢迎加入！' : '登录成功')
   router.replace(route.path)
 }, { immediate: true })
 </script>
@@ -53,10 +54,14 @@ watch(() => route.query.google_token, (token) => {
   text-decoration: none; white-space: nowrap;
 }
 .nav-admin:hover { opacity: .8; }
-.pub-toast {
+.toast-container {
   position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
-  background: var(--c-success); color: #fff; padding: 10px 24px;
-  border-radius: 8px; font-size: 14px; font-weight: 600; z-index: 100;
-  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  z-index: 100; display: flex; flex-direction: column; gap: 8px; align-items: center;
 }
+.pub-toast {
+  background: var(--c-success); color: #fff; padding: 10px 24px;
+  border-radius: 8px; font-size: 14px; font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15); white-space: nowrap;
+}
+.toast-error { background: var(--c-danger); }
 </style>

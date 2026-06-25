@@ -28,4 +28,6 @@ export const api = {
   requestRole: (role) => request('POST', '/users/request-role', { role }),
   applyEvent: (data) => request('POST', '/events/propose', data),
   myPendingRequests: () => request('GET', '/users/my-requests'),
+  getProfile: () => request('GET', '/auth/profile'),
+  saveProfile: (profile) => request('POST', '/auth/profile', { profile }),
 }

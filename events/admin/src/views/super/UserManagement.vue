@@ -5,7 +5,10 @@
         <h1 class="page-title">用户管理</h1>
         <p class="page-sub">管理后台用户和角色</p>
       </div>
-      <button class="btn btn-primary" @click="showCreate = true">添加用户</button>
+      <div class="flex gap-8">
+        <button class="btn btn-outline" @click="showInvite = true">邀请注册</button>
+        <button class="btn btn-primary" @click="showCreate = true">添加用户</button>
+      </div>
     </div>
 
     <!-- Pending role requests -->
@@ -165,6 +168,42 @@
         </form>
       </div>
     </div>
+
+    <!-- Invite registration modal -->
+    <div v-if="showInvite" class="modal-overlay" @click.self="showInvite = false">
+      <div class="modal">
+        <h3 class="modal-title">邀请注册</h3>
+        <p style="font-size:13px;color:var(--c-text-2);margin-bottom:12px">
+          输入邮箱地址，系统将发送邀请邮件，对方点击链接设置密码即完成注册。支持批量粘贴，格式不限。
+        </p>
+        <div class="field">
+          <label class="label">邮箱地址 *</label>
+          <textarea v-model="inviteForm.emails" rows="4" placeholder="粘贴邮箱地址，支持逗号、空格、换行分隔&#10;例如：a@example.com, b@example.com&#10;或直接粘贴通讯录文本"></textarea>
+        </div>
+        <div class="field">
+          <label class="label">注册角色</label>
+          <select v-model="inviteForm.role">
+            <option value="host">活动主理人</option>
+            <option v-if="auth.isSuper" value="reviewer">审核管理员</option>
+          </select>
+        </div>
+        <div v-if="inviteResult" class="invite-result">
+          <p v-if="inviteResult.sent.length" style="font-size:13px;margin-bottom:4px">
+            <strong style="color:var(--c-success)">已发送 {{ inviteResult.sent.length }} 封邀请邮件</strong>
+          </p>
+          <p v-if="inviteResult.skipped.length" style="font-size:13px;color:var(--c-text-2)">
+            已有账号跳过：{{ inviteResult.skipped.join('、') }}
+          </p>
+        </div>
+        <p v-if="inviteError" class="error">{{ inviteError }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-outline" @click="closeInviteModal">关闭</button>
+          <button v-if="!inviteResult" class="btn btn-primary" @click="sendInvites" :disabled="busy">
+            {{ busy ? '发送中…' : '发送邀请' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -192,6 +231,31 @@ const editError = ref('')
 const resetTarget = ref(null)
 const resetPw = ref('')
 const resetError = ref('')
+
+const showInvite = ref(false)
+const inviteForm = reactive({ emails: '', role: 'host' })
+const inviteResult = ref(null)
+const inviteError = ref('')
+
+async function sendInvites() {
+  inviteError.value = ''
+  if (!inviteForm.emails.trim()) { inviteError.value = '请输入邮箱'; return }
+  busy.value = true
+  try {
+    const data = await api.inviteUsers(inviteForm.emails, inviteForm.role)
+    inviteResult.value = data
+    if (data.sent.length) showToast(`已发送 ${data.sent.length} 封邀请邮件`)
+    else showToast('没有新邮箱需要邀请', 'error')
+  } catch (e) { inviteError.value = e.message }
+  busy.value = false
+}
+
+function closeInviteModal() {
+  showInvite.value = false
+  inviteForm.emails = ''; inviteForm.role = 'host'
+  inviteResult.value = null
+  inviteError.value = ''
+}
 
 function formatDT(ts) { return formatDateTime(ts) }
 
@@ -318,4 +382,8 @@ async function deleteUser(u) {
 }
 .req-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .history-item { background: var(--c-bg); border-color: var(--c-border); }
+.invite-result {
+  margin-top: 12px; padding: 12px; background: var(--c-bg);
+  border: 1px solid var(--c-success); border-radius: 8px;
+}
 </style>
