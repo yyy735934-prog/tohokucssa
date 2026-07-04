@@ -50,13 +50,16 @@ npx wrangler secret put GOOGLE_CLIENT_SECRET
 
 ### 6. 初始化超级管理员
 
-首次访问 `/admin/login`，用任意邮箱+密码登录会自动创建第一个账号；
-然后在 D1 里把该账号提升为超级管理员：
+两种方式任选：
+
+**方式 A（配置了谷歌登录）**：用管理员的谷歌账号在 `/admin/login` 登录一次（自动创建账号），然后提权：
 
 ```bash
 npx wrangler d1 execute <客户名>-db --remote \
-  --command "UPDATE admin_users SET role='reviewer', is_super=1 WHERE email='客户管理员邮箱'"
+  --command "UPDATE admin_users SET role='reviewer', is_super=1 WHERE email='管理员邮箱'"
 ```
+
+**方式 B（直接建号）**：用 Node 生成 PBKDF2 密码哈希后插入（参考 worker/lib/password.js 的格式 `salt:hash`，100000 次 SHA-256 迭代），或先部署后临时用方式 A。
 
 ## 本地开发
 

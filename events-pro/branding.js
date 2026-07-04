@@ -14,11 +14,17 @@ export const BRANDING = {
   // 部署后改成实际域名，如 'https://events.your-org.com'
   origin: 'https://example.workers.dev',
 
-  // 报名表「所属学校/单位」下拉选项，最后一项建议保留「其他」
+  // 报名表「所属学校/单位」下拉选项，以「其他」开头的选项会显示自由填写框
   // 留空数组 [] 则报名表不显示该字段
   schools: ['其他'],
+
+  // 「所属学校」字段的显示名称（校友会可改为「所属」等）
+  schoolFieldLabel: '所属学校',
 
   // 需要额外填写「学号/工号」的学校名称（须与 schools 中一致）
   // 留空 '' 则不启用学号字段
   studentIdSchool: '',
+
+  // 报名表是否显示「姓名假名」字段（面向日本组织建议开启）
+  showKana: true,
 }

@@ -56,12 +56,12 @@
           <label class="label">姓名 * <span class="label-hint">（中文优先，英文亦可）</span></label>
           <input v-model="form.name" required placeholder="请填写中文姓名" />
         </div>
-        <div class="field">
+        <div v-if="showKana" class="field">
           <label class="label">姓名假名 *</label>
           <input v-model="builtIn.name_kana" required placeholder="シメイ" />
         </div>
         <div v-if="schools.length" class="field">
-          <label class="label">所属学校 *</label>
+          <label class="label">{{ schoolFieldLabel }} *</label>
           <select v-model="builtIn.school" required>
             <option value="">请选择</option>
             <option v-for="s in schools" :key="s" :value="s">{{ s }}</option>
@@ -144,7 +144,9 @@ const form = ref({
 })
 const builtIn = reactive({ student_id: '', name_kana: '', wechat: '', school: '', school_other: '', phone_cn: '', phone_jp: '' })
 const schools = BRANDING.schools
+const schoolFieldLabel = BRANDING.schoolFieldLabel || '所属学校'
 const studentIdSchool = BRANDING.studentIdSchool
+const showKana = BRANDING.showKana !== false
 const isOtherSchool = computed(() => builtIn.school.startsWith('其他'))
 const extra = reactive({})
 const formError = ref('')
@@ -210,8 +212,8 @@ async function doSignup() {
       email: form.value.email,
       phone: '',
       extra: {
-        姓名假名: builtIn.name_kana,
-        ...(schools.length ? { 所属学校: isOtherSchool.value ? builtIn.school_other : builtIn.school } : {}),
+        ...(showKana && builtIn.name_kana ? { 姓名假名: builtIn.name_kana } : {}),
+        ...(schools.length ? { [schoolFieldLabel]: isOtherSchool.value ? builtIn.school_other : builtIn.school } : {}),
         ...(builtIn.student_id ? { '学号/工号': builtIn.student_id } : {}),
         ...(builtIn.phone_cn ? { 中国手机号: builtIn.phone_cn } : {}),
         ...(builtIn.phone_jp ? { 日本电话号: builtIn.phone_jp } : {}),

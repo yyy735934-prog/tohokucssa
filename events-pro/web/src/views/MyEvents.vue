@@ -36,8 +36,8 @@
       <div v-if="!editingProfile" class="card profile-view">
         <div v-if="hasProfile">
           <div v-if="profile.name" class="profile-row"><span class="profile-label">姓名</span><span>{{ profile.name }}</span></div>
-          <div v-if="profile.name_kana" class="profile-row"><span class="profile-label">姓名假名</span><span>{{ profile.name_kana }}</span></div>
-          <div v-if="profile.school" class="profile-row"><span class="profile-label">所属学校</span><span>{{ profile.school }}</span></div>
+          <div v-if="showKana && profile.name_kana" class="profile-row"><span class="profile-label">姓名假名</span><span>{{ profile.name_kana }}</span></div>
+          <div v-if="profile.school" class="profile-row"><span class="profile-label">{{ schoolFieldLabel }}</span><span>{{ profile.school }}</span></div>
           <div v-if="profile.student_id" class="profile-row"><span class="profile-label">学号/工号</span><span>{{ profile.student_id }}</span></div>
           <div v-if="profile.phone_cn" class="profile-row"><span class="profile-label">中国手机号</span><span>{{ profile.phone_cn }}</span></div>
           <div v-if="profile.phone_jp" class="profile-row"><span class="profile-label">日本电话号</span><span>{{ profile.phone_jp }}</span></div>
@@ -51,12 +51,12 @@
           <label class="label">姓名</label>
           <input v-model="profileForm.name" placeholder="你的姓名" />
         </div>
-        <div class="field">
+        <div v-if="showKana" class="field">
           <label class="label">姓名假名</label>
           <input v-model="profileForm.name_kana" placeholder="シメイ" />
         </div>
         <div v-if="schoolList.length" class="field">
-          <label class="label">所属学校</label>
+          <label class="label">{{ schoolFieldLabel }}</label>
           <select v-model="profileForm.school">
             <option value="">请选择</option>
             <option v-for="s in schoolList" :key="s" :value="s">{{ s }}</option>
@@ -262,7 +262,9 @@ const editingProfile = ref(false)
 const savingProfile = ref(false)
 const profileForm = ref({})
 const schoolList = BRANDING.schools
+const schoolFieldLabel = BRANDING.schoolFieldLabel || '所属学校'
 const studentIdSchool = BRANDING.studentIdSchool
+const showKana = BRANDING.showKana !== false
 
 const hasProfile = computed(() => Object.values(profile.value).some(v => v))
 
