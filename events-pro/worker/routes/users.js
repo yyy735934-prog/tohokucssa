@@ -4,6 +4,7 @@ import { getSession, extractToken } from '../lib/session.js'
 import { sendEmail, roleRequestEmail, roleChangedEmail, roleRejectedEmail, inviteRegisterEmail } from '../lib/email.js'
 import { audit } from '../lib/audit.js'
 import { createNotification } from './notifications.js'
+import { slackOnRoleGranted } from '../lib/slack.js'
 
 const users = new Hono()
 
@@ -113,8 +114,12 @@ users.patch('/:id', async (c) => {
   if (role) {
     const user = await c.env.DB.prepare('SELECT email, display_name FROM admin_users WHERE id = ?').bind(id).first()
     if (user) {
-      const content = roleChangedEmail(user, role)
+      const content = roleChangedEmail(user, role, c.env.SLACK_INVITE_URL)
       c.executionCtx.waitUntil(sendEmail(c.env, { to: user.email, ...content }))
+      if (role === 'host' || role === 'reviewer') {
+        const rn = role === 'host' ? '活动主理人' : '审核管理员'
+        c.executionCtx.waitUntil(slackOnRoleGranted(c.env, { email: user.email, displayName: user.display_name, roleName: rn }))
+      }
       // Clean up any pending role requests at or below the new role
       const roleOrder = { user: 0, host: 1, reviewer: 2 }
       for (const r of ['host', 'reviewer']) {
@@ -231,7 +236,7 @@ users.post('/approve-role', async (c) => {
   const prevRole = user.role
   await c.env.DB.prepare('UPDATE admin_users SET role = ? WHERE id = ?').bind(role, user.id).run()
 
-  const emailContent = roleChangedEmail({ email: user.email, display_name: user.display_name }, role)
+  const emailContent = roleChangedEmail({ email: user.email, display_name: user.display_name }, role, c.env.SLACK_INVITE_URL)
   c.executionCtx.waitUntil(sendEmail(c.env, { to: user.email, ...emailContent }))
 
   await c.env.SESSIONS.delete(`role_req:${email}:${role}`)
@@ -243,6 +248,7 @@ users.post('/approve-role', async (c) => {
   }), { expirationTtl: 30 * 24 * 3600 })
 
   await createNotification(c.env.DB, user.id, 'role_approved', '角色申请已通过', `你已成为${roleName}，可以使用对应功能了`)
+  c.executionCtx.waitUntil(slackOnRoleGranted(c.env, { email: user.email, displayName: user.display_name, roleName }))
   await audit(c.env.DB, 'approve_role', 'user', user.id, `批准 ${email} 为${roleName}`, session.email)
   return c.json({ ok: true })
 })

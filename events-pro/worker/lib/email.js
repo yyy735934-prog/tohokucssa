@@ -216,8 +216,8 @@ export function roleRequestEmail(user, roleName) {
   }
 }
 
-// 角色变更结果 → 通知用户
-export function roleChangedEmail(user, newRole) {
+// 角色变更结果 → 通知用户（升级且配置了 Slack 邀请链接时，附加入群按钮）
+export function roleChangedEmail(user, newRole, slackInviteUrl) {
   const roleNames = { host: '活动主理人', reviewer: '审核管理员', user: '普通用户' }
   const roleName = roleNames[newRole] || newRole
   const isUpgrade = newRole === 'host' || newRole === 'reviewer'
@@ -230,6 +230,9 @@ export function roleChangedEmail(user, newRole) {
         <dt>当前身份</dt><dd${isUpgrade ? ' class="success"' : ''}>${esc(roleName)}</dd>
       </dl>
       ${isUpgrade ? '<p style="margin-top:16px;font-size:14px">你现在可以登录管理后台使用对应功能了</p>' : ''}
+      ${isUpgrade && slackInviteUrl ? `
+      <p style="margin-top:20px"><a href="${esc(slackInviteUrl)}" class="btn">加入管理 Slack 群</a></p>
+      <p style="margin-top:8px;font-size:13px;color:#8e8e93">管理团队在 Slack 上沟通协作，点击上方按钮加入（如已加入可忽略）</p>` : ''}
     `),
   }
 }
