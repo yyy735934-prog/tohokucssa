@@ -86,4 +86,40 @@ images.get('/serve/:eventId', async (c) => {
   return new Response(obj.body, { headers })
 })
 
+// POST /api/images/announce-upload/:eventId — 通知附图上传（不占用活动主图）
+images.post('/announce-upload/:eventId', async (c) => {
+  const session = await requireAuth(c)
+  const eventId = Number(c.req.param('eventId'))
+  if (!eventId) return c.json({ ok: false, message: '无效的活动ID' }, 400)
+
+  const event = await c.env.DB.prepare('SELECT id, created_by FROM events WHERE id = ?').bind(eventId).first()
+  if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
+  if (event.created_by !== session.id && session.role !== 'reviewer') {
+    return c.json({ ok: false, message: '无权操作' }, 403)
+  }
+
+  const formData = await c.req.formData()
+  const file = formData.get('file')
+  if (!file || !(file instanceof File)) return c.json({ ok: false, message: '请选择图片' }, 400)
+  if (file.size > 5 * 1024 * 1024) return c.json({ ok: false, message: '图片不能超过 5MB' }, 400)
+  const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+  if (!allowed.includes(file.type)) return c.json({ ok: false, message: '仅支持 JPG/PNG/WebP/GIF 格式' }, 400)
+
+  const ext = file.name.split('.').pop() || 'jpg'
+  const key = `announce/${eventId}/${Date.now()}.${ext}`
+  await c.env.IMAGES.put(key, file.stream(), { httpMetadata: { contentType: file.type } })
+  return c.json({ ok: true, key })
+})
+
+// GET /api/images/announce/:eventId/:file — 公开读取通知附图（邮件内嵌）
+images.get('/announce/:eventId/:file', async (c) => {
+  const key = `announce/${c.req.param('eventId')}/${c.req.param('file')}`
+  const obj = await c.env.IMAGES.get(key)
+  if (!obj) return c.json({ ok: false, message: '图片不存在' }, 404)
+  const headers = new Headers()
+  headers.set('content-type', obj.httpMetadata?.contentType || 'image/jpeg')
+  headers.set('cache-control', 'public, max-age=604800')
+  return new Response(obj.body, { headers })
+})
+
 export { images }

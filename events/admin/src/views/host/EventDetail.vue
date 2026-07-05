@@ -280,6 +280,7 @@
       <div class="flex gap-8 flex-wrap">
         <button class="btn btn-outline btn-sm" @click="sendReminder" :disabled="busy">发送活动提醒</button>
         <button class="btn btn-outline btn-sm" @click="showNotifyModal = true">发送变更通知</button>
+        <button class="btn btn-primary btn-sm" @click="showAnnounceModal = true">发送普通通知</button>
       </div>
     </div>
 
@@ -489,6 +490,36 @@
       </div>
     </div>
 
+    <!-- Announce modal -->
+    <div v-if="showAnnounceModal" class="modal-overlay" @click.self="showAnnounceModal = false">
+      <div class="modal">
+        <h3 class="modal-title">发送普通通知</h3>
+        <p style="font-size:13px;color:var(--c-text-2);margin-bottom:12px">将向所有 {{ signups.length }} 位报名者发送邮件，可附一张图片（如微信群二维码）</p>
+        <div class="field">
+          <label class="label">标题 *</label>
+          <input v-model="announceSubject" placeholder="如：请扫码加入活动微信群" />
+        </div>
+        <div class="field">
+          <label class="label">内容 *</label>
+          <textarea v-model="announceMessage" rows="5" placeholder="通知正文，支持换行"></textarea>
+        </div>
+        <div class="field">
+          <label class="label">附图（可选）</label>
+          <div v-if="announceImagePreview">
+            <img :src="announceImagePreview" style="max-width:200px;border-radius:8px;display:block;border:1px solid var(--c-border)" />
+            <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" @click="announceImage = null; announceImagePreview = ''">移除图片</button>
+          </div>
+          <button v-else type="button" class="btn btn-outline btn-sm" @click="$refs.announceInput.click()">选择图片</button>
+          <input ref="announceInput" type="file" accept="image/*" style="display:none" @change="onAnnounceImage" />
+        </div>
+        <p v-if="announceError" class="error">{{ announceError }}</p>
+        <div class="modal-actions">
+          <button class="btn btn-outline" @click="showAnnounceModal = false">取消</button>
+          <button class="btn btn-primary" @click="sendAnnounce" :disabled="busy">{{ busy ? '发送中…' : '发送' }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Notify modal -->
     <div v-if="showNotifyModal" class="modal-overlay" @click.self="showNotifyModal = false">
       <div class="modal">
@@ -659,6 +690,45 @@ const addForm = ref({ name: '', email: '', phone: '' })
 const addError = ref('')
 const showNotifyModal = ref(false)
 const notifyMessage = ref('')
+
+const showAnnounceModal = ref(false)
+const announceSubject = ref('')
+const announceMessage = ref('')
+const announceImage = ref(null)
+const announceImagePreview = ref('')
+const announceError = ref('')
+
+function onAnnounceImage(e) {
+  const file = e.target.files[0]
+  e.target.value = ''
+  if (!file) return
+  announceImage.value = file
+  announceImagePreview.value = URL.createObjectURL(file)
+}
+
+async function sendAnnounce() {
+  announceError.value = ''
+  if (!announceSubject.value.trim() || !announceMessage.value.trim()) {
+    announceError.value = '标题和内容必填'
+    return
+  }
+  busy.value = true
+  try {
+    let image_key = null
+    if (announceImage.value) {
+      const data = await api.uploadAnnounceImage(event.value.id, announceImage.value)
+      image_key = data.key
+    }
+    const data = await api.announceEvent(event.value.id, {
+      subject: announceSubject.value, message: announceMessage.value, image_key
+    })
+    showToast(`已发送 ${data.count} 封通知邮件`)
+    showAnnounceModal.value = false
+    announceSubject.value = ''; announceMessage.value = ''
+    announceImage.value = null; announceImagePreview.value = ''
+  } catch (e) { announceError.value = e.message }
+  busy.value = false
+}
 
 const showInviteSignup = ref(false)
 const inviteTab = ref('email')

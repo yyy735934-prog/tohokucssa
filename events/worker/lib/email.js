@@ -303,3 +303,20 @@ function signupInfoBlock(signup) {
 function esc(s) {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
+
+// 普通通知（自定义标题+正文+可选附图，如微信群二维码）
+export function eventAnnounceEmail(event, signup, subject, message, imageUrl) {
+  return {
+    subject: `${subject} — ${event.title}`,
+    html: baseHtml('活动通知', `
+      <h1>${esc(subject)}</h1>
+      <p class="sub">${esc(signup.name || '')}，「${esc(event.title)}」主办方给你发来通知</p>
+      <div style="font-size:15px;line-height:1.8;white-space:pre-wrap">${esc(message)}</div>
+      ${imageUrl ? `<p style="margin-top:16px"><img src="${esc(imageUrl)}" style="max-width:100%;border-radius:8px" alt="附图" /></p>` : ''}
+      <dl class="info" style="margin-top:20px">
+        <dt>活动</dt><dd>${esc(event.title)}</dd>
+        <dt>时间</dt><dd>${esc(event.event_date)}</dd>
+      </dl>
+    `),
+  }
+}

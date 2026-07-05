@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { getSession, extractToken } from '../lib/session.js'
-import { sendEmail, eventApprovedEmail, eventRejectedEmail, eventApprovedInviteEmail, eventChangedEmail, eventReminderEmail, eventSubmittedEmail, inviteSignupEmail } from '../lib/email.js'
+import { sendEmail, eventApprovedEmail, eventRejectedEmail, eventApprovedInviteEmail, eventChangedEmail, eventReminderEmail, eventSubmittedEmail, eventAnnounceEmail, inviteSignupEmail } from '../lib/email.js'
 import { createNotification, notifyReviewers } from './notifications.js'
 import { audit } from '../lib/audit.js'
 
@@ -426,6 +426,32 @@ events.post('/:id/notify', async (c) => {
 
   for (const s of signups.results) {
     const content = eventChangedEmail(event, s, message || '')
+    c.executionCtx.waitUntil(sendEmail(c.env, { to: s.email, ...content }))
+  }
+  return c.json({ ok: true, count: signups.results.length })
+})
+
+// POST /api/events/:id/announce — 普通通知（自定义标题+正文+可选附图）
+events.post('/:id/announce', async (c) => {
+  const session = await requireAuth(c)
+  const id = Number(c.req.param('id'))
+  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
+  if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
+  if (event.created_by !== session.id && session.role !== 'reviewer') {
+    return c.json({ ok: false, message: '无权操作' }, 403)
+  }
+
+  const { subject, message, image_key } = await c.req.json().catch(() => ({}))
+  if (!subject?.trim() || !message?.trim()) return c.json({ ok: false, message: '标题和内容必填' }, 400)
+
+  const signups = await c.env.DB.prepare('SELECT name, email FROM signups WHERE event_id = ?').bind(id).all()
+  if (!signups.results.length) return c.json({ ok: false, message: '暂无报名者' }, 400)
+
+  const origin = new URL(c.req.url).origin
+  const imageUrl = image_key ? `${origin}/api/images/${image_key}` : ''
+
+  for (const s of signups.results) {
+    const content = eventAnnounceEmail(event, s, subject.trim(), message.trim(), imageUrl)
     c.executionCtx.waitUntil(sendEmail(c.env, { to: s.email, ...content }))
   }
   return c.json({ ok: true, count: signups.results.length })
