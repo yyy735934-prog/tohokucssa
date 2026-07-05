@@ -12,6 +12,8 @@
         <router-link v-if="event.status === 'draft'" :to="`/admin/events/${event.id}/edit`" class="btn btn-outline btn-sm">编辑</router-link>
         <button v-if="event.status === 'draft'" class="btn btn-primary btn-sm" @click="submitEvent" :disabled="busy">提交审核</button>
         <button v-if="event.status === 'pending'" class="btn btn-outline btn-sm" @click="withdrawEvent" :disabled="busy">撤回</button>
+        <button v-if="event.status === 'open' && !event.capacity && !isLocked" class="btn btn-outline btn-sm" style="color:var(--c-warning)" @click="lockSignups" :disabled="busy">锁定报名</button>
+        <button v-if="event.status === 'open' && isLocked" class="btn btn-outline btn-sm" style="color:var(--c-success)" @click="unlockSignups" :disabled="busy">解锁报名</button>
         <button v-if="event.status === 'open'" class="btn btn-primary btn-sm" @click="activateEvent" :disabled="busy">开始活动</button>
         <button v-if="event.status === 'active'" class="btn btn-outline btn-sm" @click="deactivateEvent" :disabled="busy">撤回开始</button>
         <button v-if="event.status === 'active'" class="btn btn-danger btn-sm" @click="closeEvent" :disabled="busy">结束活动</button>
@@ -66,6 +68,12 @@
       <p v-else-if="event.status === 'active'" class="wf-hint">
         活动进行中，可以扫码签到。结束后点击「结束活动」。无人签到时可点击「撤回开始」恢复报名
       </p>
+    </div>
+
+    <!-- Lock banner -->
+    <div v-if="isLocked && event.status === 'open'" class="card mb-16 lock-banner">
+      <span class="lock-banner-icon">🔒</span>
+      <span>报名已锁定（当前 {{ signups.length }} 人），新报名将被拒绝</span>
     </div>
 
     <!-- Event Info Card (inline editable) -->
@@ -278,7 +286,7 @@
     <div class="stats">
       <div class="card stat-card">
         <div class="stat-value">{{ signups.length }}</div>
-        <div class="stat-label">总报名{{ event.capacity ? ` / ${event.capacity}` : '' }}</div>
+        <div class="stat-label">总报名{{ event.capacity ? ` / ${event.capacity}` : (event.lock_at ? ` / ${event.lock_at} 🔒` : '') }}</div>
       </div>
       <div class="card stat-card">
         <div class="stat-value">{{ signups.filter(s => s.checked_in).length }}</div>
@@ -600,7 +608,7 @@ async function saveInfo() {
   try {
     const cfData = editCustomFields.value.filter(f => f.label.trim()).map(f => ({
       label: f.label.trim(), type: f.type, required: f.required,
-      ...(f.type === 'select' ? { options: f.optionsStr.split(',').map(o => o.trim()).filter(Boolean) } : {})
+      ...(f.type === 'select' ? { options: f.optionsStr.split(/[,，、;；]/).map(o => o.trim()).filter(Boolean) } : {})
     }))
     const payload = { ...infoForm.value, custom_fields: cfData }
     await api.updateEvent(event.value.id, payload)
@@ -711,6 +719,8 @@ const renderedPlan = computed(() => {
     .replace(/\n/g, '<br>')
 })
 
+const isLocked = computed(() => event.value?.lock_at && signups.value.length >= event.value.lock_at)
+
 const stepIndex = computed(() => {
   const map = { draft: 0, pending: 1, open: 2, active: 3, closed: 4 }
   return map[event.value?.status] ?? 0
@@ -750,6 +760,26 @@ async function load() {
 }
 
 onMounted(load)
+
+async function lockSignups() {
+  busy.value = true
+  try {
+    await api.updateEvent(event.value.id, { lock_at: signups.value.length })
+    event.value.lock_at = signups.value.length
+    showToast('报名已锁定')
+  } catch (e) { showToast(e.message, 'error') }
+  busy.value = false
+}
+
+async function unlockSignups() {
+  busy.value = true
+  try {
+    await api.updateEvent(event.value.id, { lock_at: null })
+    event.value.lock_at = null
+    showToast('报名已解锁')
+  } catch (e) { showToast(e.message, 'error') }
+  busy.value = false
+}
 
 async function submitEvent() {
   busy.value = true
@@ -982,6 +1012,13 @@ function copyCheckinLink() {
 }
 .wf-line.done { background: var(--c-primary); }
 .wf-hint { font-size: 13px; color: var(--c-text-2); margin-top: 14px; }
+
+.lock-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 18px; font-size: 14px; font-weight: 500;
+  background: #fef3c7; border: 1px solid #f59e0b; color: #92400e;
+}
+.lock-banner-icon { font-size: 18px; }
 
 .plan-card {
   background: var(--c-surface); border-radius: 12px; padding: 20px 24px;

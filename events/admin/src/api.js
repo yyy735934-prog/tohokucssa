@@ -1,6 +1,8 @@
 import { auth } from './lib/auth.js'
 
-async function request(method, path, body) {
+let _loginAt = 0
+
+async function request(method, path, body, _retry = false) {
   const headers = { 'content-type': 'application/json' }
   const token = auth.token
   if (token) headers['authorization'] = `Bearer ${token}`
@@ -14,11 +16,16 @@ async function request(method, path, body) {
   if (res.headers.get('content-type')?.includes('text/csv')) return res
 
   const data = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }))
-  if (res.status === 401) {
+  if (res.status === 401 && path !== '/auth/login') {
+    if (!_retry && Date.now() - _loginAt < 5000) {
+      await new Promise(r => setTimeout(r, 800))
+      return request(method, path, body, true)
+    }
     auth.clear()
     if (window.__vueRouter) window.__vueRouter.push('/admin/login')
     throw new Error('登录已过期')
   }
+  if (path === '/auth/login' && data.ok) _loginAt = Date.now()
   if (!res.ok || data.ok === false) throw new Error(data.message || '请求失败')
   return data
 }

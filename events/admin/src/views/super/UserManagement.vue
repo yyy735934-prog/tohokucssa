@@ -76,7 +76,7 @@
               <td>{{ formatDT(u.created_at) }}</td>
               <td>
                 <div class="flex gap-8">
-                  <button v-if="auth.isSuper && !u.is_super" class="btn btn-outline btn-sm" @click="startEdit(u)">编辑</button>
+                  <button v-if="auth.isSuper && (!u.is_super || u.email === auth.email)" class="btn btn-outline btn-sm" @click="startEdit(u)">编辑</button>
                   <button v-if="auth.isSuper && !u.is_super" class="btn btn-outline btn-sm" @click="startResetPw(u)">重置密码</button>
                   <button v-if="!u.is_super" class="btn btn-outline btn-sm" style="color:var(--c-danger)" @click="deleteUser(u)">删除</button>
                 </div>
@@ -133,7 +133,7 @@
             <label class="label">显示名</label>
             <input v-model="editForm.display_name" />
           </div>
-          <div class="field">
+          <div v-if="!editTarget.is_super" class="field">
             <label class="label">角色</label>
             <select v-model="editForm.role">
               <option value="user">普通用户</option>

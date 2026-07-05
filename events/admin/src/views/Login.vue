@@ -43,6 +43,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { api } from '../api.js'
 import { auth } from '../lib/auth.js'
+import { showToast } from '../lib/toast.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -70,6 +71,9 @@ onMounted(() => {
       is_super: q.is_super === '1',
       display_name: q.display_name || '',
     })
+    if (q.new === '1') {
+      showToast('已为你创建账号。如需发布活动，请在侧边栏申请成为活动主理人')
+    }
     router.replace('/admin/events')
     return
   }

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS events (
   content         TEXT    NOT NULL DEFAULT '',
   notes           TEXT    NOT NULL DEFAULT '',
   capacity        INTEGER,
+  lock_at         INTEGER,
   status          TEXT    NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'pending', 'open', 'active', 'closed')),
   custom_fields   TEXT    NOT NULL DEFAULT '[]',
   plan            TEXT,

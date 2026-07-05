@@ -215,7 +215,7 @@ export function roleRequestEmail(user, roleName) {
 }
 
 // 角色变更结果 → 通知用户
-export function roleChangedEmail(user, newRole) {
+export function roleChangedEmail(user, newRole, slackInviteUrl) {
   const roleNames = { host: '活动主理人', reviewer: '审核管理员', user: '普通用户' }
   const roleName = roleNames[newRole] || newRole
   const isUpgrade = newRole === 'host' || newRole === 'reviewer'
@@ -228,6 +228,23 @@ export function roleChangedEmail(user, newRole) {
         <dt>当前身份</dt><dd${isUpgrade ? ' class="success"' : ''}>${esc(roleName)}</dd>
       </dl>
       ${isUpgrade ? '<p style="margin-top:16px;font-size:14px">你现在可以登录管理后台使用对应功能了</p>' : ''}
+      ${isUpgrade && slackInviteUrl ? `
+      <p style="margin-top:20px"><a href="${esc(slackInviteUrl)}" class="btn">加入管理 Slack 群</a></p>
+      <p style="margin-top:8px;font-size:13px;color:#8e8e93">管理团队在 Slack 上沟通协作，点击上方按钮加入（如已加入可忽略）</p>` : ''}
+    `),
+  }
+}
+
+export function roleRejectedEmail(user, roleName) {
+  return {
+    subject: `角色申请未通过 — ${roleName}`,
+    html: baseHtml('申请结果', `
+      <h1>角色申请未通过</h1>
+      <p class="sub">${esc(user.display_name || user.email)}，你的${esc(roleName)}申请未被通过</p>
+      <dl class="info">
+        <dt>申请角色</dt><dd>${esc(roleName)}</dd>
+      </dl>
+      <p style="margin-top:16px;font-size:14px;color:#8e8e93">如有疑问，请联系管理员</p>
     `),
   }
 }

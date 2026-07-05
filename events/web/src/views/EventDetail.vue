@@ -23,10 +23,10 @@
       <!-- Signup count roster -->
       <div class="card mb roster-card">
         <div class="roster-head">
-          <h3>已确认参加 <strong>{{ event.signupCount }}</strong> {{ event.capacity ? `/ ${event.capacity}` : '' }} 位</h3>
+          <h3>已确认参加 <strong>{{ event.signupCount }}</strong> {{ effectiveCap ? `/ ${effectiveCap}` : '' }} 位</h3>
           <span class="roster-hint">为保护隐私，不显示姓名</span>
         </div>
-        <div v-if="event.capacity" class="roster-progress">
+        <div v-if="effectiveCap" class="roster-progress">
           <div class="roster-progress-fill" :style="{ width: pct+'%' }" :class="{ full: isFull }"></div>
         </div>
         <p v-if="!event.signupCount" class="roster-empty">还没有人报名，快来成为第一个吧。</p>
@@ -63,7 +63,7 @@
         <div class="field">
           <label class="label">所属学校 *</label>
           <select v-model="builtIn.school" required>
-            <option value="">请选择</option>
+            <option value="" disabled hidden>请选择</option>
             <option v-for="s in schools" :key="s" :value="s">{{ s }}</option>
           </select>
         </div>
@@ -96,7 +96,7 @@
         <div v-for="f in customFields" :key="f.key" class="field">
           <label class="label">{{ f.label }}{{ f.required ? ' *' : '' }}</label>
           <select v-if="f.type === 'select'" v-model="extra[f.key]" :required="f.required">
-            <option value="">请选择</option>
+            <option value="" disabled hidden>请选择</option>
             <option v-for="opt in f.options" :key="opt" :value="opt">{{ opt }}</option>
           </select>
           <textarea v-else-if="f.type === 'textarea'" v-model="extra[f.key]" :required="f.required" rows="2" :placeholder="f.placeholder || ''" />
@@ -166,8 +166,9 @@ const showQrLink = computed(() => {
   const eventDay = new Date(event.value.event_date.replace(/\s/, 'T') + '+09:00')
   return (eventDay - jstNow) < 1 * 24 * 3600000
 })
-const pct = computed(() => event.value?.capacity ? Math.min(100, event.value.signupCount / event.value.capacity * 100) : 0)
-const isFull = computed(() => event.value?.capacity && event.value.signupCount >= event.value.capacity)
+const effectiveCap = computed(() => event.value?.capacity || event.value?.lock_at || null)
+const pct = computed(() => effectiveCap.value ? Math.min(100, event.value.signupCount / effectiveCap.value * 100) : 0)
+const isFull = computed(() => effectiveCap.value && event.value.signupCount >= effectiveCap.value)
 
 onMounted(async () => {
   try {

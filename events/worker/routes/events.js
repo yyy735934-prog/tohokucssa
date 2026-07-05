@@ -97,7 +97,7 @@ events.get('/', async (c) => {
 
   if (scope === 'public') {
     const rows = await c.env.DB.prepare(
-      `SELECT e.id, e.title, e.event_date, e.location, e.content, e.capacity, e.status, e.created_at, e.image_key, e.pinned,
+      `SELECT e.id, e.title, e.event_date, e.location, e.content, e.capacity, e.lock_at, e.status, e.created_at, e.image_key, e.pinned,
               COUNT(s.id) as signupCount
        FROM events e LEFT JOIN signups s ON s.event_id = e.id
        WHERE e.status IN ('open', 'active')
@@ -139,8 +139,8 @@ events.get('/:id', async (c) => {
   const isAdmin = session && (session.role === 'reviewer' || session.id === event.created_by)
 
   if (!isAdmin) {
-    const { id, title, event_date, location, content, notes, capacity, status, custom_fields, activity_type, image_key } = event
-    return c.json({ ok: true, event: { id, title, event_date, location, content, notes, capacity, status, custom_fields, activity_type, image_key, signupCount: count.c } })
+    const { id, title, event_date, location, content, notes, capacity, lock_at, status, custom_fields, activity_type, image_key } = event
+    return c.json({ ok: true, event: { id, title, event_date, location, content, notes, capacity, lock_at, status, custom_fields, activity_type, image_key, signupCount: count.c } })
   }
 
   const creator = await c.env.DB.prepare('SELECT email, display_name FROM admin_users WHERE id = ?').bind(event.created_by).first()
@@ -151,7 +151,7 @@ events.get('/:id', async (c) => {
 events.post('/', async (c) => {
   const session = await requireAuth(c)
   const body = await c.req.json()
-  const { title, event_date, location, content, notes, capacity, custom_fields, activity_type } = body
+  const { title, event_date, location, content, notes, capacity, lock_at, custom_fields, activity_type } = body
   if (!title || !event_date) return c.json({ ok: false, message: '标题和时间必填' }, 400)
 
   const cf = custom_fields ? JSON.stringify(custom_fields) : '[]'
@@ -161,8 +161,8 @@ events.post('/', async (c) => {
   }
 
   const result = await c.env.DB.prepare(
-    'INSERT INTO events (title, event_date, location, content, notes, capacity, custom_fields, activity_type, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(title.trim(), event_date.trim(), (location || '').trim(), (content || '').trim(), (notes || '').trim(), capacity || null, cf, (activity_type || '').trim() || null, session.id).run()
+    'INSERT INTO events (title, event_date, location, content, notes, capacity, lock_at, custom_fields, activity_type, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(title.trim(), event_date.trim(), (location || '').trim(), (content || '').trim(), (notes || '').trim(), capacity || null, lock_at || null, cf, (activity_type || '').trim() || null, session.id).run()
 
   return c.json({ ok: true, id: result.meta.last_row_id, role_upgraded: session.role === 'user' })
 })
@@ -178,13 +178,13 @@ events.patch('/:id', async (c) => {
   }
 
   const body = await c.req.json()
-  const fields = ['title', 'event_date', 'location', 'content', 'notes', 'capacity', 'custom_fields', 'activity_type']
+  const fields = ['title', 'event_date', 'location', 'content', 'notes', 'capacity', 'lock_at', 'custom_fields', 'activity_type']
   const sets = []
   const vals = []
   for (const f of fields) {
     if (body[f] !== undefined) {
       sets.push(`${f} = ?`)
-      if (f === 'capacity') vals.push(body[f] || null)
+      if (f === 'capacity' || f === 'lock_at') vals.push(body[f] || null)
       else if (f === 'custom_fields') vals.push(JSON.stringify(body[f]))
       else vals.push(String(body[f] || '').trim())
     }

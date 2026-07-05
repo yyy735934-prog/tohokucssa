@@ -12,10 +12,16 @@ export async function getSession(kv, token, db) {
   if (!raw) return null
   const session = JSON.parse(raw)
   if (db) {
-    const user = await db.prepare('SELECT id FROM admin_users WHERE id = ?').bind(session.id).first()
+    const user = await db.prepare('SELECT id, role, display_name, is_super FROM admin_users WHERE id = ?').bind(session.id).first()
     if (!user) {
       await kv.delete(`session:${token}`)
       return null
+    }
+    if (user.role !== session.role || (user.display_name || '') !== (session.display_name || '') || !!user.is_super !== !!session.is_super) {
+      session.role = user.role
+      session.display_name = user.display_name || ''
+      session.is_super = !!user.is_super
+      await kv.put(`session:${token}`, JSON.stringify(session), { expirationTtl: TTL })
     }
   }
   return session

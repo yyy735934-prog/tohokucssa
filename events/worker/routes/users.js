@@ -1,8 +1,10 @@
 import { Hono } from 'hono'
 import { hashPassword } from '../lib/password.js'
 import { getSession, extractToken } from '../lib/session.js'
-import { sendEmail, roleRequestEmail, roleChangedEmail, inviteRegisterEmail } from '../lib/email.js'
+import { sendEmail, roleRequestEmail, roleChangedEmail, roleRejectedEmail, inviteRegisterEmail } from '../lib/email.js'
 import { audit } from '../lib/audit.js'
+import { createNotification } from './notifications.js'
+import { slackOnRoleGranted } from '../lib/slack.js'
 
 const users = new Hono()
 
@@ -97,12 +99,12 @@ users.patch('/:id', async (c) => {
   const id = Number(c.req.param('id'))
   const target = await c.env.DB.prepare('SELECT is_super FROM admin_users WHERE id = ?').bind(id).first()
   if (!target) return c.json({ ok: false, message: '用户不存在' }, 404)
-  if (target.is_super) return c.json({ ok: false, message: '不能修改超级管理员' }, 400)
+  if (target.is_super && id !== session.id) return c.json({ ok: false, message: '不能修改其他超级管理员' }, 400)
 
   const { role, display_name } = await c.req.json()
   const sets = []
   const vals = []
-  if (role && ['user', 'host', 'reviewer'].includes(role)) { sets.push('role = ?'); vals.push(role) }
+  if (role && !target.is_super && ['user', 'host', 'reviewer'].includes(role)) { sets.push('role = ?'); vals.push(role) }
   if (display_name !== undefined) { sets.push('display_name = ?'); vals.push(display_name.trim()) }
   if (!sets.length) return c.json({ ok: false, message: '无修改' }, 400)
 
@@ -112,8 +114,12 @@ users.patch('/:id', async (c) => {
   if (role) {
     const user = await c.env.DB.prepare('SELECT email, display_name FROM admin_users WHERE id = ?').bind(id).first()
     if (user) {
-      const content = roleChangedEmail(user, role)
+      const content = roleChangedEmail(user, role, c.env.SLACK_INVITE_URL)
       c.executionCtx.waitUntil(sendEmail(c.env, { to: user.email, ...content }))
+      if (role === 'host' || role === 'reviewer') {
+        const rn = role === 'host' ? '活动主理人' : '审核管理员'
+        c.executionCtx.waitUntil(slackOnRoleGranted(c.env, { email: user.email, displayName: user.display_name, roleName: rn }))
+      }
       // Clean up any pending role requests at or below the new role
       const roleOrder = { user: 0, host: 1, reviewer: 2 }
       for (const r of ['host', 'reviewer']) {
@@ -230,7 +236,7 @@ users.post('/approve-role', async (c) => {
   const prevRole = user.role
   await c.env.DB.prepare('UPDATE admin_users SET role = ? WHERE id = ?').bind(role, user.id).run()
 
-  const emailContent = roleChangedEmail({ email: user.email, display_name: user.display_name }, role)
+  const emailContent = roleChangedEmail({ email: user.email, display_name: user.display_name }, role, c.env.SLACK_INVITE_URL)
   c.executionCtx.waitUntil(sendEmail(c.env, { to: user.email, ...emailContent }))
 
   await c.env.SESSIONS.delete(`role_req:${email}:${role}`)
@@ -241,6 +247,8 @@ users.post('/approve-role', async (c) => {
     decision: 'approved', decided_by: session.email, decided_at: Date.now(),
   }), { expirationTtl: 30 * 24 * 3600 })
 
+  await createNotification(c.env.DB, user.id, 'role_approved', '角色申请已通过', `你已成为${roleName}，可以使用对应功能了`)
+  c.executionCtx.waitUntil(slackOnRoleGranted(c.env, { email: user.email, displayName: user.display_name, roleName }))
   await audit(c.env.DB, 'approve_role', 'user', user.id, `批准 ${email} 为${roleName}`, session.email)
   return c.json({ ok: true })
 })
@@ -261,6 +269,14 @@ users.post('/reject-role', async (c) => {
     email, display_name: pending.display_name || '', role, roleName,
     decision: 'rejected', decided_by: session.email, decided_at: Date.now(),
   }), { expirationTtl: 30 * 24 * 3600 })
+
+  const user = await c.env.DB.prepare('SELECT id, email, display_name FROM admin_users WHERE email = ?')
+    .bind(email.trim().toLowerCase()).first()
+  if (user) {
+    const content = roleRejectedEmail({ email: user.email, display_name: user.display_name }, roleName)
+    c.executionCtx.waitUntil(sendEmail(c.env, { to: user.email, ...content }))
+    await createNotification(c.env.DB, user.id, 'role_rejected', '角色申请未通过', `你的${roleName}申请未被通过，如有疑问请联系管理员`)
+  }
 
   await audit(c.env.DB, 'reject_role', 'user', null, `拒绝 ${email} 的${roleName}申请`, session.email)
   return c.json({ ok: true })

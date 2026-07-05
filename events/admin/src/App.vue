@@ -52,6 +52,7 @@
           <div class="sidebar-label">账户</div>
           <a v-if="auth.role === 'user'" href="#" class="sidebar-link" @click.prevent="requestRole('host')">申请成为活动主理人</a>
           <a v-if="auth.role !== 'reviewer'" href="#" class="sidebar-link" @click.prevent="requestRole('reviewer')">申请成为管理员</a>
+          <router-link to="/admin/password" class="sidebar-link">修改密码</router-link>
           <a href="#" class="sidebar-link" @click.prevent="logout">退出登录</a>
         </div>
       </nav>
@@ -96,7 +97,7 @@
 </template>
 
 <script setup>
-import { ref, watch, provide, onMounted } from 'vue'
+import { ref, watch, provide, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { auth } from './lib/auth.js'
 import { toasts, showToast } from './lib/toast.js'
@@ -122,6 +123,26 @@ onMounted(async () => {
     router.push('/admin/login')
   }
 })
+
+async function refreshAuth() {
+  if (!auth.isLoggedIn) return
+  try {
+    const data = await api.me()
+    if (data.role !== auth.role || data.display_name !== auth.display_name || !!data.is_super !== auth.isSuper) {
+      auth.save({ token: auth.token, ...data })
+    }
+  } catch {}
+}
+
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible' && auth.isLoggedIn) {
+    refreshAuth()
+    refreshPendingCount()
+  }
+}
+
+document.addEventListener('visibilitychange', onVisibilityChange)
+onUnmounted(() => document.removeEventListener('visibilitychange', onVisibilityChange))
 
 async function refreshPendingCount() {
   if (!auth.isLoggedIn || !verified.value) return
@@ -174,6 +195,7 @@ function formatTime(ts) {
 provide('refreshPendingCount', refreshPendingCount)
 watch(() => route.path, () => {
   menuOpen.value = false
+  refreshAuth()
   refreshPendingCount()
 }, { immediate: true })
 

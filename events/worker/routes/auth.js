@@ -177,9 +177,6 @@ auth.get('/google/callback', async (c) => {
   let isNew = false
 
   if (!user) {
-    if (from === 'admin') {
-      return c.redirect('/admin/login?error=no_account&email=' + encodeURIComponent(email))
-    }
     const displayName = profile.name || email.split('@')[0]
     const initialPassword = email.split('@')[0]
     const hash = await hashPassword(initialPassword)
@@ -194,7 +191,7 @@ auth.get('/google/callback', async (c) => {
   const params = `google_token=${sessionToken}&email=${encodeURIComponent(user.email)}&role=${user.role}&is_super=${user.is_super ? 1 : 0}&display_name=${encodeURIComponent(user.display_name || '')}`
 
   if (from === 'admin') {
-    return c.redirect(`/admin/login?${params}`)
+    return c.redirect(`/admin/login?${params}&new=${isNew ? 1 : 0}`)
   }
   return c.redirect(`/my?${params}&new=${isNew ? 1 : 0}`)
 })
