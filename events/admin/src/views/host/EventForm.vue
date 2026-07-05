@@ -72,9 +72,20 @@
           <span class="section-divider-text">报名表单字段</span>
         </div>
 
-        <p class="field-hint" style="margin-bottom:14px">
-          报名时默认收集姓名、邮箱、手机号。如需额外信息，可添加自定义字段。
-        </p>
+        <div class="builtin-notice">
+          <div class="builtin-notice-title">报名表已默认包含以下字段，请勿重复添加</div>
+          <div class="builtin-tags">
+            <span class="builtin-tag">姓名 *</span>
+            <span class="builtin-tag">姓名假名 *</span>
+            <span class="builtin-tag">所属学校 *</span>
+            <span class="builtin-tag">学号（東北大学）*</span>
+            <span class="builtin-tag">邮箱 *</span>
+            <span class="builtin-tag">中国手机号</span>
+            <span class="builtin-tag">日本电话号</span>
+            <span class="builtin-tag">微信号</span>
+          </div>
+          <div class="builtin-notice-sub">只需添加活动特有的信息（如：性别、尺码、饮食禁忌等）</div>
+        </div>
 
         <!-- Custom fields list -->
         <div v-if="customFields.length" class="cf-list">
@@ -241,6 +252,19 @@ async function submit() {
   content: ''; flex: 1; height: 1px; background: var(--c-border);
 }
 .section-divider-text { font-size: 13px; font-weight: 600; white-space: nowrap; }
+
+/* Built-in fields notice */
+.builtin-notice {
+  background: var(--c-bg); border: 1px solid var(--c-border);
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 14px;
+}
+.builtin-notice-title { font-size: 13px; font-weight: 600; }
+.builtin-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.builtin-tag {
+  font-size: 12px; padding: 3px 10px; border-radius: 99px;
+  background: var(--c-surface); border: 1px solid var(--c-border); color: var(--c-text-2);
+}
+.builtin-notice-sub { font-size: 12px; color: var(--c-text-3); margin-top: 8px; }
 
 /* Custom fields */
 .cf-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }

@@ -178,7 +178,7 @@
         </div>
         <div class="field">
           <label class="label">自定义报名字段</label>
-          <p class="field-hint">除姓名、邮箱、手机号外，需要参与者额外填写的信息</p>
+          <p class="field-hint">报名表已默认包含：姓名、姓名假名、所属学校、学号（東北大学）、邮箱、中国手机号、日本电话号、微信号，请勿重复添加，只需补充活动特有的信息</p>
           <div v-for="(cf, i) in editCustomFields" :key="i" class="cf-row">
             <input v-model="cf.label" placeholder="字段名称，如：学号" style="flex:2" />
             <select v-model="cf.type" style="flex:1">
