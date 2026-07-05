@@ -608,7 +608,7 @@ async function saveInfo() {
   try {
     const cfData = editCustomFields.value.filter(f => f.label.trim()).map(f => ({
       label: f.label.trim(), type: f.type, required: f.required,
-      ...(f.type === 'select' ? { options: f.optionsStr.split(',').map(o => o.trim()).filter(Boolean) } : {})
+      ...(f.type === 'select' ? { options: f.optionsStr.split(/[,，、;；]/).map(o => o.trim()).filter(Boolean) } : {})
     }))
     const payload = { ...infoForm.value, custom_fields: cfData }
     await api.updateEvent(event.value.id, payload)

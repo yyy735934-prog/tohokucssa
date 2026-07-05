@@ -63,7 +63,7 @@
         <div v-if="schools.length" class="field">
           <label class="label">{{ schoolFieldLabel }} *</label>
           <select v-model="builtIn.school" required>
-            <option value="">请选择</option>
+            <option value="" disabled hidden>请选择</option>
             <option v-for="s in schools" :key="s" :value="s">{{ s }}</option>
           </select>
         </div>
@@ -96,7 +96,7 @@
         <div v-for="f in customFields" :key="f.key" class="field">
           <label class="label">{{ f.label }}{{ f.required ? ' *' : '' }}</label>
           <select v-if="f.type === 'select'" v-model="extra[f.key]" :required="f.required">
-            <option value="">请选择</option>
+            <option value="" disabled hidden>请选择</option>
             <option v-for="opt in f.options" :key="opt" :value="opt">{{ opt }}</option>
           </select>
           <textarea v-else-if="f.type === 'textarea'" v-model="extra[f.key]" :required="f.required" rows="2" :placeholder="f.placeholder || ''" />

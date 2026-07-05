@@ -186,7 +186,7 @@ async function submit() {
       label: f.label.trim(),
       type: f.type,
       required: f.required,
-      ...(f.type === 'select' ? { options: f.optionsStr.split(',').map(o => o.trim()).filter(Boolean) } : {})
+      ...(f.type === 'select' ? { options: f.optionsStr.split(/[,，、;；]/).map(o => o.trim()).filter(Boolean) } : {})
     }))
     const payload = { ...form, custom_fields: cfData }
     if (isEdit) {
