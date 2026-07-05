@@ -8,6 +8,7 @@ const routes = [
   { path: '/checkin/:id', component: () => import('./views/Checkin.vue') },
   { path: '/my', component: () => import('./views/MyEvents.vue') },
   { path: '/apply', component: () => import('./views/ApplyEvent.vue') },
+  { path: '/privacy', component: () => import('./views/Privacy.vue') },
   { path: '/register', component: () => import('./views/RegisterInvite.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
