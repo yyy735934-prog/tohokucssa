@@ -725,15 +725,42 @@
       }
     }
 
-    function assist() {
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    async function assist() {
       const text = document.getElementById('helpText').value.trim();
       const result = document.getElementById('result');
+      const btn = document.querySelector('#assist .btn');
       if (!text) return toast('请先输入求助内容');
-      const needHuman = /心理|抑郁|压力|自杀|疾病|发烧|疼|失联|报警|被骗|骚扰|签证|法律/.test(text);
+
       result.style.display = 'block';
-      result.innerHTML = needHuman
-        ? '<b>AI 判断：</b>可能需要人工协助。先展示相关指南，并询问是否匿名转交负责人。'
-        : '<b>AI 判断：</b>可先由信息库回答。推荐 FAQ、地图、翻译模板或对应入口。';
+      result.innerHTML = '<b>AI 正在处理…</b>';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/help', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text }),
+        });
+        if (!res.ok) throw new Error(`请求失败 (${res.status})`);
+        const data = await res.json();
+
+        if (data.action === 'answer') {
+          result.innerHTML = `<b>AI 已解答：</b>${escapeHtml(data.answer)}`;
+        } else {
+          const urgentNote = data.urgency === 'urgent' ? '（已标记为紧急，工作人员会尽快联系）' : '';
+          result.innerHTML = `<b>已匿名转交工作人员：</b>你的问题已经转交给学友会工作人员${urgentNote}，我们会尽快跟进，请留意后续联系。`;
+        }
+      } catch (err) {
+        result.innerHTML = `<b>提交失败：</b>${escapeHtml(err.message || '请稍后重试')}`;
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     renderServices();
