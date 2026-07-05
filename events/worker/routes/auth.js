@@ -217,7 +217,7 @@ auth.post('/profile', async (c) => {
   const { profile } = await c.req.json()
   if (!profile || typeof profile !== 'object') return c.json({ ok: false, message: '无效数据' }, 400)
 
-  const allowed = ['name', 'name_kana', 'school', 'school_other', 'student_id', 'phone', 'phone_cn', 'phone_jp', 'wechat']
+  const allowed = ['name', 'name_kana', 'gender', 'school', 'school_other', 'student_id', 'phone', 'phone_cn', 'phone_jp', 'wechat']
   const clean = {}
   for (const k of allowed) {
     if (profile[k] !== undefined && profile[k] !== null) clean[k] = String(profile[k]).trim()

@@ -77,6 +77,7 @@
           <div class="builtin-tags">
             <span class="builtin-tag">姓名 *</span>
             <span class="builtin-tag">姓名假名 *</span>
+            <span class="builtin-tag">性别 *</span>
             <span class="builtin-tag">所属学校 *</span>
             <span class="builtin-tag">学号（東北大学）*</span>
             <span class="builtin-tag">邮箱 *</span>
@@ -84,7 +85,7 @@
             <span class="builtin-tag">日本电话号</span>
             <span class="builtin-tag">微信号</span>
           </div>
-          <div class="builtin-notice-sub">只需添加活动特有的信息（如：性别、尺码、饮食禁忌等）</div>
+          <div class="builtin-notice-sub">只需添加活动特有的信息（如：尺码、饮食禁忌、交通方式等）</div>
         </div>
 
         <!-- Custom fields list -->

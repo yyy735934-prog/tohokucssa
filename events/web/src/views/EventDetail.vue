@@ -61,6 +61,14 @@
           <input v-model="builtIn.name_kana" required placeholder="シメイ" />
         </div>
         <div class="field">
+          <label class="label">性别 *</label>
+          <select v-model="builtIn.gender" required>
+            <option value="" disabled hidden>请选择</option>
+            <option value="男">男</option>
+            <option value="女">女</option>
+          </select>
+        </div>
+        <div class="field">
           <label class="label">所属学校 *</label>
           <select v-model="builtIn.school" required>
             <option value="" disabled hidden>请选择</option>
@@ -141,7 +149,7 @@ const form = ref({
   name: localStorage.getItem('user_name') || '',
   email: localStorage.getItem('user_email') || '',
 })
-const builtIn = reactive({ student_id: '', name_kana: '', wechat: '', school: '', school_other: '', phone_cn: '', phone_jp: '' })
+const builtIn = reactive({ student_id: '', name_kana: '', gender: '', wechat: '', school: '', school_other: '', phone_cn: '', phone_jp: '' })
 const schools = ['東北大学', '山形大学', '福島大学', '会津大学', '宮城大学', '仙台大学', '東北医科薬科大学', '東北学院大学', '東北工業大学', '福島県立医科大学', '東北芸術工科大学', '其他学校']
 const extra = reactive({})
 const formError = ref('')
@@ -183,6 +191,7 @@ onMounted(async () => {
       const p = data.profile || {}
       if (p.name && !form.value.name) form.value.name = p.name
       if (p.name_kana && !builtIn.name_kana) builtIn.name_kana = p.name_kana
+      if (p.gender && !builtIn.gender) builtIn.gender = p.gender
       if (p.phone_cn && !builtIn.phone_cn) builtIn.phone_cn = p.phone_cn
       if (p.phone_jp && !builtIn.phone_jp) builtIn.phone_jp = p.phone_jp
       if (p.wechat && !builtIn.wechat) builtIn.wechat = p.wechat
@@ -207,6 +216,7 @@ async function doSignup() {
       phone: '',
       extra: {
         姓名假名: builtIn.name_kana,
+        性别: builtIn.gender,
         所属学校: builtIn.school === '其他学校' ? builtIn.school_other : builtIn.school,
         ...(builtIn.student_id ? { '学号/工号': builtIn.student_id } : {}),
         ...(builtIn.phone_cn ? { 中国手机号: builtIn.phone_cn } : {}),

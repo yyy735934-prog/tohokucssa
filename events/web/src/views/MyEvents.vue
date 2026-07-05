@@ -37,6 +37,7 @@
         <div v-if="hasProfile">
           <div v-if="profile.name" class="profile-row"><span class="profile-label">姓名</span><span>{{ profile.name }}</span></div>
           <div v-if="profile.name_kana" class="profile-row"><span class="profile-label">姓名假名</span><span>{{ profile.name_kana }}</span></div>
+          <div v-if="profile.gender" class="profile-row"><span class="profile-label">性别</span><span>{{ profile.gender }}</span></div>
           <div v-if="profile.school" class="profile-row"><span class="profile-label">所属学校</span><span>{{ profile.school }}</span></div>
           <div v-if="profile.student_id" class="profile-row"><span class="profile-label">学号/工号</span><span>{{ profile.student_id }}</span></div>
           <div v-if="profile.phone_cn" class="profile-row"><span class="profile-label">中国手机号</span><span>{{ profile.phone_cn }}</span></div>
@@ -54,6 +55,14 @@
         <div class="field">
           <label class="label">姓名假名</label>
           <input v-model="profileForm.name_kana" placeholder="シメイ" />
+        </div>
+        <div class="field">
+          <label class="label">性别</label>
+          <select v-model="profileForm.gender">
+            <option value="" disabled hidden>请选择</option>
+            <option value="男">男</option>
+            <option value="女">女</option>
+          </select>
         </div>
         <div class="field">
           <label class="label">所属学校</label>
