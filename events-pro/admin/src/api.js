@@ -64,6 +64,7 @@ export const api = {
   dashboardStats: () => request('GET', '/events/dashboard-stats'),
 
   notifyParticipants: (id, message) => request('POST', `/events/${id}/notify`, { message }),
+  announceEvent: (id, data) => request('POST', `/events/${id}/announce`, data),
   remindParticipants: (id) => request('POST', `/events/${id}/remind`),
 
   getNotifications: () => request('GET', '/notifications'),
@@ -100,4 +101,14 @@ export const api = {
     return data
   },
   deleteEventImage: (eventId) => request('DELETE', `/images/${eventId}`),
+  uploadAnnounceImage: async (eventId, file) => {
+    const form = new FormData()
+    form.append('file', file)
+    const headers = {}
+    if (auth.token) headers['authorization'] = `Bearer ${auth.token}`
+    const res = await fetch(`/api/images/announce-upload/${eventId}`, { method: 'POST', headers, body: form })
+    const data = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }))
+    if (!res.ok || data.ok === false) throw new Error(data.message || '上传失败')
+    return data
+  },
 }
