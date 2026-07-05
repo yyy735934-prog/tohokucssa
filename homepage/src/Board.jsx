@@ -26,8 +26,9 @@ const CATEGORIES = [
     ],
   },
   {
-    id: "whisper", label: "悄悄话", color: "#6840a0", bg: "#f4effa",
+    id: "whisper", label: "悄悄话", color: "#6840a0", bg: "#f4effa", ready: true,
     items: [
+      { name: "匿名求助", desc: "AI优先解答 · 复杂/紧急问题自动转人工", icon: "助", kind: "ai-help", tag: "AI", tagColor: "#6840a0" },
       { name: "匿名树洞", desc: "匿名发布 · 畅所欲言 · 倾诉心声", icon: "洞" },
       { name: "情感交流", desc: "留学生活 · 学业压力 · 人际关系", icon: "心" },
       { name: "吐槽大会", desc: "生活吐槽 · 轻松一刻 · 引起共鸣", icon: "吐" },
@@ -119,6 +120,110 @@ const QUICK_ENTRIES = [
   { name: "活动申请", desc: "提交活动策划 · 在线审核", icon: "申", color: "#c0392b", url: "https://events.tohokucssa.org/apply" },
   { name: "我的活动", desc: "报名记录 · 签到码", icon: "我", color: "#c0392b", url: "https://events.tohokucssa.org/my" },
 ];
+
+function AnonymousHelpCard({ item, cat }) {
+  const [expanded, setExpanded] = useState(false);
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | loading | done | error
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    if (!message.trim() || status === "loading") return;
+    setStatus("loading");
+    setError("");
+    try {
+      const res = await fetch("/api/help", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      if (!res.ok) throw new Error(`请求失败 (${res.status})`);
+      const data = await res.json();
+      setResult(data);
+      setStatus("done");
+    } catch (err) {
+      setError(err.message || "提交失败，请稍后重试");
+      setStatus("error");
+    }
+  };
+
+  const reset = () => {
+    setExpanded(false);
+    setMessage("");
+    setStatus("idle");
+    setResult(null);
+    setError("");
+  };
+
+  if (!expanded) {
+    return (
+      <div className="board-item" style={AH.row} onClick={() => setExpanded(true)}>
+        <div style={{ ...AH.icon, background: cat.bg, color: cat.color }}>{item.icon}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={AH.name}>{item.name}</div>
+          <div style={AH.desc}>{item.desc}</div>
+        </div>
+        {item.tag && (
+          <span style={{ ...AH.tag, color: item.tagColor, background: `${item.tagColor}12` }}>{item.tag}</span>
+        )}
+        <span style={AH.arrow}>›</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={AH.panel}>
+      <div style={AH.panelHead}>
+        <div style={{ ...AH.icon, background: cat.bg, color: cat.color }}>{item.icon}</div>
+        <div style={AH.name}>{item.name}</div>
+        <button style={AH.closeBtn} onClick={reset}>×</button>
+      </div>
+
+      {status !== "done" && (
+        <>
+          <textarea
+            style={AH.textarea}
+            placeholder="匿名描述你遇到的问题，AI会先尝试解答，无法处理的会自动转交工作人员..."
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            disabled={status === "loading"}
+            maxLength={1000}
+          />
+          <button
+            style={{ ...AH.submitBtn, opacity: status === "loading" || !message.trim() ? 0.5 : 1 }}
+            onClick={submit}
+            disabled={status === "loading" || !message.trim()}
+          >
+            {status === "loading" ? "AI正在处理…" : "匿名提交"}
+          </button>
+          {error && <div style={AH.error}>{error}</div>}
+        </>
+      )}
+
+      {status === "done" && result && (
+        <div style={AH.result}>
+          {result.action === "answer" ? (
+            <>
+              <div style={AH.resultTag}>AI 已解答</div>
+              <div style={AH.resultText}>{result.answer}</div>
+            </>
+          ) : (
+            <>
+              <div style={{ ...AH.resultTag, color: "#c0392b", background: "#c0392b12" }}>
+                {result.urgency === "urgent" ? "已紧急转人工" : "已转交工作人员"}
+              </div>
+              <div style={AH.resultText}>
+                你的问题已经匿名转交给学友会工作人员，我们会尽快跟进，请留意后续联系。
+              </div>
+            </>
+          )}
+          <button style={AH.againBtn} onClick={reset}>再次提交</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function HomePage({ onNav }) {
   return (
@@ -293,6 +398,9 @@ export default function Board() {
               {cat.ready ? (
                 <div className="board-items" style={S.itemList}>
                   {cat.items.map((item, i) => {
+                    if (item.kind === "ai-help") {
+                      return <AnonymousHelpCard key={i} item={item} cat={cat} />;
+                    }
                     const Tag = item.url ? "a" : "div";
                     const linkProps = item.url
                       ? { href: item.url, target: "_blank", rel: "noopener noreferrer" }
@@ -372,6 +480,66 @@ export default function Board() {
     </div>
   );
 }
+
+const AH = {
+  row: {
+    display: "flex", alignItems: "center", gap: 12,
+    padding: "10px 12px", borderRadius: 12,
+    background: "#fff", border: "0.5px solid #eee",
+    cursor: "pointer",
+  },
+  panel: {
+    padding: "12px", borderRadius: 12,
+    background: "#fff", border: "0.5px solid #eee",
+    display: "flex", flexDirection: "column", gap: 8,
+  },
+  panelHead: { display: "flex", alignItems: "center", gap: 10 },
+  icon: {
+    width: 38, height: 38, borderRadius: 10,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 14, fontWeight: 700, flexShrink: 0,
+  },
+  name: { fontSize: 13, fontWeight: 650, lineHeight: 1.3, color: "#1e1c18", flex: 1 },
+  desc: {
+    fontSize: 11, color: "#999", lineHeight: 1.4, marginTop: 1,
+    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+  },
+  tag: {
+    fontSize: 10, fontWeight: 650, padding: "2px 8px", borderRadius: 4,
+    flexShrink: 0, whiteSpace: "nowrap",
+  },
+  arrow: { fontSize: 16, color: "#ccc", flexShrink: 0, marginLeft: 2 },
+  closeBtn: {
+    width: 24, height: 24, borderRadius: 12, border: "none",
+    background: "#f0efed", color: "#999", fontSize: 15, lineHeight: 1,
+    cursor: "pointer", flexShrink: 0,
+  },
+  textarea: {
+    width: "100%", minHeight: 80, borderRadius: 10,
+    border: "0.5px solid #ddd", padding: "8px 10px",
+    fontSize: 12.5, fontFamily: "inherit", resize: "vertical",
+    boxSizing: "border-box",
+  },
+  submitBtn: {
+    padding: "8px 12px", borderRadius: 10, border: "none",
+    background: "#6840a0", color: "#fff", fontSize: 12.5, fontWeight: 650,
+    cursor: "pointer", fontFamily: "inherit",
+  },
+  error: { fontSize: 11, color: "#c0392b" },
+  result: { display: "flex", flexDirection: "column", gap: 8 },
+  resultTag: {
+    alignSelf: "flex-start", fontSize: 10, fontWeight: 650,
+    padding: "2px 8px", borderRadius: 4,
+    color: "#6840a0", background: "#6840a012",
+  },
+  resultText: { fontSize: 12.5, color: "#333", lineHeight: 1.6 },
+  againBtn: {
+    alignSelf: "flex-start", padding: "6px 12px", borderRadius: 10,
+    border: "1.5px solid #e0e0e0", background: "transparent",
+    fontSize: 11.5, fontWeight: 600, color: "#666", cursor: "pointer",
+    fontFamily: "inherit",
+  },
+};
 
 const H = {
   wrap: {
