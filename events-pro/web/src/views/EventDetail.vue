@@ -60,6 +60,14 @@
           <label class="label">姓名假名 *</label>
           <input v-model="builtIn.name_kana" required placeholder="シメイ" />
         </div>
+        <div class="field">
+          <label class="label">性别 *</label>
+          <select v-model="builtIn.gender" required>
+            <option value="" disabled hidden>请选择</option>
+            <option value="男">男</option>
+            <option value="女">女</option>
+          </select>
+        </div>
         <div v-if="schools.length" class="field">
           <label class="label">{{ schoolFieldLabel }} *</label>
           <select v-model="builtIn.school" required>
@@ -142,7 +150,7 @@ const form = ref({
   name: localStorage.getItem('user_name') || '',
   email: localStorage.getItem('user_email') || '',
 })
-const builtIn = reactive({ student_id: '', name_kana: '', wechat: '', school: '', school_other: '', phone_cn: '', phone_jp: '' })
+const builtIn = reactive({ student_id: '', name_kana: '', gender: '', wechat: '', school: '', school_other: '', phone_cn: '', phone_jp: '' })
 const schools = BRANDING.schools
 const schoolFieldLabel = BRANDING.schoolFieldLabel || '所属学校'
 const studentIdSchool = BRANDING.studentIdSchool
@@ -188,6 +196,7 @@ onMounted(async () => {
       const p = data.profile || {}
       if (p.name && !form.value.name) form.value.name = p.name
       if (p.name_kana && !builtIn.name_kana) builtIn.name_kana = p.name_kana
+      if (p.gender && !builtIn.gender) builtIn.gender = p.gender
       if (p.phone_cn && !builtIn.phone_cn) builtIn.phone_cn = p.phone_cn
       if (p.phone_jp && !builtIn.phone_jp) builtIn.phone_jp = p.phone_jp
       if (p.wechat && !builtIn.wechat) builtIn.wechat = p.wechat
@@ -213,6 +222,7 @@ async function doSignup() {
       phone: '',
       extra: {
         ...(showKana && builtIn.name_kana ? { 姓名假名: builtIn.name_kana } : {}),
+        性别: builtIn.gender,
         ...(schools.length ? { [schoolFieldLabel]: isOtherSchool.value ? builtIn.school_other : builtIn.school } : {}),
         ...(builtIn.student_id ? { '学号/工号': builtIn.student_id } : {}),
         ...(builtIn.phone_cn ? { 中国手机号: builtIn.phone_cn } : {}),

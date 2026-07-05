@@ -77,7 +77,7 @@
           <div class="builtin-tags">
             <span v-for="t in builtInFields" :key="t" class="builtin-tag">{{ t }}</span>
           </div>
-          <div class="builtin-notice-sub">只需添加活动特有的信息（如：性别、尺码、饮食禁忌等）</div>
+          <div class="builtin-notice-sub">只需添加活动特有的信息（如：尺码、饮食禁忌、交通方式等）</div>
         </div>
 
         <!-- Custom fields list -->
@@ -124,6 +124,7 @@ import { BRANDING } from '../../../../branding.js'
 const builtInFields = [
   '姓名 *',
   ...(BRANDING.showKana !== false ? ['姓名假名 *'] : []),
+  '性别 *',
   ...(BRANDING.schools.length ? [`${BRANDING.schoolFieldLabel || '所属学校'} *`] : []),
   ...(BRANDING.studentIdSchool ? [`学号（${BRANDING.studentIdSchool}）*`] : []),
   '邮箱 *', '中国手机号', '日本电话号', '微信号',

@@ -542,7 +542,7 @@ import { showToast } from '../../lib/toast.js'
 import { STATUS_MAP, formatDateTime } from '../../lib/format.js'
 import { BRANDING } from '../../../../branding.js'
 
-const builtInFieldsText = ['姓名', ...(BRANDING.showKana !== false ? ['姓名假名'] : []), ...(BRANDING.schools.length ? [BRANDING.schoolFieldLabel || '所属学校'] : []), '邮箱', '中国手机号', '日本电话号', '微信号'].join('、')
+const builtInFieldsText = ['姓名', ...(BRANDING.showKana !== false ? ['姓名假名'] : []), '性别', ...(BRANDING.schools.length ? [BRANDING.schoolFieldLabel || '所属学校'] : []), '邮箱', '中国手机号', '日本电话号', '微信号'].join('、')
 
 const route = useRoute()
 const router = useRouter()
