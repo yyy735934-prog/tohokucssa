@@ -9,7 +9,11 @@
     "build:web": "vite build --config web/vite.config.js",
     "build:admin": "vite build --config admin/vite.config.js",
     "build": "npm run build:web && npm run build:admin",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "deploy:cssa": "cp deploy/cssa/branding.js branding.js && cp deploy/cssa/wrangler.toml wrangler.toml && npm run deploy",
+    "deploy:cumt": "cp deploy/cumt/branding.js branding.js && cp deploy/cumt/wrangler.toml wrangler.toml && npm run deploy",
+    "deploy:all": "npm run deploy:cssa && npm run deploy:cumt",
+    "setup": "cp deploy/template/branding.js branding.js && cp deploy/template/wrangler.toml wrangler.toml && echo 'Template config copied. Edit branding.js and wrangler.toml before deploying.'"
   },
   "dependencies": {
     "qrcode": "^1.5.4",
