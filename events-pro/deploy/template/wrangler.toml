@@ -1,0 +1,45 @@
+# ============================================================
+# 部署配置模板 — 新组织部署前必须修改：
+#   1. name         → 组织专属 worker 名称（不可重复）
+#   2. database_id  → 新建 D1: npx wrangler d1 create <名称>-db
+#   3. kv id        → 新建 KV: npx wrangler kv namespace create SESSIONS
+#   4. bucket_name  → 新建 R2: npx wrangler r2 bucket create <名称>-images
+#   5. routes       → 自定义域名（可选）
+# 建表: npx wrangler d1 execute <db名> --remote --file=schema.sql
+# 密钥: npx wrangler secret put RESEND_API_KEY
+#       npx wrangler secret put EMAIL_FROM
+#       npx wrangler secret put GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+# ============================================================
+
+name = "change-me"
+main = "worker/index.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+not_found_handling = "none"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "change-me-db"
+database_id = "change-me"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "change-me"
+
+[ai]
+binding = "AI"
+
+# [[routes]]
+# pattern = "events.your-domain.com"
+# custom_domain = true
+
+[triggers]
+crons = ["0 0 * * *"]
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "change-me-images"
