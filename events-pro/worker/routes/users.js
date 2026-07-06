@@ -141,10 +141,14 @@ users.delete('/:id', async (c) => {
   const target = await c.env.DB.prepare('SELECT is_super FROM admin_users WHERE id = ?').bind(id).first()
   if (target?.is_super) return c.json({ ok: false, message: '不能删除超级管理员' }, 400)
 
+  const targetUser = await c.env.DB.prepare('SELECT email, display_name, role FROM admin_users WHERE id = ?').bind(id).first()
   await c.env.DB.prepare('DELETE FROM notifications WHERE user_id = ?').bind(id).run()
   await c.env.DB.prepare('UPDATE events SET created_by = NULL WHERE created_by = ?').bind(id).run()
   await c.env.DB.prepare('UPDATE events SET reviewed_by = NULL WHERE reviewed_by = ?').bind(id).run()
   await c.env.DB.prepare('DELETE FROM admin_users WHERE id = ?').bind(id).run()
+  if (targetUser) {
+    await audit(c.env.DB, 'delete_user', 'user', id, `删除用户 ${targetUser.email}（${targetUser.display_name || '无显示名'}，角色：${targetUser.role}）`, session.email)
+  }
   return c.json({ ok: true })
 })
 
@@ -234,7 +238,11 @@ users.post('/approve-role', async (c) => {
   }
 
   const prevRole = user.role
-  await c.env.DB.prepare('UPDATE admin_users SET role = ? WHERE id = ?').bind(role, user.id).run()
+  const updateResult = await c.env.DB.prepare('UPDATE admin_users SET role = ? WHERE id = ?').bind(role, user.id).run()
+  if (!updateResult.success) return c.json({ ok: false, message: '数据库更新失败，请重试' }, 500)
+
+  const verify = await c.env.DB.prepare('SELECT role FROM admin_users WHERE id = ?').bind(user.id).first()
+  if (!verify || verify.role !== role) return c.json({ ok: false, message: '角色更新未生效，请重试' }, 500)
 
   const emailContent = roleChangedEmail({ email: user.email, display_name: user.display_name }, role, c.env.SLACK_INVITE_URL)
   c.executionCtx.waitUntil(sendEmail(c.env, { to: user.email, ...emailContent }))

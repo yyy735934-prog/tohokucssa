@@ -112,10 +112,10 @@
           <input v-else v-model="extra[f.key]" :required="f.required" :placeholder="f.placeholder || ''" />
         </div>
 
-        <label class="consent-row">
-          <input type="checkbox" v-model="agreed" />
-          <span>我已阅读并同意<router-link to="/privacy" target="_blank">《隐私政策》</router-link></span>
-        </label>
+        <div class="consent-row">
+          <input id="agree-privacy" type="checkbox" v-model="agreed" />
+          <label for="agree-privacy">我已阅读并同意</label><router-link to="/privacy" target="_blank">《隐私政策》</router-link>
+        </div>
 
         <p v-if="formError" class="error">{{ formError }}</p>
         <button type="submit" class="btn btn-primary" :disabled="submitting || !agreed">
@@ -262,9 +262,9 @@ async function doSignup() {
 .form-title { font-size: 17px; font-weight: 600; margin-bottom: 16px; }
 .consent-row {
   display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--c-text-2);
-  margin-top: 16px; cursor: pointer; user-select: none;
+  margin: 20px 0 8px; cursor: pointer; user-select: none;
 }
-.consent-row input[type="checkbox"] { width: 16px; height: 16px; margin: 0; flex-shrink: 0; cursor: pointer; }
+.consent-row input[type="checkbox"] { width: 16px; height: 16px; margin: 0; flex-shrink: 0; cursor: pointer; -webkit-appearance: checkbox; appearance: checkbox; }
 .consent-row a { color: var(--c-primary); text-decoration: underline; }
 .result-card { text-align: center; padding: 32px 20px; }
 .check-icon {

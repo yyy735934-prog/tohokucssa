@@ -207,10 +207,10 @@
         <span style="font-size:12px;color:var(--c-text-3)">可选，上传后将在报名页展示</span>
       </div>
       <div v-if="event.image_key" class="img-preview">
-        <img :src="`/api/images/serve/${event.id}`" alt="活动图片" />
+        <img :src="`/api/images/serve/${event.id}?t=${event.image_key}`" alt="活动图片" />
         <button class="btn btn-outline btn-sm img-delete" @click="deleteImage" :disabled="busy">删除图片</button>
       </div>
-      <div v-else class="img-upload-area" @click="$refs.imageInput.click()" @dragover.prevent @drop.prevent="handleDrop">
+      <div v-else class="img-upload-area" @click="imageInput.click()" @dragover.prevent @drop.prevent="handleDrop">
         <div class="img-upload-icon">+</div>
         <div class="img-upload-text">点击或拖拽上传图片</div>
         <div class="img-upload-hint">支持 JPG/PNG/WebP/GIF，最大 5MB</div>
@@ -507,9 +507,9 @@
           <label class="label">附图（可选）</label>
           <div v-if="announceImagePreview">
             <img :src="announceImagePreview" style="max-width:200px;border-radius:8px;display:block;border:1px solid var(--c-border)" />
-            <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" @click="announceImage = null; announceImagePreview = ''">移除图片</button>
+            <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" @click="removeAnnounceImage">移除图片</button>
           </div>
-          <button v-else type="button" class="btn btn-outline btn-sm" @click="$refs.announceInput.click()">选择图片</button>
+          <button v-else type="button" class="btn btn-outline btn-sm" @click="announceInput.click()">选择图片</button>
           <input ref="announceInput" type="file" accept="image/*" style="display:none" @change="onAnnounceImage" />
         </div>
         <p v-if="announceError" class="error">{{ announceError }}</p>
@@ -655,6 +655,7 @@ async function saveInfo() {
 }
 
 const imageUploading = ref(false)
+const imageInput = ref(null)
 
 async function uploadImage(file) {
   imageUploading.value = true
@@ -683,6 +684,7 @@ async function deleteImage() {
   try {
     await api.deleteEventImage(event.value.id)
     event.value.image_key = null
+    if (imageInput.value) imageInput.value.value = ''
     showToast('图片已删除')
   } catch (e) { showToast(e.message, 'error') }
   busy.value = false
@@ -700,13 +702,20 @@ const announceMessage = ref('')
 const announceImage = ref(null)
 const announceImagePreview = ref('')
 const announceError = ref('')
+const announceInput = ref(null)
 
 function onAnnounceImage(e) {
   const file = e.target.files[0]
-  e.target.value = ''
   if (!file) return
   announceImage.value = file
   announceImagePreview.value = URL.createObjectURL(file)
+  e.target.value = ''
+}
+
+function removeAnnounceImage() {
+  announceImage.value = null
+  announceImagePreview.value = ''
+  if (announceInput.value) announceInput.value.value = ''
 }
 
 async function sendAnnounce() {

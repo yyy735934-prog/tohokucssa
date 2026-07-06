@@ -288,7 +288,7 @@ async function approveRole(r) {
   try {
     await api.approveRole(r.email, r.role)
     showToast(`已批准 ${r.display_name || r.email} 为${r.roleName}`)
-    loadRoleRequests(); loadRoleHistory(); load()
+    await Promise.all([loadRoleRequests(), loadRoleHistory(), load()])
   } catch (e) { showToast(e.message, 'error') }
   busy.value = false
 }
@@ -299,7 +299,7 @@ async function rejectRole(r) {
   try {
     await api.rejectRole(r.email, r.role)
     showToast('已拒绝')
-    loadRoleRequests(); loadRoleHistory()
+    await Promise.all([loadRoleRequests(), loadRoleHistory()])
   } catch (e) { showToast(e.message, 'error') }
   busy.value = false
 }
@@ -310,7 +310,7 @@ async function revokeRole(h) {
   try {
     await api.revokeRole(h.email, h.role)
     showToast(`已撤回 ${h.display_name || h.email} 的${h.roleName}权限`)
-    loadRoleHistory(); load()
+    await Promise.all([loadRoleHistory(), load()])
   } catch (e) { showToast(e.message, 'error') }
   busy.value = false
 }
