@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { getSession, extractToken } from '../lib/session.js'
-import { sendEmail, eventApprovedEmail, eventRejectedEmail, eventApprovedInviteEmail, eventChangedEmail, eventReminderEmail, eventSubmittedEmail, eventAnnounceEmail, inviteSignupEmail } from '../lib/email.js'
+import { sendEmail, sendEmailBatch, getEmailQuota, eventApprovedEmail, eventRejectedEmail, eventApprovedInviteEmail, eventChangedEmail, eventReminderEmail, eventSubmittedEmail, eventAnnounceEmail, inviteSignupEmail } from '../lib/email.js'
 import { createNotification, notifyReviewers } from './notifications.js'
 import { audit } from '../lib/audit.js'
 
@@ -42,7 +42,7 @@ events.post('/propose', async (c) => {
   const reviewers = await c.env.DB.prepare("SELECT email FROM admin_users WHERE role = 'reviewer'").all()
   for (const r of reviewers.results) {
     const content = eventSubmittedEmail(eventForEmail, submitter_name.trim())
-    c.executionCtx.waitUntil(sendEmail(c.env, { to: r.email, ...content }))
+    c.executionCtx.waitUntil(sendEmail(c.env, { to: r.email, eventId: newId, ...content }))
   }
 
   return c.json({ ok: true, id: newId })
@@ -89,6 +89,48 @@ events.get('/audit-logs', async (c) => {
     'SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ?'
   ).bind(limit).all()
   return c.json({ ok: true, logs: rows.results })
+})
+
+// GET /api/events/email-quota — 今日邮件配额
+events.get('/email-quota', async (c) => {
+  const session = await requireAuth(c)
+  if (session.role !== 'reviewer' && session.role !== 'host') return c.json({ ok: false, message: '无权查看' }, 403)
+  const quota = await getEmailQuota(c.env.DB, Number(c.env.EMAIL_DAILY_LIMIT) || undefined)
+  return c.json({ ok: true, ...quota })
+})
+
+// GET /api/events/email-logs — 邮件发送日志
+events.get('/email-logs', async (c) => {
+  const session = await requireAuth(c)
+  if (session.role !== 'reviewer') return c.json({ ok: false, message: '仅管理员可查看' }, 403)
+
+  const eventId = c.req.query('event_id')
+  const limit = Math.min(Number(c.req.query('limit')) || 100, 500)
+
+  let rows
+  if (eventId) {
+    rows = await c.env.DB.prepare(
+      'SELECT l.id, l.event_id, l.to_email, l.subject, l.status, l.error, l.created_at, e.title as event_title FROM email_logs l LEFT JOIN events e ON e.id = l.event_id WHERE l.event_id = ? ORDER BY l.created_at DESC LIMIT ?'
+    ).bind(Number(eventId), limit).all()
+  } else {
+    rows = await c.env.DB.prepare(
+      'SELECT l.id, l.event_id, l.to_email, l.subject, l.status, l.error, l.created_at, e.title as event_title FROM email_logs l LEFT JOIN events e ON e.id = l.event_id ORDER BY l.created_at DESC LIMIT ?'
+    ).bind(limit).all()
+  }
+  return c.json({ ok: true, logs: rows.results })
+})
+
+// GET /api/events/email-logs/:logId — 邮件详情（含 HTML 预览）
+events.get('/email-logs/:logId', async (c) => {
+  const session = await requireAuth(c)
+  if (session.role !== 'reviewer') return c.json({ ok: false, message: '仅管理员可查看' }, 403)
+
+  const logId = Number(c.req.param('logId'))
+  const row = await c.env.DB.prepare(
+    'SELECT l.*, e.title as event_title FROM email_logs l LEFT JOIN events e ON e.id = l.event_id WHERE l.id = ?'
+  ).bind(logId).first()
+  if (!row) return c.json({ ok: false, message: '记录不存在' }, 404)
+  return c.json({ ok: true, log: row })
 })
 
 // GET /api/events — public or admin listing
@@ -220,7 +262,7 @@ events.post('/:id/submit', async (c) => {
   const submitterName = session.display_name || session.email
   for (const r of reviewers.results) {
     const content = eventSubmittedEmail(event, submitterName)
-    c.executionCtx.waitUntil(sendEmail(c.env, { to: r.email, ...content }))
+    c.executionCtx.waitUntil(sendEmail(c.env, { to: r.email, eventId: id, ...content }))
   }
 
   return c.json({ ok: true })
@@ -243,7 +285,7 @@ events.post('/:id/approve', async (c) => {
     const host = await c.env.DB.prepare('SELECT email, display_name FROM admin_users WHERE id = ?').bind(event.created_by).first()
     if (host) {
       const emailContent = eventApprovedEmail(event, host)
-      c.executionCtx.waitUntil(sendEmail(c.env, { to: host.email, ...emailContent }))
+      c.executionCtx.waitUntil(sendEmail(c.env, { to: host.email, eventId: id, ...emailContent }))
     }
   } else if (event.submitter_email) {
     const inviteToken = crypto.randomUUID()
@@ -253,7 +295,7 @@ events.post('/:id/approve', async (c) => {
 
     const origin = new URL(c.req.url).origin
     const emailContent = eventApprovedInviteEmail(event, inviteToken, origin)
-    c.executionCtx.waitUntil(sendEmail(c.env, { to: event.submitter_email, ...emailContent }))
+    c.executionCtx.waitUntil(sendEmail(c.env, { to: event.submitter_email, eventId: id, ...emailContent }))
   }
 
   if (event.created_by) {
@@ -282,12 +324,12 @@ events.post('/:id/reject', async (c) => {
     const host = await c.env.DB.prepare('SELECT email, display_name FROM admin_users WHERE id = ?').bind(event.created_by).first()
     if (host) {
       const emailContent = eventRejectedEmail(event, host, reason)
-      c.executionCtx.waitUntil(sendEmail(c.env, { to: host.email, ...emailContent }))
+      c.executionCtx.waitUntil(sendEmail(c.env, { to: host.email, eventId: id, ...emailContent }))
     }
   } else if (event.submitter_email) {
     const pseudo = { email: event.submitter_email, display_name: event.submitter_name }
     const emailContent = eventRejectedEmail(event, pseudo, reason)
-    c.executionCtx.waitUntil(sendEmail(c.env, { to: event.submitter_email, ...emailContent }))
+    c.executionCtx.waitUntil(sendEmail(c.env, { to: event.submitter_email, eventId: id, ...emailContent }))
   }
 
   if (event.created_by) {
@@ -424,11 +466,12 @@ events.post('/:id/notify', async (c) => {
   const signups = await c.env.DB.prepare('SELECT name, email, phone, data FROM signups WHERE event_id = ?').bind(id).all()
   if (!signups.results.length) return c.json({ ok: false, message: '暂无报名者' }, 400)
 
-  for (const s of signups.results) {
-    const content = eventChangedEmail(event, s, message || '')
-    c.executionCtx.waitUntil(sendEmail(c.env, { to: s.email, ...content }))
-  }
-  return c.json({ ok: true, count: signups.results.length })
+  const emails = signups.results.map(s => ({
+    to: s.email, eventId: id, ...eventChangedEmail(event, s, message || '')
+  }))
+  const result = await sendEmailBatch(c.env, emails)
+  if (result.blocked) return c.json({ ok: false, message: `今日邮件额度不足（已用 ${result.quota.used}/${result.quota.limit}），需发 ${emails.length} 封，剩余 ${result.quota.remaining} 封。请明天再试`, quota: result.quota }, 429)
+  return c.json({ ok: true, count: signups.results.length, sent: result.sent, failed: result.failed, quota: result.quota })
 })
 
 // POST /api/events/:id/announce — 普通通知（自定义标题+正文+可选附图）
@@ -450,11 +493,12 @@ events.post('/:id/announce', async (c) => {
   const origin = new URL(c.req.url).origin
   const imageUrl = image_key ? `${origin}/api/images/${image_key}` : ''
 
-  for (const s of signups.results) {
-    const content = eventAnnounceEmail(event, s, subject.trim(), message.trim(), imageUrl)
-    c.executionCtx.waitUntil(sendEmail(c.env, { to: s.email, ...content }))
-  }
-  return c.json({ ok: true, count: signups.results.length })
+  const emails = signups.results.map(s => ({
+    to: s.email, eventId: id, ...eventAnnounceEmail(event, s, subject.trim(), message.trim(), imageUrl)
+  }))
+  const result = await sendEmailBatch(c.env, emails)
+  if (result.blocked) return c.json({ ok: false, message: `今日邮件额度不足（已用 ${result.quota.used}/${result.quota.limit}），需发 ${emails.length} 封，剩余 ${result.quota.remaining} 封。请明天再试`, quota: result.quota }, 429)
+  return c.json({ ok: true, count: signups.results.length, sent: result.sent, failed: result.failed, quota: result.quota })
 })
 
 // POST /api/events/:id/remind — send reminder to all participants
@@ -473,11 +517,12 @@ events.post('/:id/remind', async (c) => {
   const signups = await c.env.DB.prepare('SELECT name, email, phone, data, token FROM signups WHERE event_id = ?').bind(id).all()
   if (!signups.results.length) return c.json({ ok: false, message: '暂无报名者' }, 400)
 
-  for (const s of signups.results) {
-    const content = eventReminderEmail(event, s)
-    c.executionCtx.waitUntil(sendEmail(c.env, { to: s.email, ...content }))
-  }
-  return c.json({ ok: true, count: signups.results.length })
+  const emails = signups.results.map(s => ({
+    to: s.email, eventId: id, ...eventReminderEmail(event, s)
+  }))
+  const result = await sendEmailBatch(c.env, emails)
+  if (result.blocked) return c.json({ ok: false, message: `今日邮件额度不足（已用 ${result.quota.used}/${result.quota.limit}），需发 ${emails.length} 封，剩余 ${result.quota.remaining} 封。请明天再试`, quota: result.quota }, 429)
+  return c.json({ ok: true, count: signups.results.length, sent: result.sent, failed: result.failed, quota: result.quota })
 })
 
 // AI plan draft generation
@@ -553,8 +598,8 @@ events.post('/:id/invite-signup', async (c) => {
     if (existing) { skipped.push(email); continue }
 
     const content = inviteSignupEmail(event, signupUrl)
-    c.executionCtx.waitUntil(sendEmail(c.env, { to: email, ...content }))
-    sent.push(email)
+    const ok = await sendEmail(c.env, { to: email, eventId: id, ...content })
+    if (ok) sent.push(email); else skipped.push(email)
   }
 
   return c.json({ ok: true, sent, skipped })

@@ -12,6 +12,7 @@ const routes = [
   { path: '/admin/overview', component: () => import('./views/reviewer/Overview.vue'), meta: { reviewer: true } },
   { path: '/admin/review', component: () => import('./views/reviewer/ReviewQueue.vue'), meta: { reviewer: true } },
   { path: '/admin/users', component: () => import('./views/super/UserManagement.vue'), meta: { reviewer: true } },
+  { path: '/admin/emails', component: () => import('./views/super/EmailLogs.vue'), meta: { reviewer: true } },
   { path: '/admin/password', component: () => import('./views/ChangePassword.vue') },
   { path: '/admin/:pathMatch(.*)*', redirect: '/admin/events' },
 ]

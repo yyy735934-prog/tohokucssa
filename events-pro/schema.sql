@@ -83,3 +83,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS email_logs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id    INTEGER,
+  to_email    TEXT    NOT NULL,
+  subject     TEXT    NOT NULL,
+  html        TEXT    NOT NULL DEFAULT '',
+  status      TEXT    NOT NULL DEFAULT 'sent' CHECK (status IN ('sent', 'failed')),
+  error       TEXT    NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_logs_event ON email_logs(event_id);
+CREATE INDEX IF NOT EXISTS idx_email_logs_created ON email_logs(created_at DESC);

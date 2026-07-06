@@ -46,7 +46,7 @@ signups.post('/', async (c) => {
   }
 
   const emailContent = signupConfirmEmail(event, { name: nameTrim, email: emailNorm, phone: phoneTrim, data: extra || {} })
-  c.executionCtx.waitUntil(sendEmail(c.env, { to: emailNorm, ...emailContent }))
+  c.executionCtx.waitUntil(sendEmail(c.env, { to: emailNorm, eventId: event.id, ...emailContent }))
 
   return c.json({ ok: true, id: result.meta.last_row_id, token })
 })
@@ -228,7 +228,7 @@ signups.post('/checkin-by-token', async (c) => {
 
   const event = { title: signup.title, event_date: signup.event_date, location: signup.location }
   const content = checkinConfirmEmail(event, { name: signup.name })
-  c.executionCtx.waitUntil(sendEmail(c.env, { to: signup.email, ...content }))
+  c.executionCtx.waitUntil(sendEmail(c.env, { to: signup.email, eventId: signup.event_id, ...content }))
 
   return c.json({ ok: true, name: signup.name })
 })
@@ -329,7 +329,7 @@ signups.post('/manual', async (c) => {
   const fullEvent = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(event_id).first()
   if (fullEvent) {
     const emailContent = signupConfirmEmail(fullEvent, { name: nameTrim, email: emailNorm, phone: phoneTrim, data: extra || {} })
-    c.executionCtx.waitUntil(sendEmail(c.env, { to: emailNorm, ...emailContent }))
+    c.executionCtx.waitUntil(sendEmail(c.env, { to: emailNorm, eventId: event_id, ...emailContent }))
   }
 
   return c.json({ ok: true, id: result.meta.last_row_id, token })

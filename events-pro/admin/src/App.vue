@@ -42,6 +42,7 @@
             <span v-if="pendingCount" class="count-badge">{{ pendingCount }}</span>
           </router-link>
           <router-link to="/admin/users" class="sidebar-link">用户管理</router-link>
+          <router-link to="/admin/emails" class="sidebar-link">邮件记录</router-link>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-label">公开页面</div>

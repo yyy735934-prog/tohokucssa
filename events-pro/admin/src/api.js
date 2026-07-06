@@ -89,6 +89,9 @@ export const api = {
   inviteUsers: (emails, role) => request('POST', '/users/invite', { emails, role }),
   inviteSignup: (eventId, emails) => request('POST', `/events/${eventId}/invite-signup`, { emails }),
   getAuditLogs: (limit = 50) => request('GET', `/events/audit-logs?limit=${limit}`),
+  getEmailLogs: (eventId, limit = 100) => request('GET', `/events/email-logs?${eventId ? `event_id=${eventId}&` : ''}limit=${limit}`),
+  getEmailDetail: (id) => request('GET', `/events/email-logs/${id}`),
+  getEmailQuota: () => request('GET', '/events/email-quota'),
 
   uploadEventImage: async (eventId, file) => {
     const form = new FormData()

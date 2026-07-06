@@ -279,8 +279,8 @@
       <div style="font-size:14px;font-weight:600;margin-bottom:10px">通知参与者</div>
       <div class="flex gap-8 flex-wrap">
         <button class="btn btn-outline btn-sm" @click="sendReminder" :disabled="busy">发送活动提醒</button>
-        <button class="btn btn-outline btn-sm" @click="showNotifyModal = true">发送变更通知</button>
-        <button class="btn btn-primary btn-sm" @click="showAnnounceModal = true">发送普通通知</button>
+        <button class="btn btn-outline btn-sm" @click="loadQuota(); showNotifyModal = true">发送变更通知</button>
+        <button class="btn btn-primary btn-sm" @click="loadQuota(); showAnnounceModal = true">发送普通通知</button>
       </div>
     </div>
 
@@ -495,6 +495,10 @@
       <div class="modal">
         <h3 class="modal-title">发送普通通知</h3>
         <p style="font-size:13px;color:var(--c-text-2);margin-bottom:12px">将向所有 {{ signups.length }} 位报名者发送邮件，可附一张图片（如微信群二维码）</p>
+        <div v-if="emailQuota" style="font-size:12px;margin-bottom:12px;padding:8px 12px;border-radius:6px" :style="{ background: emailQuota.remaining === 0 ? '#ffe5e5' : emailQuota.remaining < signups.length ? '#fff6e5' : '#e8f8ee', color: emailQuota.remaining === 0 ? 'var(--c-danger)' : emailQuota.remaining < signups.length ? '#cc7700' : 'var(--c-success)' }">
+          今日额度：{{ emailQuota.used }}/{{ emailQuota.limit }}，剩余 {{ emailQuota.remaining }} 封
+          <span v-if="emailQuota.remaining < signups.length" style="font-weight:600">（不足以发送 {{ signups.length }} 封）</span>
+        </div>
         <div class="field">
           <label class="label">标题 *</label>
           <input v-model="announceSubject" placeholder="如：请扫码加入活动微信群" />
@@ -696,6 +700,12 @@ const addError = ref('')
 const showNotifyModal = ref(false)
 const notifyMessage = ref('')
 
+const emailQuota = ref(null)
+
+async function loadQuota() {
+  try { emailQuota.value = await api.getEmailQuota() } catch (_) {}
+}
+
 const showAnnounceModal = ref(false)
 const announceSubject = ref('')
 const announceMessage = ref('')
@@ -724,6 +734,11 @@ async function sendAnnounce() {
     announceError.value = '标题和内容必填'
     return
   }
+  await loadQuota()
+  if (emailQuota.value && emailQuota.value.remaining < signups.value.length) {
+    announceError.value = `今日邮件额度不足（剩余 ${emailQuota.value.remaining}/${emailQuota.value.limit}），需发 ${signups.value.length} 封。请明天再试`
+    return
+  }
   busy.value = true
   try {
     let image_key = null
@@ -734,7 +749,9 @@ async function sendAnnounce() {
     const data = await api.announceEvent(event.value.id, {
       subject: announceSubject.value, message: announceMessage.value, image_key
     })
-    showToast(`已发送 ${data.count} 封通知邮件`)
+    const msg = data.failed ? `发送完成：${data.sent} 封成功，${data.failed} 封失败` : `已发送 ${data.sent} 封通知邮件`
+    if (data.quota) emailQuota.value = data.quota
+    showToast(msg)
     showAnnounceModal.value = false
     announceSubject.value = ''; announceMessage.value = ''
     announceImage.value = null; announceImagePreview.value = ''
@@ -989,20 +1006,34 @@ async function addManualSignup() {
 }
 
 async function sendReminder() {
+  await loadQuota()
+  if (emailQuota.value && emailQuota.value.remaining < signups.value.length) {
+    showToast(`今日邮件额度不足（剩余 ${emailQuota.value.remaining}/${emailQuota.value.limit}），需发 ${signups.value.length} 封`, 'error')
+    return
+  }
   if (!confirm(`向 ${signups.value.length} 位报名者发送活动提醒邮件？`)) return
   busy.value = true
   try {
     const data = await api.remindParticipants(event.value.id)
-    showToast(`已发送 ${data.count} 封提醒邮件`)
+    const msg = data.failed ? `发送完成：${data.sent} 封成功，${data.failed} 封失败` : `已发送 ${data.sent} 封提醒邮件`
+    if (data.quota) emailQuota.value = data.quota
+    showToast(msg)
   } catch (e) { showToast(e.message, 'error') }
   busy.value = false
 }
 
 async function sendNotify() {
+  await loadQuota()
+  if (emailQuota.value && emailQuota.value.remaining < signups.value.length) {
+    showToast(`今日邮件额度不足（剩余 ${emailQuota.value.remaining}/${emailQuota.value.limit}），需发 ${signups.value.length} 封`, 'error')
+    return
+  }
   busy.value = true
   try {
     const data = await api.notifyParticipants(event.value.id, notifyMessage.value)
-    showToast(`已发送 ${data.count} 封通知邮件`)
+    const msg = data.failed ? `发送完成：${data.sent} 封成功，${data.failed} 封失败` : `已发送 ${data.sent} 封通知邮件`
+    if (data.quota) emailQuota.value = data.quota
+    showToast(msg)
     showNotifyModal.value = false
     notifyMessage.value = ''
   } catch (e) { showToast(e.message, 'error') }

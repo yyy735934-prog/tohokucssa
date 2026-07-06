@@ -1,11 +1,24 @@
 import { BRANDING } from '../../branding.js'
 
 const FROM_DEFAULT = `${BRANDING.platformName} <onboarding@resend.dev>`
+const DEFAULT_DAILY_LIMIT = 100
 
-export async function sendEmail(env, { to, subject, html }) {
+export async function getEmailQuota(db, dailyLimit) {
+  const limit = dailyLimit || DEFAULT_DAILY_LIMIT
+  const todayStart = new Date()
+  todayStart.setUTCHours(0, 0, 0, 0)
+  const row = await db.prepare(
+    "SELECT COUNT(*) as c FROM email_logs WHERE status = 'sent' AND created_at >= ?"
+  ).bind(todayStart.getTime()).first()
+  const used = row?.c || 0
+  return { used, limit, remaining: Math.max(0, limit - used) }
+}
+
+export async function sendEmail(env, { to, subject, html, eventId }) {
   const apiKey = env.RESEND_API_KEY
-  if (!apiKey) { console.warn('[email] no RESEND_API_KEY, skipping'); return }
+  if (!apiKey) { console.warn('[email] no RESEND_API_KEY, skipping'); return false }
   const from = env.EMAIL_FROM || FROM_DEFAULT
+  let status = 'sent', error = ''
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -13,19 +26,45 @@ export async function sendEmail(env, { to, subject, html }) {
       body: JSON.stringify({ from, to: [to], subject, html }),
     })
     if (!res.ok) {
-      const body = await res.text()
-      console.error(`[email] Resend error ${res.status}: ${body}`)
+      error = await res.text()
+      console.error(`[email] Resend error ${res.status} to=${to}: ${error}`)
+      status = 'failed'
     }
   } catch (e) {
-    console.error('[email] fetch error:', e.message)
+    error = e.message
+    console.error(`[email] fetch error to=${to}: ${error}`)
+    status = 'failed'
   }
+  if (env.DB) {
+    try {
+      await env.DB.prepare('INSERT INTO email_logs (event_id, to_email, subject, html, status, error) VALUES (?,?,?,?,?,?)')
+        .bind(eventId || null, to, subject, html || '', status, error).run()
+    } catch (_) {}
+  }
+  return status === 'sent'
 }
 
 export async function sendEmailBatch(env, emails) {
-  for (const e of emails) {
-    await sendEmail(env, e)
+  if (env.DB) {
+    const quota = await getEmailQuota(env.DB, Number(env.EMAIL_DAILY_LIMIT) || undefined)
+    if (quota.remaining === 0) {
+      return { sent: 0, failed: emails.length, quota, blocked: true }
+    }
+    if (quota.remaining < emails.length) {
+      return { sent: 0, failed: emails.length, quota, blocked: true }
+    }
   }
+  let sent = 0, failed = 0
+  for (const e of emails) {
+    const ok = await sendEmail(env, e)
+    if (ok) sent++; else failed++
+    if (emails.length > 2) await sleep(550)
+  }
+  const quota = env.DB ? await getEmailQuota(env.DB, Number(env.EMAIL_DAILY_LIMIT) || undefined) : null
+  return { sent, failed, quota }
 }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 function baseHtml(title, body) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
