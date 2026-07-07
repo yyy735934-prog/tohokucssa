@@ -17,6 +17,7 @@
         <button v-if="event.status === 'open'" class="btn btn-primary btn-sm" @click="activateEvent" :disabled="busy">开始活动</button>
         <button v-if="event.status === 'active'" class="btn btn-outline btn-sm" @click="deactivateEvent" :disabled="busy">撤回开始</button>
         <button v-if="event.status === 'active'" class="btn btn-danger btn-sm" @click="closeEvent" :disabled="busy">结束活动</button>
+        <button v-if="auth.isReviewer && event.status !== 'draft'" class="btn btn-outline btn-sm" style="color:var(--c-warning)" @click="revertEvent" :disabled="busy">回退到编辑</button>
         <button v-if="auth.isReviewer" class="btn btn-outline btn-sm" @click="togglePin" :disabled="busy">
           {{ event.pinned ? '取消置顶' : '置顶' }}
         </button>
@@ -893,6 +894,14 @@ async function submitEvent() {
 async function withdrawEvent() {
   busy.value = true
   try { await api.withdrawEvent(event.value.id); showToast('已撤回'); await load() }
+  catch (e) { showToast(e.message, 'error') }
+  busy.value = false
+}
+
+async function revertEvent() {
+  if (!confirm('确认把该活动回退到编辑（草稿）状态？回退后需要重新提交审核。')) return
+  busy.value = true
+  try { await api.revertEvent(event.value.id); showToast('已回退到编辑状态'); await load() }
   catch (e) { showToast(e.message, 'error') }
   busy.value = false
 }

@@ -46,6 +46,7 @@ export const api = {
   approveEvent: (id) => request('POST', `/events/${id}/approve`),
   rejectEvent: (id, reason) => request('POST', `/events/${id}/reject`, { reason }),
   withdrawEvent: (id) => request('POST', `/events/${id}/withdraw`),
+  revertEvent: (id) => request('POST', `/events/${id}/revert`),
   activateEvent: (id) => request('POST', `/events/${id}/activate`),
   deactivateEvent: (id) => request('POST', `/events/${id}/deactivate`),
   togglePin: (id) => request('POST', `/events/${id}/toggle-pin`),

@@ -354,6 +354,32 @@ events.post('/:id/withdraw', async (c) => {
   return c.json({ ok: true })
 })
 
+// POST /api/events/:id/revert — 任意状态 → draft（审核员/超管手动回退，仅限没有报名/签到的活动）
+events.post('/:id/revert', async (c) => {
+  const session = await requireAuth(c)
+  if (session.role !== 'reviewer') return c.json({ ok: false, message: '仅审核员可回退活动' }, 403)
+
+  const id = Number(c.req.param('id'))
+  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
+  if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
+  if (event.status === 'draft') return c.json({ ok: false, message: '活动已是编辑状态' }, 400)
+
+  const stat = await c.env.DB.prepare(
+    'SELECT COUNT(*) as total, SUM(CASE WHEN checked_in = 1 THEN 1 ELSE 0 END) as checkedIn FROM signups WHERE event_id = ?'
+  ).bind(id).first()
+  if (stat.total > 0) {
+    return c.json({ ok: false, message: stat.checkedIn > 0
+      ? '已有参与者签到，无法回退到编辑状态'
+      : `已有 ${stat.total} 人报名，无法回退到编辑状态` }, 400)
+  }
+
+  await c.env.DB.prepare(
+    'UPDATE events SET status = ?, submitted_at = NULL, reviewed_by = NULL, reviewed_at = NULL, reject_reason = NULL WHERE id = ?'
+  ).bind('draft', id).run()
+  await audit(c.env.DB, 'revert', 'event', id, `回退「${event.title}」到编辑状态`, session.email)
+  return c.json({ ok: true })
+})
+
 // POST /api/events/:id/activate — open → active
 events.post('/:id/activate', async (c) => {
   const session = await requireAuth(c)
