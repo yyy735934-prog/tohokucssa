@@ -138,7 +138,9 @@
         <div v-for="e in createdEvents" :key="'c-'+e.id" class="card event-item">
           <div class="head">
             <h3>{{ e.title }}</h3>
-            <span class="badge" :class="`badge-${e.status}`">{{ statusLabel(e.status) }}</span>
+            <span class="badge" :class="e.status === 'open' && isFull(e) ? 'badge-full' : `badge-${e.status}`">
+              {{ e.status === 'open' && isFull(e) ? '报名已满' : statusLabel(e.status) }}
+            </span>
           </div>
           <div class="info">{{ e.event_date }}<span v-if="e.location"> · {{ e.location }}</span></div>
           <div v-if="e.reject_reason" class="reject-reason">驳回原因：{{ e.reject_reason }}</div>
@@ -298,6 +300,10 @@ const roleLabel = computed(() => {
 function statusLabel(s) {
   return { draft: '草稿', pending: '审核中', open: '报名中', active: '进行中', closed: '已结束' }[s] || s
 }
+
+// 有效名额上限（含锁定报名写入的 lock_at），用于判断是否已满
+const effectiveCap = (e) => e.capacity || e.lock_at || null
+const isFull = (e) => { const cap = effectiveCap(e); return !!cap && e.signupCount >= cap }
 
 function loadForCurrentUser() {
   signups.value = []

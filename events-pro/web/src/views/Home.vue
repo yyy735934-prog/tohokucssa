@@ -19,8 +19,8 @@
         <div class="event-head">
           <h3>{{ e.title }}</h3>
           <span v-if="e.pinned" class="pin-badge">置顶</span>
-          <span class="badge" :class="e.status === 'open' ? 'badge-open' : 'badge-active'">
-            {{ e.status === 'open' ? '报名中' : '进行中' }}
+          <span class="badge" :class="e.status !== 'open' ? 'badge-active' : isFull(e) ? 'badge-full' : 'badge-open'">
+            {{ e.status !== 'open' ? '进行中' : isFull(e) ? '报名已满' : '报名中' }}
           </span>
         </div>
         <div class="event-info">
@@ -30,11 +30,13 @@
         <p v-if="e.content" class="event-desc">{{ e.content }}</p>
         <div class="event-foot">
           <span class="signup-count">{{ e.signupCount }}{{ e.capacity ? `/${e.capacity}` : '' }} 人报名</span>
-          <span v-if="e.status === 'open'" class="action-hint">立即报名 →</span>
+          <span v-if="e.status === 'open'" class="action-hint" :class="{ 'hint-full': isFull(e) }">
+            {{ isFull(e) ? '报名已满' : '立即报名 →' }}
+          </span>
         </div>
-        <div v-if="e.capacity" class="progress">
-          <div class="progress-fill" :style="{ width: Math.min(100, e.signupCount/e.capacity*100)+'%' }"
-               :class="{ full: e.signupCount >= e.capacity }"></div>
+        <div v-if="effectiveCap(e)" class="progress">
+          <div class="progress-fill" :style="{ width: Math.min(100, e.signupCount/effectiveCap(e)*100)+'%' }"
+               :class="{ full: e.signupCount >= effectiveCap(e) }"></div>
         </div>
         </div>
       </router-link>
@@ -49,6 +51,10 @@ import { api } from '../api.js'
 const events = ref([])
 const loading = ref(true)
 const error = ref('')
+
+// 有效名额上限：显式上限，或锁定报名时写入 lock_at 的锁定值
+const effectiveCap = (e) => e.capacity || e.lock_at || null
+const isFull = (e) => { const cap = effectiveCap(e); return !!cap && e.signupCount >= cap }
 
 onMounted(async () => {
   try {
@@ -86,4 +92,5 @@ onMounted(async () => {
 .progress { height: 3px; background: var(--c-border); border-radius: 2px; margin-top: 12px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--c-primary); border-radius: 2px; transition: width .3s; }
 .progress-fill.full { background: var(--c-danger); }
+.hint-full { color: var(--c-text-3); }
 </style>

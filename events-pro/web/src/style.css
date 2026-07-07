@@ -82,6 +82,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--c-primary); }
 .badge-open { background: var(--c-success-bg); color: #059669; }
 .badge-active { background: #eef2ff; color: var(--c-primary); }
 .badge-closed { background: var(--c-bg); color: var(--c-text-2); }
+.badge-full { background: #fef2f2; color: var(--c-danger); }
 
 .empty { text-align: center; padding: 48px 20px; color: var(--c-text-2); }
 .error { color: var(--c-danger); font-size: 13px; margin-bottom: 12px; }

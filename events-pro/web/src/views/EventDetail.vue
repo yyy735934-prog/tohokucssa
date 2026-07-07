@@ -6,8 +6,8 @@
       <div class="card mb">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
           <h1 class="title">{{ event.title }}</h1>
-          <span class="badge" :class="`badge-${event.status}`">
-            {{ { open:'报名中', active:'进行中', closed:'已结束' }[event.status] || event.status }}
+          <span class="badge" :class="event.status === 'open' && isFull ? 'badge-full' : `badge-${event.status}`">
+            {{ event.status === 'open' && isFull ? '报名已满' : ({ open:'报名中', active:'进行中', closed:'已结束' }[event.status] || event.status) }}
           </span>
         </div>
         <div class="meta">{{ event.event_date }}<span v-if="event.location"> · {{ event.location }}</span></div>
