@@ -238,7 +238,8 @@ events.patch('/:id', async (c) => {
   return c.json({ ok: true })
 })
 
-// POST /api/events/:id/submit — draft → pending (reviewer auto-approves own events → open)
+// POST /api/events/:id/submit — draft → pending (super admin auto-approves own events → open;
+// 普通审核员提交后仍需人工审核，避免绕过审核流程)
 events.post('/:id/submit', async (c) => {
   const session = await requireAuth(c)
   const id = Number(c.req.param('id'))
@@ -247,7 +248,7 @@ events.post('/:id/submit', async (c) => {
   if (event.created_by !== session.id) return c.json({ ok: false, message: '只能提交自己的活动' }, 403)
   if (event.status !== 'draft') return c.json({ ok: false, message: '只有草稿可以提交审核' }, 400)
 
-  if (session.role === 'reviewer') {
+  if (session.is_super) {
     await c.env.DB.prepare('UPDATE events SET status = ?, submitted_at = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?')
       .bind('open', Date.now(), session.id, Date.now(), id).run()
     return c.json({ ok: true, autoApproved: true })
