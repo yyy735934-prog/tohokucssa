@@ -11,4 +11,7 @@ export const BRANDING = {
   studentIdSchool: '',
   showKana: false,
   contactEmail: '',
+  // 微信/社交分享卡片
+  description: '中国矿业大学日本校友会 · 活动报名与签到平台',
+  ogImage: '', // 有 logo 后填绝对 URL（如 https://.../logo.png）或站内路径 /logo.png
 }

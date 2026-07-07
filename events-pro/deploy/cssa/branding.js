@@ -11,4 +11,7 @@ export const BRANDING = {
   studentIdSchool: '東北大学',
   showKana: true,
   contactEmail: 'tohokucssa@gmail.com',
+  // 微信/社交分享卡片
+  description: '東北地区中国学友会 · 活動の申込と受付プラットフォーム',
+  ogImage: '/logo.png', // 微信/社交分享卡片缩略图（构建时自动拼成绝对 URL）
 }
