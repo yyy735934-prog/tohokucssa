@@ -52,7 +52,12 @@
         <div class="sidebar-section">
           <div class="sidebar-label">账户</div>
           <a v-if="auth.role === 'user'" href="#" class="sidebar-link" @click.prevent="requestRole('host')">申请成为活动主理人</a>
-          <a v-if="auth.role !== 'reviewer'" href="#" class="sidebar-link" @click.prevent="requestRole('reviewer')">申请成为管理员</a>
+          <a v-if="auth.role !== 'reviewer'" href="#" class="sidebar-link" @click.prevent="requestRole('reviewer')">
+            {{ auth.role === 'user' ? '申请成为管理员（含主理人权限）' : '申请升级为管理员' }}
+          </a>
+          <p v-if="auth.role === 'user'" class="role-hint">
+            管理员权限已包含活动主理人的全部功能，若要成为管理员，直接申请管理员即可，无需再单独申请主理人。
+          </p>
           <router-link to="/admin/password" class="sidebar-link">修改密码</router-link>
           <a href="#" class="sidebar-link" @click.prevent="logout">退出登录</a>
         </div>
@@ -248,6 +253,10 @@ async function logout() {
 .count-badge {
   background: var(--c-danger); color: #fff; font-size: 11px; font-weight: 700;
   padding: 1px 7px; border-radius: 99px; margin-left: auto;
+}
+.role-hint {
+  font-size: 12px; color: var(--c-text-3); line-height: 1.5;
+  padding: 2px 12px 8px; margin: 0;
 }
 
 .bell-btn {
