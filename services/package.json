@@ -1,0 +1,20 @@
+{
+  "name": "tohokucssa-services",
+  "version": "1.0.0",
+  "private": true,
+  "description": "東北地区中国学友会 · 生活指南服务中心",
+  "scripts": {
+    "dev": "vite --port 5180",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && wrangler pages deploy dist --project-name=tohokucssa-services"
+  },
+  "dependencies": {
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.0",
+    "vite": "^6.2.0"
+  }
+}
