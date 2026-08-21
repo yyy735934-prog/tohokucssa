@@ -12,10 +12,9 @@ test("builds the documented generateContent image request shape", () => {
     "交通",
   ]);
 
-  assert.equal(body.contents[0].role, "user");
   assert.deepEqual(body.contents[0].parts[0], {
-    inlineData: {
-      mimeType: "image/png",
+    inline_data: {
+      mime_type: "image/png",
       data: "base64-image",
     },
   });

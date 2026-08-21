@@ -31,11 +31,10 @@ export function buildGeminiRequestBody(
   return {
     contents: [
       {
-        role: "user",
         parts: [
           {
-            inlineData: {
-              mimeType,
+            inline_data: {
+              mime_type: mimeType,
               data,
             },
           },
