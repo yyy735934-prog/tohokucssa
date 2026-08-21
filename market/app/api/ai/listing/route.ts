@@ -3,6 +3,11 @@ import {
   inferListingIntelligence,
   LISTING_CATEGORIES,
 } from "../../../../lib/listing-intelligence";
+import {
+  buildGeminiRequestBody,
+  extractOutputText,
+  type GeminiGenerateContentResponse,
+} from "../../../../lib/gemini-api";
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const maxImageBytes = 2 * 1024 * 1024;
@@ -13,31 +18,6 @@ type RecognitionPayload = {
   description?: unknown;
   category?: unknown;
 };
-
-type GeminiInteractionResponse = {
-  output_text?: string;
-  status?: string;
-  steps?: Array<{
-    type?: string;
-    content?: Array<{ type?: string; text?: string }>;
-  }>;
-  error?: {
-    code?: string | number;
-    message?: string;
-    status?: string;
-  };
-};
-
-function extractOutputText(response: GeminiInteractionResponse) {
-  if (response.output_text) return response.output_text;
-  for (const step of response.steps ?? []) {
-    if (step.type !== "model_output") continue;
-    for (const content of step.content ?? []) {
-      if (content.type === "text" && content.text) return content.text;
-    }
-  }
-  return null;
-}
 
 function parseRecognitionPayload(outputText: string): RecognitionPayload {
   const cleaned = outputText
@@ -147,34 +127,26 @@ export async function POST(request: Request) {
 
   try {
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/interactions",
+      `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
       {
         method: "POST",
         headers: {
           "x-goog-api-key": runtimeEnv.GEMINI_API_KEY,
           "content-type": "application/json",
         },
-        body: JSON.stringify({
-          model: geminiModel,
-          input: [
-            {
-              type: "image",
-              mime_type: image.type,
-              data: imageBase64(await image.arrayBuffer()),
-            },
-            {
-              type: "text",
-              text:
-                `识别照片中主要的二手商品。用简洁中文生成商品标题与描述，不要猜测照片中看不清的品牌、型号、功能状态或配件。标题应适合二手平台；描述应明确提示卖家核对成色、功能和配件。分类只能从以下栏目中选择一个：${LISTING_CATEGORIES.join("、")}。只输出一个 JSON 对象，不要输出 Markdown 或其他文字，格式为：{"title":"商品名称","description":"商品描述","category":"栏目"}`,
-            },
-          ],
-        }),
+        body: JSON.stringify(
+          buildGeminiRequestBody(
+            image.type,
+            imageBase64(await image.arrayBuffer()),
+            LISTING_CATEGORIES,
+          ),
+        ),
       },
     );
 
-    let payload: GeminiInteractionResponse = {};
+    let payload: GeminiGenerateContentResponse = {};
     try {
-      payload = (await response.json()) as GeminiInteractionResponse;
+      payload = (await response.json()) as GeminiGenerateContentResponse;
     } catch (error) {
       console.error(
         JSON.stringify({
@@ -207,7 +179,9 @@ export async function POST(request: Request) {
 
     const outputText = extractOutputText(payload);
     if (!outputText) {
-      throw new Error(`AI_RESPONSE_EMPTY:${payload.status ?? "unknown"}`);
+      throw new Error(
+        `AI_RESPONSE_EMPTY:${payload.promptFeedback?.blockReason ?? "unknown"}`,
+      );
     }
 
     const recognized = parseRecognitionPayload(outputText);
