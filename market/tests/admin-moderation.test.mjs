@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  isListingModerationAction,
+  shouldShowUserModerationActions,
+} from "../lib/admin-moderation.ts";
+
+test("allows administrators to withdraw marketplace listings", () => {
+  assert.equal(isListingModerationAction("withdrawn"), true);
+  assert.equal(isListingModerationAction("deleted"), false);
+});
+
+test("only shows academic review actions while a member is pending", () => {
+  assert.equal(shouldShowUserModerationActions("member", "pending"), true);
+  assert.equal(shouldShowUserModerationActions("member", "verified"), false);
+  assert.equal(shouldShowUserModerationActions("member", "rejected"), false);
+  assert.equal(shouldShowUserModerationActions("admin", "pending"), false);
+});

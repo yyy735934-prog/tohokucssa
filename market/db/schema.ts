@@ -94,3 +94,22 @@ export const contactRequests = sqliteTable(
     index("contact_buyer_idx").on(table.buyerEmail, table.createdAt),
   ],
 );
+
+export const emailLoginChallenges = sqliteTable(
+  "email_login_challenges",
+  {
+    email: text("email").primaryKey(),
+    codeHash: text("code_hash").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    requestIpHash: text("request_ip_hash").notNull(),
+    lastSentAt: integer("last_sent_at").notNull(),
+  },
+  (table) => [
+    index("email_login_expires_idx").on(table.expiresAt),
+    index("email_login_ip_sent_idx").on(
+      table.requestIpHash,
+      table.lastSentAt,
+    ),
+  ],
+);

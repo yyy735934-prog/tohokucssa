@@ -1,7 +1,7 @@
 import {
   safeRelativeReturnPath,
   serializeCookie,
-} from "../chatgpt-auth";
+} from "../../../../chatgpt-auth";
 
 const OAUTH_COOKIE = "tohoku_oauth";
 

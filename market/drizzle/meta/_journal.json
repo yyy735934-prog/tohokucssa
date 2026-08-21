@@ -36,6 +36,20 @@
       "when": 1784798511910,
       "tag": "0004_remove_demo_listings",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1787295600000,
+      "tag": "0005_rename_transport_category",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1787302005776,
+      "tag": "0006_email_login_challenges",
+      "breakpoints": true
     }
   ]
 }

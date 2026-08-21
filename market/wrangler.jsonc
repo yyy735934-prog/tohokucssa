@@ -31,6 +31,12 @@
       "bucket_name": "tohoku-market-uploads"
     }
   ],
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "remote": true
+    }
+  ],
   "vars": {
     "ADMIN_EMAILS": "ding.junzhong.p4@dc.tohoku.ac.jp"
   },

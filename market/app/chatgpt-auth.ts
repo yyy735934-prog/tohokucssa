@@ -21,6 +21,7 @@ const PERCENT_ENCODED_UTF8 = "percent-encoded-utf-8";
 const SIGN_IN_PATH = "/signin-with-chatgpt";
 const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
+const AUTH_API_PREFIX = "/api/auth/";
 const SESSION_COOKIE = "tohoku_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 
@@ -212,7 +213,8 @@ function isReservedAuthPath(pathname: string): boolean {
   return (
     pathname === SIGN_IN_PATH ||
     pathname === SIGN_OUT_PATH ||
-    pathname === CALLBACK_PATH
+    pathname === CALLBACK_PATH ||
+    pathname.startsWith(AUTH_API_PREFIX)
   );
 }
 

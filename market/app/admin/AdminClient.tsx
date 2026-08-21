@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { shouldShowUserModerationActions } from "../../lib/admin-moderation";
 
 type AdminListing = {
   id: string;
@@ -23,6 +24,20 @@ type AdminUser = {
   role: string;
   academicStatus: string;
   createdAt: string;
+};
+
+const listingStatusText: Record<string, string> = {
+  pending: "待审核",
+  active: "展示中",
+  rejected: "未通过",
+  sold: "已售出",
+  withdrawn: "已下架",
+};
+
+const academicStatusText: Record<string, string> = {
+  pending: "待认证",
+  verified: "已认证",
+  rejected: "未通过",
 };
 
 export default function AdminClient({
@@ -91,6 +106,7 @@ export default function AdminClient({
               <option value="active">展示中</option>
               <option value="rejected">未通过</option>
               <option value="sold">已售出</option>
+              <option value="withdrawn">已下架</option>
               <option value="all">全部商品</option>
             </select>
           </div>
@@ -107,12 +123,27 @@ export default function AdminClient({
                   <span>{listing.category} · {listing.place}</span>
                   <h3>{listing.title}</h3>
                   <p>{listing.description}</p>
-                  <small>{listing.ownerName} · {listing.ownerEmail}</small>
+                  <small>
+                    {listing.ownerName} · {listing.ownerEmail} · {listingStatusText[listing.status] ?? listing.status}
+                  </small>
                 </div>
                 <strong>{listing.price === 0 ? "免费" : `¥${listing.price.toLocaleString()}`}</strong>
                 <div className="admin-row-actions">
-                  {listing.status !== "active" && <button className="approve" onClick={() => moderate("listing", listing.id, "active")}>通过</button>}
-                  {listing.status !== "rejected" && <button onClick={() => moderate("listing", listing.id, "rejected")}>驳回</button>}
+                  {listing.status === "pending" && (
+                    <>
+                      <button className="approve" onClick={() => moderate("listing", listing.id, "active")}>通过</button>
+                      <button onClick={() => moderate("listing", listing.id, "rejected")}>拒绝</button>
+                    </>
+                  )}
+                  {listing.status === "active" && (
+                    <>
+                      <button onClick={() => moderate("listing", listing.id, "withdrawn")}>下架</button>
+                      <button onClick={() => moderate("listing", listing.id, "sold")}>标记售出</button>
+                    </>
+                  )}
+                  {["rejected", "withdrawn"].includes(listing.status) && (
+                    <button className="approve" onClick={() => moderate("listing", listing.id, "active")}>重新上架</button>
+                  )}
                 </div>
               </article>
             ))}
@@ -130,8 +161,10 @@ export default function AdminClient({
               <article key={user.email}>
                 <div className="admin-user-avatar">{user.displayName.slice(0, 1).toUpperCase()}</div>
                 <div><b>{user.displayName}</b><span>{user.email}</span></div>
-                <span className={`status-pill ${user.academicStatus}`}>{user.academicStatus}</span>
-                {user.role !== "admin" && (
+                <span className={`status-pill ${user.academicStatus}`}>
+                  {academicStatusText[user.academicStatus] ?? user.academicStatus}
+                </span>
+                {shouldShowUserModerationActions(user.role, user.academicStatus) && (
                   <div className="admin-row-actions">
                     <button className="approve" onClick={() => moderate("user", user.email, "verified")}>通过认证</button>
                     <button onClick={() => moderate("user", user.email, "rejected")}>拒绝</button>
