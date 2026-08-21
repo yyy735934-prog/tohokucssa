@@ -28,6 +28,39 @@ test("uses title and description together for classification", () => {
   );
 });
 
+test("uses the category default when only the description names a specific item", () => {
+  assert.deepEqual(
+    inferListingIntelligence("毕业出闲置", "电饭煲功能正常", "家电"),
+    {
+      category: "家电",
+      icon: "🔌",
+      tone: "cream",
+    },
+  );
+});
+
+test("keeps icon refinements inside the selected category", () => {
+  assert.deepEqual(
+    inferListingIntelligence("电脑桌", "适合放显示器和笔记本", "家具"),
+    {
+      category: "家具",
+      icon: "🪵",
+      tone: "sage",
+    },
+  );
+});
+
+test("ignores incidental description keywords when choosing a thumbnail", () => {
+  assert.deepEqual(
+    inferListingIntelligence("宜家收纳柜", "上层可以放电饭煲", "家具"),
+    {
+      category: "家具",
+      icon: "🗄️",
+      tone: "sage",
+    },
+  );
+});
+
 test("exposes every requested marketplace category", () => {
   assert.deepEqual(LISTING_CATEGORIES, [
     "家具",

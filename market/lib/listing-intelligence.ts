@@ -46,50 +46,27 @@ const categoryRules: Array<{
   },
 ];
 
-const iconRules: Array<{ icon: string; pattern: RegExp }> = [
-  { icon: "🍚", pattern: /电饭|炊饭/ },
-  { icon: "🧊", pattern: /冰箱|冷柜|冷藏/ },
-  { icon: "🧺", pattern: /洗衣机|烘干机/ },
-  { icon: "🍞", pattern: /烤箱|面包机/ },
-  { icon: "🥘", pattern: /微波炉/ },
-  { icon: "💧", pattern: /除湿|加湿/ },
-  { icon: "🌀", pattern: /风扇|空调/ },
-  { icon: "💡", pattern: /灯|照明/ },
-  { icon: "☕", pattern: /咖啡机|咖啡壶/ },
-  { icon: "📺", pattern: /电视/ },
-  { icon: "🖥️", pattern: /显示器|显示屏|屏幕|台式机/ },
-  { icon: "💻", pattern: /笔记本|电脑|macbook/ },
-  { icon: "📱", pattern: /手机|iphone|平板|ipad/ },
-  { icon: "📷", pattern: /相机|摄影机|摄像机/ },
-  { icon: "🎧", pattern: /耳机|音箱|扬声器/ },
-  { icon: "🖨️", pattern: /打印机|扫描仪/ },
-  { icon: "🛋️", pattern: /沙发/ },
-  { icon: "🛏️", pattern: /床|床垫/ },
-  { icon: "🪑", pattern: /椅|凳/ },
-  { icon: "🗄️", pattern: /衣柜|书柜|鞋柜|橱柜|收纳柜/ },
-  { icon: "🪞", pattern: /镜子|穿衣镜/ },
-  { icon: "🪵", pattern: /桌|茶几|置物架|收纳架/ },
-  { icon: "🚲", pattern: /自行车|单车|脚踏车|公路车|山地车/ },
-  { icon: "🛵", pattern: /电动车|摩托|滑板车/ },
-  { icon: "🛹", pattern: /滑板/ },
-  { icon: "⛑️", pattern: /头盔/ },
-  { icon: "📚", pattern: /教材|教科书|参考书|词典|字典|书籍|图书/ },
-  { icon: "📖", pattern: /小说|漫画|杂志/ },
-  { icon: "⛺", pattern: /帐篷|露营|睡袋/ },
-  { icon: "🥾", pattern: /登山|徒步/ },
-  { icon: "🏸", pattern: /羽毛球/ },
-  { icon: "🎾", pattern: /网球/ },
-  { icon: "⚽", pattern: /足球/ },
-  { icon: "🏀", pattern: /篮球/ },
-  { icon: "🏂", pattern: /滑雪|雪板/ },
-  { icon: "🖼️", pattern: /油画|水彩|版画|装饰画|挂画|绘画|书法/ },
-  { icon: "🏺", pattern: /陶艺|陶瓷|古董/ },
-  { icon: "🗿", pattern: /雕塑/ },
-  { icon: "🎸", pattern: /吉他|尤克里里/ },
-  { icon: "🎻", pattern: /小提琴/ },
-  { icon: "🎹", pattern: /钢琴|电子琴|键盘/ },
-  { icon: "🧸", pattern: /手办|玩偶|公仔/ },
-];
+const categoryIconRules: Partial<
+  Record<ListingCategory, Array<{ icon: string; pattern: RegExp }>>
+> = {
+  家具: [
+    { icon: "🛋️", pattern: /沙发/ },
+    { icon: "🛏️", pattern: /床|床垫/ },
+    { icon: "🗄️", pattern: /衣柜|书柜|鞋柜|橱柜|收纳柜/ },
+    { icon: "🪵", pattern: /桌|茶几|置物架|收纳架/ },
+  ],
+  家电: [
+    { icon: "🍚", pattern: /电饭|炊饭/ },
+    { icon: "🧊", pattern: /冰箱|冷柜/ },
+    { icon: "🧺", pattern: /洗衣机|烘干机/ },
+    { icon: "📺", pattern: /电视/ },
+    { icon: "💻", pattern: /电脑|笔记本|macbook/ },
+  ],
+  交通: [
+    { icon: "🛵", pattern: /电动车|摩托|滑板车/ },
+    { icon: "🛹", pattern: /滑板/ },
+  ],
+};
 
 const categoryDefaults: Record<ListingCategory, { icon: string; tone: string }> = {
   家具: { icon: "🪑", tone: "sage" },
@@ -118,9 +95,14 @@ export function inferListingIntelligence(
     ? preferredCategory
     : matchedCategory ?? "其他";
   const fallback = categoryDefaults[category];
+  // The category supplies the thumbnail by default. Only a small set of
+  // category-compatible, explicit words in the title can make it more
+  // specific; incidental details in the description must not change it.
+  const normalizedTitle = title.toLowerCase();
   const icon =
-    iconRules.find(({ pattern }) => pattern.test(searchable))?.icon ??
-    fallback.icon;
+    categoryIconRules[category]?.find(({ pattern }) =>
+      pattern.test(normalizedTitle),
+    )?.icon ?? fallback.icon;
 
   return { category, icon, tone: fallback.tone };
 }
