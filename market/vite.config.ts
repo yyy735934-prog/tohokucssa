@@ -11,28 +11,6 @@ const { d1, r2 } = hostingConfig;
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
-const localBindingConfig = {
-  main: "./worker/index.ts",
-  compatibility_flags: ["nodejs_compat"],
-  d1_databases: d1
-    ? [
-        {
-          binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
-        },
-      ]
-    : [],
-  r2_buckets: r2
-    ? [
-        {
-          binding: r2,
-          bucket_name: "site-creator-r2",
-        },
-      ]
-    : [],
-};
-
 export default defineConfig(async () => {
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
@@ -57,7 +35,46 @@ export default defineConfig(async () => {
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
-        config: localBindingConfig,
+        config: (userConfig) => {
+          userConfig.main = "./worker/index.ts";
+          userConfig.compatibility_flags = Array.from(
+            new Set([
+              ...(userConfig.compatibility_flags ?? []),
+              "nodejs_compat",
+            ]),
+          );
+
+          // Programmatic config arrays are concatenated with wrangler.jsonc.
+          // Only supply Sites preview placeholders when a binding is absent,
+          // otherwise the generated deploy config contains duplicate names.
+          if (
+            d1 &&
+            !(userConfig.d1_databases ?? []).some(
+              (database) => database.binding === d1,
+            )
+          ) {
+            userConfig.d1_databases = [
+              {
+                binding: d1,
+                database_name: "site-creator-d1",
+                database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+              },
+            ];
+          }
+          if (
+            r2 &&
+            !(userConfig.r2_buckets ?? []).some(
+              (bucket) => bucket.binding === r2,
+            )
+          ) {
+            userConfig.r2_buckets = [
+              {
+                binding: r2,
+                bucket_name: "site-creator-r2",
+              },
+            ];
+          }
+        },
       }),
     ],
   };
