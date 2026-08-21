@@ -11,7 +11,7 @@ import {
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const maxImageBytes = 2 * 1024 * 1024;
-const geminiModel = "gemini-2.5-flash-lite";
+const geminiModel = "gemini-3.5-flash-lite";
 
 type RecognitionPayload = {
   title?: unknown;
