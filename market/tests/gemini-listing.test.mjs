@@ -9,6 +9,7 @@ test("builds the documented generateContent image request shape", () => {
   const body = buildGeminiRequestBody("image/png", "base64-image", [
     "家具",
     "家电",
+    "电子产品",
     "交通",
   ]);
 
@@ -18,7 +19,7 @@ test("builds the documented generateContent image request shape", () => {
       data: "base64-image",
     },
   });
-  assert.match(body.contents[0].parts[1].text, /家具、家电、交通/);
+  assert.match(body.contents[0].parts[1].text, /家具、家电、电子产品、交通/);
 });
 
 test("extracts text from a generateContent candidate", () => {

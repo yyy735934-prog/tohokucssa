@@ -1,6 +1,7 @@
 export const LISTING_CATEGORIES = [
   "家具",
   "家电",
+  "电子产品",
   "交通",
   "书籍",
   "户外",
@@ -41,8 +42,12 @@ const categoryRules: Array<{
     pattern: /桌|椅|沙发|床|床垫|衣柜|书柜|鞋柜|橱柜|置物架|收纳架|茶几|地毯|窗帘|镜子|家具/,
   },
   {
+    category: "电子产品",
+    pattern: /手机|iphone|安卓|平板|ipad|电脑|笔记本|macbook|台式机|主机|显示器|显示屏|键盘|鼠标|触控板|耳机|音箱|扬声器|相机|摄影机|摄像机|打印机|扫描仪|路由器|交换机|充电器|数据线|移动电源|充电宝|硬盘|u盘|usb|ssd|显卡|cpu|内存条|电脑配件|电子产品|外设/,
+  },
+  {
     category: "家电",
-    pattern: /电饭|炊饭|冰箱|冷柜|微波炉|烤箱|洗衣机|吸尘器|除湿|加湿|空调|风扇|吹风|电吹风|台灯|电热水壶|咖啡机|电视|显示器|屏幕|电脑|笔记本|平板|手机|相机|音箱|耳机|路由器|打印机|家电/,
+    pattern: /电饭|炊饭|冰箱|冷柜|微波炉|烤箱|洗衣机|吸尘器|除湿|加湿|空调|风扇|吹风|电吹风|台灯|电热水壶|咖啡机|电视|家电/,
   },
 ];
 
@@ -60,7 +65,11 @@ const categoryIconRules: Partial<
     { icon: "🧊", pattern: /冰箱|冷柜/ },
     { icon: "🧺", pattern: /洗衣机|烘干机/ },
     { icon: "📺", pattern: /电视/ },
-    { icon: "💻", pattern: /电脑|笔记本|macbook/ },
+  ],
+  电子产品: [
+    { icon: "📱", pattern: /手机|iphone|平板|ipad/ },
+    { icon: "📷", pattern: /相机|摄影机|摄像机/ },
+    { icon: "🖥️", pattern: /显示器|显示屏|台式机|主机/ },
   ],
   交通: [
     { icon: "🛵", pattern: /电动车|摩托|滑板车/ },
@@ -71,6 +80,7 @@ const categoryIconRules: Partial<
 const categoryDefaults: Record<ListingCategory, { icon: string; tone: string }> = {
   家具: { icon: "🪑", tone: "sage" },
   家电: { icon: "🔌", tone: "cream" },
+  电子产品: { icon: "💻", tone: "blue" },
   交通: { icon: "🚲", tone: "blue" },
   书籍: { icon: "📚", tone: "lilac" },
   户外: { icon: "⛺", tone: "orange" },

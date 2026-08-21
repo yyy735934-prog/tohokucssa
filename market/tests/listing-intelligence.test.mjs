@@ -61,10 +61,38 @@ test("ignores incidental description keywords when choosing a thumbnail", () => 
   );
 });
 
+test("classifies phones as electronics with a restrained specific icon", () => {
+  assert.deepEqual(inferListingIntelligence("二手 iPhone 手机"), {
+    category: "电子产品",
+    icon: "📱",
+    tone: "blue",
+  });
+});
+
+test("groups computer peripherals under the electronics category", () => {
+  assert.deepEqual(
+    inferListingIntelligence("罗技无线鼠标", "附机械键盘接收器"),
+    {
+      category: "电子产品",
+      icon: "💻",
+      tone: "blue",
+    },
+  );
+});
+
+test("keeps computer desks in furniture", () => {
+  assert.deepEqual(inferListingIntelligence("宜家电脑桌"), {
+    category: "家具",
+    icon: "🪵",
+    tone: "sage",
+  });
+});
+
 test("exposes every requested marketplace category", () => {
   assert.deepEqual(LISTING_CATEGORIES, [
     "家具",
     "家电",
+    "电子产品",
     "交通",
     "书籍",
     "户外",
