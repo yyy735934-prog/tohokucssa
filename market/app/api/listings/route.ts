@@ -14,6 +14,7 @@ function errorMessage(error: unknown) {
 
 export async function GET() {
   try {
+    const member = await getMemberAccess();
     const db = await getDb();
     const rows = await db
       .select()
@@ -21,7 +22,9 @@ export async function GET() {
       .where(eq(listings.status, "active"))
       .orderBy(desc(listings.createdAt))
       .limit(60);
-    return Response.json({ listings: rows.map(listingToMarketItem) });
+    return Response.json({
+      listings: rows.map((listing) => listingToMarketItem(listing, member?.email)),
+    });
   } catch (error) {
     return Response.json({ error: errorMessage(error) }, { status: 503 });
   }
@@ -103,7 +106,7 @@ export async function POST(request: Request) {
 
     return Response.json(
       {
-        listing: listingToMarketItem(created),
+        listing: listingToMarketItem(created, member.email),
         message: status === "active" ? "发布成功。" : "已提交审核，管理员通过后将公开展示。",
       },
       { status: 201 },

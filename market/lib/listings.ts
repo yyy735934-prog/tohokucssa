@@ -2,7 +2,7 @@ import type { listings } from "../db/schema";
 
 type ListingRow = typeof listings.$inferSelect;
 
-export function listingToMarketItem(listing: ListingRow) {
+export function listingToMarketItem(listing: ListingRow, viewerEmail?: string) {
   return {
     id: listing.id,
     title: listing.title,
@@ -16,6 +16,7 @@ export function listingToMarketItem(listing: ListingRow) {
     tone: listing.tone,
     note: listing.description,
     status: listing.status,
+    isOwner: Boolean(viewerEmail && listing.ownerEmail === viewerEmail),
     createdAt: listing.createdAt,
     lat: listing.latitude === null ? null : listing.latitude / 1_000_000,
     lng: listing.longitude === null ? null : listing.longitude / 1_000_000,

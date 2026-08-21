@@ -20,12 +20,12 @@ type ContactRequest = {
   id: string;
   listingId: string;
   listingTitle: string;
-  buyerEmail: string;
-  buyerName: string;
-  sellerEmail: string;
-  status: string;
+  direction: "incoming" | "outgoing";
+  counterpartName: string;
+  status: "pending" | "accepted" | "declined";
   createdAt: string;
   counterpartContact: {
+    email: string;
     phone: string | null;
     wechat: string | null;
     qq: string | null;
@@ -44,19 +44,18 @@ const statusText: Record<string, string> = {
 export default function AccountClient({
   initialListings,
   initialContacts,
-  currentEmail,
   canPublish,
   initialProfile,
 }: {
   initialListings: Listing[];
   initialContacts: ContactRequest[];
-  currentEmail: string;
   canPublish: boolean;
   initialProfile: { phone: string; wechat: string; qq: string; qrUrl: string | null };
 }) {
   const [listings, setListings] = useState(initialListings);
   const [contacts, setContacts] = useState(initialContacts);
   const [message, setMessage] = useState("");
+  const [respondingId, setRespondingId] = useState<string | null>(null);
 
   const updateListing = async (id: string, status: "sold" | "withdrawn") => {
     const response = await fetch("/api/listings", {
@@ -76,19 +75,35 @@ export default function AccountClient({
   };
 
   const respondToContact = async (id: string, status: "accepted" | "declined") => {
-    const response = await fetch("/api/contacts", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id, status }),
-    });
-    if (!response.ok) {
-      setMessage("处理联系申请失败，请稍后再试。");
-      return;
+    setRespondingId(id);
+    try {
+      const response = await fetch("/api/contacts", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      });
+      const result = (await response.json().catch(() => null)) as {
+        error?: string;
+        message?: string;
+        code?: string;
+      } | null;
+      if (!response.ok) {
+        setMessage(result?.error ?? "处理联系申请失败，请稍后再试。");
+        if (result?.code === "CONTACT_PROFILE_REQUIRED") {
+          document.getElementById("profile-contact")?.scrollIntoView({ behavior: "smooth" });
+        }
+        return;
+      }
+      setContacts((current) =>
+        current.map((contact) => (contact.id === id ? { ...contact, status } : contact)),
+      );
+      setMessage(result?.message ?? (status === "accepted" ? "已接受联系申请。" : "已拒绝联系申请。"));
+      if (status === "accepted") window.location.reload();
+    } catch {
+      setMessage("处理联系申请失败，请检查网络后重试。");
+    } finally {
+      setRespondingId(null);
     }
-    setContacts((current) =>
-      current.map((contact) => (contact.id === id ? { ...contact, status } : contact)),
-    );
-    setMessage(status === "accepted" ? "已接受，双方现在可以查看联系邮箱。" : "已拒绝联系申请。");
   };
 
   return (
@@ -98,6 +113,7 @@ export default function AccountClient({
         <a className="active" href="#my-listings">我的发布</a>
         <Link href="/favorites">我的收藏</Link>
         <Link href="/map">附近闲置</Link>
+        <a href="#contacts">交易联系</a>
         <a href="#profile-contact">联系方式</a>
         <small>平台不会公开你的邮箱。具体联系方式仅在双方确认交易意向后提供。</small>
       </aside>
@@ -148,8 +164,7 @@ export default function AccountClient({
           {contacts.length ? (
             <div className="contact-list">
               {contacts.map((contact) => {
-                const isSeller = contact.sellerEmail === currentEmail;
-                const counterpartEmail = isSeller ? contact.buyerEmail : contact.sellerEmail;
+                const isSeller = contact.direction === "incoming";
                 return (
                   <article key={contact.id}>
                     <div className="contact-icon">{isSeller ? "收" : "发"}</div>
@@ -158,25 +173,28 @@ export default function AccountClient({
                       <b>{contact.listingTitle}</b>
                       <small>
                         {contact.status === "accepted"
-                          ? `已同意 · 联系邮箱：${counterpartEmail}`
+                          ? `已同意 · ${contact.counterpartName}`
                           : contact.status === "declined"
                             ? "已拒绝"
-                            : "等待卖家确认"}
+                            : isSeller ? `${contact.counterpartName} 等待你的确认` : "等待卖家确认"}
                       </small>
                     </div>
                     {contact.status === "accepted" && contact.counterpartContact && (
                       <div className="shared-contact">
+                        <span>邮箱 <b>{contact.counterpartContact.email}</b></span>
                         {contact.counterpartContact.phone && <span>电话 <b>{contact.counterpartContact.phone}</b></span>}
                         {contact.counterpartContact.wechat && <span>微信 <b>{contact.counterpartContact.wechat}</b></span>}
                         {contact.counterpartContact.qq && <span>QQ <b>{contact.counterpartContact.qq}</b></span>}
                         {contact.counterpartContact.qrUrl && <a href={contact.counterpartContact.qrUrl} target="_blank" rel="noreferrer">查看微信二维码</a>}
                       </div>
                     )}
-                    <span className={`status-pill ${contact.status}`}>{contact.status}</span>
+                    <span className={`status-pill ${contact.status}`}>
+                      {contact.status === "accepted" ? "已接受" : contact.status === "declined" ? "已拒绝" : "待确认"}
+                    </span>
                     {isSeller && contact.status === "pending" && (
                       <div className="manage-actions">
-                        <button onClick={() => respondToContact(contact.id, "accepted")}>接受</button>
-                        <button onClick={() => respondToContact(contact.id, "declined")}>拒绝</button>
+                        <button disabled={respondingId === contact.id} onClick={() => respondToContact(contact.id, "accepted")}>接受</button>
+                        <button disabled={respondingId === contact.id} onClick={() => respondToContact(contact.id, "declined")}>拒绝</button>
                       </div>
                     )}
                   </article>

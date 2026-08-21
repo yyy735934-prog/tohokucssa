@@ -34,7 +34,10 @@ type MarketItem = {
   lat?: number | null;
   lng?: number | null;
   createdAt?: string;
+  isOwner?: boolean;
 };
+
+type ContactStatus = "pending" | "accepted" | "declined";
 
 const categories = ["全部", ...LISTING_CATEGORIES];
 
@@ -119,6 +122,10 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
   const [publishLocation, setPublishLocation] = useState<PublishLocation | null>(null);
   const [price, setPrice] = useState("");
   const [publishing, setPublishing] = useState(false);
+  const [contactStatuses, setContactStatuses] = useState<Record<string, ContactStatus>>({});
+  const [pendingIncoming, setPendingIncoming] = useState(0);
+  const [contactingId, setContactingId] = useState<string | null>(null);
+  const [profileReady, setProfileReady] = useState(Boolean(viewer?.profileCompleted));
   const [showProfileSetup, setShowProfileSetup] = useState(Boolean(viewer && !viewer.profileCompleted));
 
   useEffect(() => {
@@ -142,6 +149,23 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
     fetch("/api/favorites")
       .then(async (response) => response.ok ? (await response.json()) as { listings?: MarketItem[] } : null)
       .then((result) => { if (result?.listings) setFavorites(result.listings.map((item) => item.id)); })
+      .catch(() => undefined);
+  }, [viewer]);
+
+  useEffect(() => {
+    if (!viewer) return;
+    fetch("/api/contacts")
+      .then(async (response) => response.ok ? (await response.json()) as {
+        requests?: Array<{ listingId: string; status: ContactStatus }>;
+        pendingIncoming?: number;
+      } : null)
+      .then((result) => {
+        if (!result) return;
+        setContactStatuses(Object.fromEntries(
+          (result.requests ?? []).map((contact) => [contact.listingId, contact.status]),
+        ));
+        setPendingIncoming(result.pendingIncoming ?? 0);
+      })
       .catch(() => undefined);
   }, [viewer]);
 
@@ -291,13 +315,49 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
       window.location.assign("/signin-with-chatgpt?return_to=%2F");
       return;
     }
-    const response = await fetch("/api/contacts", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ listingId }),
-    });
-    const result = (await response.json()) as { error?: string; message?: string };
-    showNotice(result.message ?? result.error ?? "暂时无法发送联系申请。");
+    if (contactStatuses[listingId]) {
+      window.location.assign("/account#contacts");
+      return;
+    }
+    if (!profileReady) {
+      setShowProfileSetup(true);
+      showNotice("请先留下至少一种联系方式。");
+      return;
+    }
+
+    setContactingId(listingId);
+    try {
+      const response = await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ listingId }),
+      });
+      const result = await readJson<{
+        code?: string;
+        error?: string;
+        message?: string;
+        contact?: { status?: ContactStatus };
+      }>(response);
+      if (response.status === 401) {
+        window.location.assign("/signin-with-chatgpt?return_to=%2F");
+        return;
+      }
+      if (result?.code === "CONTACT_PROFILE_REQUIRED") {
+        setProfileReady(false);
+        setShowProfileSetup(true);
+      }
+      if (response.ok && result?.contact?.status) {
+        setContactStatuses((current) => ({
+          ...current,
+          [listingId]: result.contact!.status!,
+        }));
+      }
+      showNotice(result?.message ?? result?.error ?? "暂时无法发送联系申请。");
+    } catch {
+      showNotice("联系申请发送失败，请检查网络后重试。");
+    } finally {
+      setContactingId(null);
+    }
   };
 
   const updateItemIntelligence = (
@@ -395,7 +455,14 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
           <a href="#about">关于平台</a>
         </nav>
         <div className="top-actions">
-          <button className="circle-btn" aria-label="消息" onClick={() => showNotice("暂无新消息，去逛逛新上架的好物吧") }><Icon>♢</Icon></button>
+          <button
+            className="circle-btn message-button"
+            aria-label={pendingIncoming ? `${pendingIncoming} 条待处理联系申请` : "交易联系"}
+            onClick={() => window.location.assign(viewer ? "/account#contacts" : "/signin-with-chatgpt?return_to=%2Faccount%23contacts")}
+          >
+            <Icon>♢</Icon>
+            {pendingIncoming > 0 && <b className="message-badge">{Math.min(pendingIncoming, 9)}</b>}
+          </button>
           <a className="profile-btn" href={viewer ? "/account" : "/signin-with-chatgpt?return_to=%2Faccount"}>
             <span>{viewer ? viewer.displayName.slice(0, 1).toUpperCase() : "登"}</span>
             <b>{viewer ? "我的" : "登录 / 注册"}</b>
@@ -506,7 +573,22 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
             <p>{selectedItem.note}</p>
             <div className="seller-row"><span>{selectedItem.seller.slice(0,1)}</span><div><b>{selectedItem.seller}</b><small>✓ 学友身份已验证 · 通常1小时内回复</small></div></div>
             <div className="pickup">⌖ 建议交接地点 <b>{selectedItem.place}附近公共场所</b></div>
-            <div className="detail-actions"><button className={favorites.includes(selectedItem.id) ? "favorited" : ""} onClick={() => toggleFavorite(selectedItem.id)}>{favorites.includes(selectedItem.id) ? "♥ 已收藏" : "♡ 收藏"}</button><button onClick={() => requestContact(selectedItem.id)}>联系卖家</button></div>
+            <div className="detail-actions">
+              <button className={favorites.includes(selectedItem.id) ? "favorited" : ""} onClick={() => toggleFavorite(selectedItem.id)}>{favorites.includes(selectedItem.id) ? "♥ 已收藏" : "♡ 收藏"}</button>
+              <button disabled={selectedItem.isOwner || contactingId === selectedItem.id} onClick={() => requestContact(selectedItem.id)}>
+                {selectedItem.isOwner
+                  ? "这是你的商品"
+                  : contactingId === selectedItem.id
+                  ? "正在发送…"
+                  : contactStatuses[selectedItem.id] === "accepted"
+                    ? "查看联系方式"
+                    : contactStatuses[selectedItem.id] === "declined"
+                      ? "查看申请结果"
+                      : contactStatuses[selectedItem.id] === "pending"
+                        ? "申请已发送"
+                        : "联系卖家"}
+              </button>
+            </div>
             <small className="safety-note">请勿提前转账；当面验货确认后再完成交易。</small>
           </div>
         </section>
@@ -583,7 +665,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
       {showProfileSetup && viewer && (
         <div className="modal-backdrop profile-onboarding-backdrop" role="presentation">
           <section className="profile-onboarding-modal" role="dialog" aria-modal="true" aria-label="完善交易联系方式">
-            <ProfileSetup onboarding onComplete={() => setShowProfileSetup(false)} />
+            <ProfileSetup onboarding onComplete={() => { setProfileReady(true); setShowProfileSetup(false); }} />
             <button className="profile-skip" onClick={() => setShowProfileSetup(false)}>稍后在个人中心填写</button>
           </section>
         </div>

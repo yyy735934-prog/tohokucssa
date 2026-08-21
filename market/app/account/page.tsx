@@ -4,6 +4,7 @@ import { getDb } from "../../db";
 import { contactRequests, listings, users } from "../../db/schema";
 import { chatGPTSignOutPath } from "../chatgpt-auth";
 import { requireMemberAccess } from "../../lib/auth";
+import { toContactView } from "../../lib/contact-view";
 import { listingToMarketItem } from "../../lib/listings";
 import AccountClient from "./AccountClient";
 
@@ -27,6 +28,7 @@ export default async function AccountPage() {
         buyerEmail: contactRequests.buyerEmail,
         buyerName: contactRequests.buyerName,
         sellerEmail: contactRequests.sellerEmail,
+        sellerName: listings.ownerName,
         status: contactRequests.status,
         createdAt: contactRequests.createdAt,
       })
@@ -40,7 +42,9 @@ export default async function AccountPage() {
     }).from(users).where(eq(users.email, member.email)).limit(1),
   ]);
   const counterpartEmails = Array.from(new Set(
-    contacts.map((contact) => contact.sellerEmail === member.email ? contact.buyerEmail : contact.sellerEmail),
+    contacts
+      .filter((contact) => contact.status === "accepted")
+      .map((contact) => contact.sellerEmail === member.email ? contact.buyerEmail : contact.sellerEmail),
   ));
   const counterpartProfiles = counterpartEmails.length
     ? await db.select({
@@ -94,17 +98,17 @@ export default async function AccountPage() {
         initialContacts={contacts.map((contact) => {
           const counterpartEmail = contact.sellerEmail === member.email ? contact.buyerEmail : contact.sellerEmail;
           const profile = profileByEmail.get(counterpartEmail);
-          return {
+          return toContactView({
             ...contact,
-            counterpartContact: profile ? {
-              phone: profile.phone,
-              wechat: profile.wechat,
-              qq: profile.qq,
-              qrUrl: profile.wechatQrKey ? `/api/profile/qr?email=${encodeURIComponent(counterpartEmail)}` : null,
+            counterpartProfile: contact.status === "accepted" ? {
+              email: counterpartEmail,
+              phone: profile?.phone ?? null,
+              wechat: profile?.wechat ?? null,
+              qq: profile?.qq ?? null,
+              qrUrl: profile?.wechatQrKey ? `/api/profile/qr?email=${encodeURIComponent(counterpartEmail)}` : null,
             } : null,
-          };
+          }, member.email);
         })}
-        currentEmail={member.email}
         canPublish={member.academicStatus === "verified" || member.isAdmin}
         initialProfile={{
           phone: profileRows[0]?.phone ?? "",

@@ -1,13 +1,64 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { contactRequests, listings } from "../../../db/schema";
+import { contactRequests, listings, users } from "../../../db/schema";
 import { getMemberAccess } from "../../../lib/auth";
+
+type ContactStatus = "pending" | "accepted" | "declined";
+
+function statusMessage(status: ContactStatus) {
+  if (status === "accepted") return "卖家已接受申请，请在个人中心查看联系方式。";
+  if (status === "declined") return "卖家已拒绝此前的联系申请。";
+  return "联系申请已发送，正在等待卖家确认。";
+}
+
+export async function GET() {
+  const member = await getMemberAccess();
+  if (!member) return Response.json({ error: "请先登录。" }, { status: 401 });
+
+  const db = await getDb();
+  const rows = await db
+    .select({
+      listingId: contactRequests.listingId,
+      buyerEmail: contactRequests.buyerEmail,
+      sellerEmail: contactRequests.sellerEmail,
+      status: contactRequests.status,
+    })
+    .from(contactRequests)
+    .where(
+      or(
+        eq(contactRequests.buyerEmail, member.email),
+        eq(contactRequests.sellerEmail, member.email),
+      ),
+    );
+
+  return Response.json({
+    requests: rows
+      .filter((contact) => contact.buyerEmail === member.email)
+      .map((contact) => ({
+        listingId: contact.listingId,
+        status: contact.status,
+      })),
+    pendingIncoming: rows.filter(
+      (contact) =>
+        contact.sellerEmail === member.email && contact.status === "pending",
+    ).length,
+  });
+}
 
 export async function POST(request: Request) {
   const member = await getMemberAccess();
   if (!member) return Response.json({ error: "请先登录。" }, { status: 401 });
   if (member.academicStatus !== "verified" && !member.isAdmin) {
     return Response.json({ error: "完成学友身份认证后才能联系卖家。" }, { status: 403 });
+  }
+  if (!member.profileCompleted) {
+    return Response.json(
+      {
+        code: "CONTACT_PROFILE_REQUIRED",
+        error: "请先填写至少一种联系方式，再向卖家发送申请。",
+      },
+      { status: 409 },
+    );
   }
 
   const payload = (await request.json()) as { listingId?: string };
@@ -28,6 +79,25 @@ export async function POST(request: Request) {
     return Response.json({ error: "不能向自己的商品发起联系申请。" }, { status: 400 });
   }
 
+  const existingRows = await db
+    .select({ status: contactRequests.status })
+    .from(contactRequests)
+    .where(
+      and(
+        eq(contactRequests.listingId, listing.id),
+        eq(contactRequests.buyerEmail, member.email),
+      ),
+    )
+    .limit(1);
+  const existingStatus = existingRows[0]?.status as ContactStatus | undefined;
+  if (existingStatus) {
+    return Response.json({
+      ok: true,
+      contact: { listingId: listing.id, status: existingStatus },
+      message: statusMessage(existingStatus),
+    });
+  }
+
   await db
     .insert(contactRequests)
     .values({
@@ -43,8 +113,9 @@ export async function POST(request: Request) {
 
   return Response.json({
     ok: true,
-    message: "联系申请已发送。卖家接受后，双方可在个人中心查看联系方式。",
-  });
+    contact: { listingId: listing.id, status: "pending" },
+    message: statusMessage("pending"),
+  }, { status: 201 });
 }
 
 export async function PATCH(request: Request) {
@@ -57,13 +128,38 @@ export async function PATCH(request: Request) {
   }
 
   const db = await getDb();
+  if (payload.status === "accepted") {
+    const sellerProfiles = await db
+      .select({ profileCompleted: users.profileCompleted })
+      .from(users)
+      .where(eq(users.email, member.email))
+      .limit(1);
+    if (!sellerProfiles[0]?.profileCompleted) {
+      return Response.json(
+        {
+          code: "CONTACT_PROFILE_REQUIRED",
+          error: "请先完善至少一种联系方式，再接受买家的申请。",
+        },
+        { status: 409 },
+      );
+    }
+  }
   const [updated] = await db
     .update(contactRequests)
     .set({ status: payload.status!, updatedAt: new Date().toISOString() })
-    .where(and(eq(contactRequests.id, payload.id), eq(contactRequests.sellerEmail, member.email)))
+    .where(and(
+      eq(contactRequests.id, payload.id),
+      eq(contactRequests.sellerEmail, member.email),
+      eq(contactRequests.status, "pending"),
+    ))
     .returning();
 
   return updated
-    ? Response.json({ contact: updated })
+    ? Response.json({
+        contact: { id: updated.id, status: updated.status },
+        message: payload.status === "accepted"
+          ? "已接受申请，双方现在可以查看联系方式。"
+          : "已拒绝联系申请。",
+      })
     : Response.json({ error: "未找到联系申请或没有操作权限。" }, { status: 404 });
 }
