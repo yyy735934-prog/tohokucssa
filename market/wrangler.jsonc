@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tohoku-market",
+  "main": "./dist/server/index.js",
+  "compatibility_date": "2026-08-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "keep_vars": true,
+  "no_bundle": true,
+  "base_dir": "./dist/server",
+  "find_additional_modules": true,
+  "rules": [
+    {
+      "type": "ESModule",
+      "globs": ["**/*.js", "**/*.mjs"]
+    }
+  ],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tohoku-market-db",
+      "migrations_dir": "./drizzle"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "tohoku-market-uploads"
+    }
+  ],
+  "vars": {
+    "ADMIN_EMAILS": "ding.junzhong.p4@dc.tohoku.ac.jp"
+  },
+  "secrets": {
+    "required": ["GEMINI_API_KEY", "SESSION_SECRET"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

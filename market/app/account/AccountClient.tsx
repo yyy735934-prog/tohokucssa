@@ -1,0 +1,197 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import ProfileSetup from "../ProfileSetup";
+
+type Listing = {
+  id: string;
+  title: string;
+  price: number;
+  place: string;
+  status: string;
+  icon: string;
+  tone: string;
+  time: string;
+  imageUrl?: string | null;
+};
+
+type ContactRequest = {
+  id: string;
+  listingId: string;
+  listingTitle: string;
+  buyerEmail: string;
+  buyerName: string;
+  sellerEmail: string;
+  status: string;
+  createdAt: string;
+  counterpartContact: {
+    phone: string | null;
+    wechat: string | null;
+    qq: string | null;
+    qrUrl: string | null;
+  } | null;
+};
+
+const statusText: Record<string, string> = {
+  pending: "待审核",
+  active: "展示中",
+  sold: "已售出",
+  rejected: "未通过",
+  withdrawn: "已下架",
+};
+
+export default function AccountClient({
+  initialListings,
+  initialContacts,
+  currentEmail,
+  canPublish,
+  initialProfile,
+}: {
+  initialListings: Listing[];
+  initialContacts: ContactRequest[];
+  currentEmail: string;
+  canPublish: boolean;
+  initialProfile: { phone: string; wechat: string; qq: string; qrUrl: string | null };
+}) {
+  const [listings, setListings] = useState(initialListings);
+  const [contacts, setContacts] = useState(initialContacts);
+  const [message, setMessage] = useState("");
+
+  const updateListing = async (id: string, status: "sold" | "withdrawn") => {
+    const response = await fetch("/api/listings", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    });
+    if (!response.ok) {
+      const result = (await response.json()) as { error?: string };
+      setMessage(result.error ?? "操作失败，请稍后再试。");
+      return;
+    }
+    setListings((current) =>
+      current.map((listing) => (listing.id === id ? { ...listing, status } : listing)),
+    );
+    setMessage(status === "sold" ? "已标记为售出。" : "商品已下架。");
+  };
+
+  const respondToContact = async (id: string, status: "accepted" | "declined") => {
+    const response = await fetch("/api/contacts", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    });
+    if (!response.ok) {
+      setMessage("处理联系申请失败，请稍后再试。");
+      return;
+    }
+    setContacts((current) =>
+      current.map((contact) => (contact.id === id ? { ...contact, status } : contact)),
+    );
+    setMessage(status === "accepted" ? "已接受，双方现在可以查看联系邮箱。" : "已拒绝联系申请。");
+  };
+
+  return (
+    <section className="account-workspace">
+      <aside className="account-nav">
+        <b>我的集市</b>
+        <a className="active" href="#my-listings">我的发布</a>
+        <Link href="/favorites">我的收藏</Link>
+        <Link href="/map">附近闲置</Link>
+        <a href="#profile-contact">联系方式</a>
+        <small>平台不会公开你的邮箱。具体联系方式仅在双方确认交易意向后提供。</small>
+      </aside>
+
+      <div className="account-panel" id="my-listings">
+        <div className="panel-heading">
+          <div>
+            <span>MY LISTINGS</span>
+            <h2>我的发布</h2>
+          </div>
+          {canPublish ? <Link href="/?publish=1">＋ 发布新闲置</Link> : <button disabled>认证后可发布</button>}
+        </div>
+
+        {listings.length ? (
+          <div className="manage-listings">
+            {listings.map((listing) => (
+              <article key={listing.id}>
+                <div className={`manage-photo ${listing.tone} ${listing.imageUrl ? "has-image" : ""}`} style={listing.imageUrl ? { backgroundImage: `url("${listing.imageUrl}")` } : undefined}>{listing.imageUrl ? null : listing.icon}</div>
+                <div className="manage-copy">
+                  <span className={`status-pill ${listing.status}`}>{statusText[listing.status] ?? listing.status}</span>
+                  <h3>{listing.title}</h3>
+                  <p>⌖ {listing.place} · {listing.time}</p>
+                </div>
+                <strong>{listing.price === 0 ? "免费" : `¥${listing.price.toLocaleString()}`}</strong>
+                {["pending", "active"].includes(listing.status) && (
+                  <div className="manage-actions">
+                    {listing.status === "active" && <button onClick={() => updateListing(listing.id, "sold")}>标记售出</button>}
+                    <button onClick={() => updateListing(listing.id, "withdrawn")}>下架</button>
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="account-empty">
+            <span>📦</span>
+            <h3>还没有发布闲置</h3>
+            <p>拍一张照片，最快一分钟完成发布。</p>
+            {canPublish && <Link href="/?publish=1">发布第一件闲置</Link>}
+          </div>
+        )}
+
+        <div className="contact-section" id="contacts">
+          <div className="panel-heading">
+            <div><span>CONTACT REQUESTS</span><h2>交易联系</h2></div>
+            <small>{contacts.filter((contact) => contact.status === "pending").length} 条待处理</small>
+          </div>
+          {contacts.length ? (
+            <div className="contact-list">
+              {contacts.map((contact) => {
+                const isSeller = contact.sellerEmail === currentEmail;
+                const counterpartEmail = isSeller ? contact.buyerEmail : contact.sellerEmail;
+                return (
+                  <article key={contact.id}>
+                    <div className="contact-icon">{isSeller ? "收" : "发"}</div>
+                    <div>
+                      <span>{isSeller ? "买家联系你" : "已联系卖家"}</span>
+                      <b>{contact.listingTitle}</b>
+                      <small>
+                        {contact.status === "accepted"
+                          ? `已同意 · 联系邮箱：${counterpartEmail}`
+                          : contact.status === "declined"
+                            ? "已拒绝"
+                            : "等待卖家确认"}
+                      </small>
+                    </div>
+                    {contact.status === "accepted" && contact.counterpartContact && (
+                      <div className="shared-contact">
+                        {contact.counterpartContact.phone && <span>电话 <b>{contact.counterpartContact.phone}</b></span>}
+                        {contact.counterpartContact.wechat && <span>微信 <b>{contact.counterpartContact.wechat}</b></span>}
+                        {contact.counterpartContact.qq && <span>QQ <b>{contact.counterpartContact.qq}</b></span>}
+                        {contact.counterpartContact.qrUrl && <a href={contact.counterpartContact.qrUrl} target="_blank" rel="noreferrer">查看微信二维码</a>}
+                      </div>
+                    )}
+                    <span className={`status-pill ${contact.status}`}>{contact.status}</span>
+                    {isSeller && contact.status === "pending" && (
+                      <div className="manage-actions">
+                        <button onClick={() => respondToContact(contact.id, "accepted")}>接受</button>
+                        <button onClick={() => respondToContact(contact.id, "declined")}>拒绝</button>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="contact-empty">暂时没有交易联系。浏览商品后，可向卖家发送联系申请。</div>
+          )}
+        </div>
+        <div className="profile-contact-section" id="profile-contact">
+          <ProfileSetup initialProfile={initialProfile} />
+        </div>
+      </div>
+      {message && <div className="portal-toast" role="status">{message}</div>}
+    </section>
+  );
+}
