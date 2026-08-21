@@ -124,6 +124,16 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
+  const geminiApiKey = runtimeEnv.GEMINI_API_KEY.trim();
+  if (!geminiApiKey) {
+    return Response.json(
+      {
+        code: "AI_NOT_CONFIGURED",
+        error: "Gemini 照片识别尚未启用，请联系管理员配置密钥。",
+      },
+      { status: 503 },
+    );
+  }
 
   try {
     const response = await fetch(
@@ -131,7 +141,7 @@ export async function POST(request: Request) {
       {
         method: "POST",
         headers: {
-          "x-goog-api-key": runtimeEnv.GEMINI_API_KEY,
+          "x-goog-api-key": geminiApiKey,
           "content-type": "application/json",
         },
         body: JSON.stringify(
@@ -144,14 +154,19 @@ export async function POST(request: Request) {
       },
     );
 
+    const responseText = await response.text();
     let payload: GeminiGenerateContentResponse = {};
     try {
-      payload = (await response.json()) as GeminiGenerateContentResponse;
+      payload = responseText
+        ? (JSON.parse(responseText) as GeminiGenerateContentResponse)
+        : {};
     } catch (error) {
       console.error(
         JSON.stringify({
           event: "gemini_listing_invalid_json",
           httpStatus: response.status,
+          responseContentType: response.headers.get("content-type"),
+          responseBodyLength: responseText.length,
           error: safeErrorMessage(error),
         }),
       );
@@ -162,11 +177,18 @@ export async function POST(request: Request) {
         JSON.stringify({
           event: "gemini_listing_request_failed",
           httpStatus: response.status,
+          responseStatusText: response.statusText,
+          responseContentType: response.headers.get("content-type"),
+          responseContentLength: response.headers.get("content-length"),
+          responseBodyLength: responseText.length,
           providerCode: payload.error?.code,
           providerStatus: payload.error?.status,
           providerMessage: safeErrorMessage(
-            payload.error?.message ?? "Gemini request failed",
+            payload.error?.message || responseText || "Gemini request failed",
           ),
+          apiKeyLength: geminiApiKey.length,
+          apiKeyPrefixValid: geminiApiKey.startsWith("AIza"),
+          apiKeyTrimmed: geminiApiKey !== runtimeEnv.GEMINI_API_KEY,
         }),
       );
       return Response.json(publicGeminiError(response.status), {
