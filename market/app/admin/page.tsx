@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getDb } from "../../db";
 import { listings, users } from "../../db/schema";
 import { requireAdminAccess } from "../../lib/auth";
+import { listingCategoryLabel } from "../../lib/listing-intelligence";
 import AdminClient from "./AdminClient";
 
 export const dynamic = "force-dynamic";
@@ -66,7 +67,13 @@ export default async function AdminPage() {
         <article><span>待认证用户</span><b>{pendingUsers}</b><small>非学术邮箱复核</small></article>
       </section>
 
-      <AdminClient initialListings={listingRows} initialUsers={userRows} />
+      <AdminClient
+        initialListings={listingRows.map((listing) => ({
+          ...listing,
+          category: listingCategoryLabel(listing.category),
+        }))}
+        initialUsers={userRows}
+      />
     </main>
   );
 }

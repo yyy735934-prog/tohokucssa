@@ -1,4 +1,5 @@
 import type { listings } from "../db/schema";
+import { listingCategoryLabel } from "./listing-intelligence";
 
 type ListingRow = typeof listings.$inferSelect;
 
@@ -7,7 +8,7 @@ export function listingToMarketItem(listing: ListingRow, viewerEmail?: string) {
     id: listing.id,
     title: listing.title,
     price: listing.price,
-    category: listing.category,
+    category: listingCategoryLabel(listing.category),
     place: listing.place,
     time: formatRelativeTime(listing.createdAt),
     seller: listing.ownerName,

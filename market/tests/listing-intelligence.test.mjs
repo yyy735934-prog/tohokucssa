@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   inferListingIntelligence,
+  listingCategoryLabel,
   LISTING_CATEGORIES,
 } from "../lib/listing-intelligence.ts";
 
@@ -24,8 +25,31 @@ test("classifies artwork and assigns a relevant map icon", () => {
 test("uses title and description together for classification", () => {
   assert.equal(
     inferListingIntelligence("毕业出闲置", "27 寸通学自行车，附车锁").category,
-    "交通",
+    "车辆与出行",
   );
+});
+
+test("groups bicycles, mopeds, cars, and skateboards under vehicles and mobility", () => {
+  assert.deepEqual(
+    ["通学自行车", "雅马哈原付", "二手轻自动车", "儿童滑板"].map(
+      (title) => inferListingIntelligence(title).category,
+    ),
+    ["车辆与出行", "车辆与出行", "车辆与出行", "车辆与出行"],
+  );
+});
+
+test("uses restrained vehicle-specific icons when the title is explicit", () => {
+  assert.deepEqual(
+    ["通学自行车", "雅马哈原付", "二手轻自动车", "儿童滑板"].map(
+      (title) => inferListingIntelligence(title).icon,
+    ),
+    ["🚲", "🛵", "🚗", "🛹"],
+  );
+});
+
+test("labels legacy transport listings with the new category name", () => {
+  assert.equal(listingCategoryLabel("交通"), "车辆与出行");
+  assert.equal(listingCategoryLabel("家具"), "家具");
 });
 
 test("uses the category default when only the description names a specific item", () => {
@@ -93,7 +117,7 @@ test("exposes every requested marketplace category", () => {
     "家具",
     "家电",
     "电子产品",
-    "交通",
+    "车辆与出行",
     "书籍",
     "户外",
     "艺术品",

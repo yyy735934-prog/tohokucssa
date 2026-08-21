@@ -2,7 +2,7 @@ export const LISTING_CATEGORIES = [
   "家具",
   "家电",
   "电子产品",
-  "交通",
+  "车辆与出行",
   "书籍",
   "户外",
   "艺术品",
@@ -26,8 +26,8 @@ const categoryRules: Array<{
     pattern: /油画|水彩|版画|装饰画|挂画|绘画|书法|雕塑|陶艺|陶瓷|艺术品|工艺品|吉他|尤克里里|小提琴|乐器|古董|手办/,
   },
   {
-    category: "交通",
-    pattern: /自行车|单车|脚踏车|公路车|山地车|电动车|电动滑板|滑板车|摩托|头盔|车锁|车灯|汽车|轮胎/,
+    category: "车辆与出行",
+    pattern: /自行车|单车|脚踏车|公路车|山地车|电动车|电动滑板|滑板车|滑板|原付|原动机付自行车|摩托|机车|头盔|车锁|车灯|汽车|轿车|轻自动车|軽自動車|轮胎|キックボード|スケートボード/,
   },
   {
     category: "书籍",
@@ -71,8 +71,9 @@ const categoryIconRules: Partial<
     { icon: "📷", pattern: /相机|摄影机|摄像机/ },
     { icon: "🖥️", pattern: /显示器|显示屏|台式机|主机/ },
   ],
-  交通: [
-    { icon: "🛵", pattern: /电动车|摩托|滑板车/ },
+  车辆与出行: [
+    { icon: "🛵", pattern: /电动车|原付|原动机付自行车|摩托|机车|滑板车|キックボード/ },
+    { icon: "🚗", pattern: /汽车|轿车|轻自动车|軽自動車/ },
     { icon: "🛹", pattern: /滑板/ },
   ],
 };
@@ -81,7 +82,7 @@ const categoryDefaults: Record<ListingCategory, { icon: string; tone: string }> 
   家具: { icon: "🪑", tone: "sage" },
   家电: { icon: "🔌", tone: "cream" },
   电子产品: { icon: "💻", tone: "blue" },
-  交通: { icon: "🚲", tone: "blue" },
+  车辆与出行: { icon: "🚲", tone: "blue" },
   书籍: { icon: "📚", tone: "lilac" },
   户外: { icon: "⛺", tone: "orange" },
   艺术品: { icon: "🖼️", tone: "lilac" },
@@ -90,6 +91,10 @@ const categoryDefaults: Record<ListingCategory, { icon: string; tone: string }> 
 
 export function isListingCategory(value: unknown): value is ListingCategory {
   return LISTING_CATEGORIES.includes(value as ListingCategory);
+}
+
+export function listingCategoryLabel(value: string) {
+  return value === "交通" ? "车辆与出行" : value;
 }
 
 export function inferListingIntelligence(
