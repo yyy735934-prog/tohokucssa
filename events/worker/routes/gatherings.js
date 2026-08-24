@@ -41,7 +41,7 @@ async function requireManager(c, eventId) {
 
 gatherings.get('/', async (c) => {
   const rows = await c.env.DB.prepare(
-    `SELECT e.id, e.title, e.event_date, e.location, e.content, e.notes, e.capacity,
+    `SELECT e.id, e.title, e.event_date, e.location, e.content, e.notes, e.capacity, e.lock_at,
             e.status, e.image_key, e.gathering_state, e.gathering_category,
             e.min_participants, e.formation_deadline, e.arrangement_due_at,
             e.requires_host, e.carpool_enabled, e.cancel_reason,
@@ -104,6 +104,7 @@ gatherings.post('/:id/join', async (c) => {
   if (event.status !== 'open' || !['recruiting', 'arrangement_pending', 'confirmed'].includes(event.gathering_state)) {
     return c.json({ ok: false, message: '当前组局已停止参加' }, 400)
   }
+  if (event.lock_at !== null && event.lock_at !== undefined) return c.json({ ok: false, message: '主理人已暂停接受新成员' }, 400)
   if (event.formation_deadline && Date.now() >= event.formation_deadline && event.gathering_state === 'recruiting') {
     return c.json({ ok: false, message: '成局报名时间已截止' }, 400)
   }
@@ -356,7 +357,7 @@ gatherings.post('/:id/attendance', async (c) => {
 gatherings.get('/:id', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare(
-    `SELECT e.id, e.title, e.event_date, e.location, e.content, e.notes, e.capacity,
+    `SELECT e.id, e.title, e.event_date, e.location, e.content, e.notes, e.capacity, e.lock_at,
             e.status, e.image_key, e.gathering_state, e.gathering_category,
             e.min_participants, e.formation_deadline, e.arrangement_due_at,
             e.requires_host, e.carpool_enabled, e.cancel_reason,

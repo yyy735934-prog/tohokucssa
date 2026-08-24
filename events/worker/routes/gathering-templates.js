@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { getSession, extractToken } from '../lib/session.js'
-import { GATHERING_CATEGORIES, isValidClock, templateSchedule } from '../lib/gatherings.js'
+import { GATHERING_CATEGORIES, createGatheringFromTemplate, isValidClock, templateSchedule } from '../lib/gatherings.js'
 import { audit } from '../lib/audit.js'
 
 const gatheringTemplates = new Hono()
@@ -107,6 +107,30 @@ gatheringTemplates.post('/:id/approve', async (c) => {
   ).bind(session.id, Date.now(), Date.now(), id).run()
   await audit(c.env.DB, 'gathering_template_approve', 'gathering_template', id, template.name, session.email)
   return c.json({ ok: true })
+})
+
+gatheringTemplates.post('/:id/publish-now', async (c) => {
+  const session = await requireReviewer(c)
+  const id = Number(c.req.param('id'))
+  const template = await c.env.DB.prepare('SELECT * FROM gathering_templates WHERE id = ?').bind(id).first()
+  if (!template) return c.json({ ok: false, message: '模板不存在' }, 404)
+  if (template.approval_status !== 'approved') return c.json({ ok: false, message: '请先批准模板' }, 400)
+
+  const now = Date.now()
+  const schedule = templateSchedule(template, now)
+  if (schedule.eventAt <= now) return c.json({ ok: false, message: '本周活动时间已经过去，请调整活动星期或等待下周' }, 400)
+
+  const existing = await c.env.DB.prepare('SELECT id, title FROM events WHERE template_id = ? AND week_key = ?')
+    .bind(id, schedule.weekKey).first()
+  if (existing) return c.json({ ok: true, already_exists: true, event: existing })
+
+  const event = await createGatheringFromTemplate(c.env, template, now, {
+    force: true,
+    jobType: 'manual_publish',
+    actor: session.email,
+  })
+  if (!event) return c.json({ ok: false, message: '本周组局未能生成，请刷新后重试' }, 409)
+  return c.json({ ok: true, event })
 })
 
 gatheringTemplates.post('/:id/pause', async (c) => {

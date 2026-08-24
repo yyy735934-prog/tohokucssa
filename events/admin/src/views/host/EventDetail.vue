@@ -12,7 +12,7 @@
         <router-link v-if="event.status === 'draft'" :to="`/admin/events/${event.id}/edit`" class="btn btn-outline btn-sm">编辑</router-link>
         <button v-if="event.status === 'draft'" class="btn btn-primary btn-sm" @click="submitEvent" :disabled="busy">提交审核</button>
         <button v-if="event.status === 'pending'" class="btn btn-outline btn-sm" @click="withdrawEvent" :disabled="busy">撤回</button>
-        <button v-if="event.status === 'open' && !event.capacity && !isLocked" class="btn btn-outline btn-sm" style="color:var(--c-warning)" @click="lockSignups" :disabled="busy">锁定报名</button>
+        <button v-if="event.status === 'open' && !isLocked" class="btn btn-outline btn-sm" style="color:var(--c-warning)" @click="lockSignups" :disabled="busy">锁定报名</button>
         <button v-if="event.status === 'open' && isLocked" class="btn btn-outline btn-sm" style="color:var(--c-success)" @click="unlockSignups" :disabled="busy">解锁报名</button>
         <button v-if="event.status === 'open'" class="btn btn-primary btn-sm" @click="activateEvent" :disabled="busy">开始活动</button>
         <button v-if="event.status === 'active'" class="btn btn-outline btn-sm" @click="deactivateEvent" :disabled="busy">撤回开始</button>
@@ -789,7 +789,7 @@ const renderedPlan = computed(() => {
     .replace(/\n/g, '<br>')
 })
 
-const isLocked = computed(() => event.value?.lock_at && signups.value.length >= event.value.lock_at)
+const isLocked = computed(() => event.value?.lock_at !== null && event.value?.lock_at !== undefined)
 
 const stepIndex = computed(() => {
   const map = { draft: 0, pending: 1, open: 2, active: 3, closed: 4 }
@@ -834,10 +834,11 @@ async function load() {
 onMounted(load)
 
 async function lockSignups() {
+  if (!confirm(`锁定后将保留当前 ${signups.value.length} 位报名者，并暂停其他人继续报名。确定锁定？`)) return
   busy.value = true
   try {
-    await api.updateEvent(event.value.id, { lock_at: signups.value.length })
-    event.value.lock_at = signups.value.length
+    const data = await api.setSignupLock(event.value.id, true)
+    event.value.lock_at = data.lock_at
     showToast('报名已锁定')
   } catch (e) { showToast(e.message, 'error') }
   busy.value = false
@@ -846,7 +847,7 @@ async function lockSignups() {
 async function unlockSignups() {
   busy.value = true
   try {
-    await api.updateEvent(event.value.id, { lock_at: null })
+    await api.setSignupLock(event.value.id, false)
     event.value.lock_at = null
     showToast('报名已解锁')
   } catch (e) { showToast(e.message, 'error') }

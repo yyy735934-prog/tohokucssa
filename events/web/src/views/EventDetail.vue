@@ -50,7 +50,7 @@
         </router-link>
       </div>
 
-      <form v-else-if="event.status === 'open' && !isFull" class="card" @submit.prevent="doSignup">
+      <form v-else-if="event.status === 'open' && !isFull && !isLocked" class="card" @submit.prevent="doSignup">
         <h2 class="form-title">填写报名信息</h2>
         <div class="field">
           <label class="label">姓名 * <span class="label-hint">（中文优先，英文亦可）</span></label>
@@ -123,6 +123,10 @@
         </button>
       </form>
 
+      <div v-else-if="isLocked" class="card result-card">
+        <p class="result-title" style="color:var(--c-warning)">报名暂时锁定</p>
+        <p class="result-sub">活动创建者已暂停接受新报名，现有报名不受影响。</p>
+      </div>
       <div v-else-if="isFull" class="card result-card">
         <p class="result-title" style="color:var(--c-warning)">报名已满</p>
       </div>
@@ -182,6 +186,7 @@ const showQrLink = computed(() => {
 const effectiveCap = computed(() => event.value?.capacity || event.value?.lock_at || null)
 const pct = computed(() => effectiveCap.value ? Math.min(100, event.value.signupCount / effectiveCap.value * 100) : 0)
 const isFull = computed(() => effectiveCap.value && event.value.signupCount >= effectiveCap.value)
+const isLocked = computed(() => event.value?.lock_at !== null && event.value?.lock_at !== undefined)
 
 onMounted(async () => {
   try {

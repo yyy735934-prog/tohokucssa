@@ -19,6 +19,7 @@ signups.post('/', async (c) => {
   const event = await c.env.DB.prepare('SELECT id, title, event_date, location, status, capacity, lock_at, event_mode FROM events WHERE id = ?').bind(event_id).first()
   if (!event || event.status !== 'open') return c.json({ ok: false, message: '活动未开放报名' }, 400)
   if (event.event_mode === 'gathering') return c.json({ ok: false, message: '组局必须使用 Google 登录后参加' }, 403)
+  if (event.lock_at !== null && event.lock_at !== undefined) return c.json({ ok: false, message: '活动创建者已暂停报名' }, 400)
 
   const emailNorm = email.trim().toLowerCase()
   const token = crypto.randomUUID()
@@ -26,7 +27,7 @@ signups.post('/', async (c) => {
   const phoneTrim = (phone || '').trim()
   const dataJson = JSON.stringify(extra || {})
 
-  const cap = event.capacity || event.lock_at
+  const cap = event.capacity
   let result
   try {
     if (cap) {

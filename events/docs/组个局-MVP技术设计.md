@@ -98,6 +98,8 @@
 - `POST /api/gatherings/:id/attendance`：主理人或管理员补录出席状态。
 - `GET/POST/PATCH /api/gathering-templates`：模板管理。
 - `GET /api/gathering-templates/jobs`：查看最近自动任务及失败原因。
+- `POST /api/gathering-templates/:id/publish-now`：幂等地立即生成本周实例。
+- `POST /api/events/:id/signup-lock`：创建者或管理员锁定/恢复新报名。
 - `POST /api/gathering-templates/:id/approve`：管理员批准自动发布。
 - `POST /api/gathering-templates/:id/pause`：暂停模板。
 

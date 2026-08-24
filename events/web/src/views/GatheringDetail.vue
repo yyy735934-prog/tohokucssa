@@ -80,6 +80,10 @@
         </form>
       </div>
 
+      <div v-else-if="gathering.lock_at !== null && gathering.lock_at !== undefined" class="card result-card">
+        <h2>报名暂时锁定</h2><p>主理人或管理员已暂停接受新成员，现有参加状态不受影响。</p>
+      </div>
+
       <div v-else-if="gathering.gathering_state === 'cancelled'" class="card result-card">
         <h2>本次未能成局</h2><p>{{ gathering.cancel_reason }}</p>
       </div>
@@ -119,7 +123,7 @@ const stateLabel = computed(() => states[gathering.value?.gathering_state] || ''
 const signupStatusLabel = computed(() => signupStates[mySignup.value?.signup_status] || '')
 const remaining = computed(() => Math.max(0, (gathering.value?.min_participants || 0) - (gathering.value?.effective_count || 0)))
 const progress = computed(() => Math.min(100, (gathering.value?.effective_count || 0) / (gathering.value?.min_participants || 1) * 100))
-const canJoin = computed(() => ['recruiting', 'arrangement_pending', 'confirmed'].includes(gathering.value?.gathering_state))
+const canJoin = computed(() => gathering.value?.lock_at === null && ['recruiting', 'arrangement_pending', 'confirmed'].includes(gathering.value?.gathering_state))
 const canCancel = computed(() => !['completed', 'cancelled'].includes(gathering.value?.gathering_state) && !mySignup.value?.checked_in)
 const googleLoginUrl = computed(() => `/api/auth/google?from=public&return_to=${encodeURIComponent(`/g/${route.params.id}`)}`)
 

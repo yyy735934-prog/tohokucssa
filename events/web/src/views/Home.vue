@@ -44,6 +44,7 @@
             <div class="event-head">
               <div><span class="category">{{ categoryLabel(g.gathering_category) }}</span><h3>{{ g.title }}</h3></div>
               <span class="state-pill" :class="`state-${g.gathering_state}`">{{ stateLabel(g.gathering_state) }}</span>
+              <span v-if="g.lock_at !== null && g.lock_at !== undefined" class="state-pill">报名已锁定</span>
             </div>
             <div class="event-info">{{ g.event_date }}<span v-if="g.location"> · {{ g.location }}</span></div>
             <p v-if="g.content" class="event-desc">{{ g.content }}</p>

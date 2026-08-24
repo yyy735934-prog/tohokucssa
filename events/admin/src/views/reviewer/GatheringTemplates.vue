@@ -57,7 +57,10 @@
         <div class="actions">
           <button class="btn btn-outline btn-sm" @click="editTemplate(t)">编辑</button>
           <button v-if="t.approval_status !== 'approved'" class="btn btn-primary btn-sm" @click="approve(t)">批准自动发布</button>
-          <button v-else class="btn btn-outline btn-sm" style="color:var(--c-warning)" @click="pause(t)">暂停</button>
+          <template v-else>
+            <button class="btn btn-primary btn-sm" :disabled="publishingId === t.id" @click="publishNow(t)">{{ publishingId === t.id ? '生成中…' : '立即生成本周组局' }}</button>
+            <button class="btn btn-outline btn-sm" style="color:var(--c-warning)" @click="pause(t)">暂停</button>
+          </template>
         </div>
       </div>
     </div>
@@ -87,6 +90,7 @@ const users = ref([])
 const loading = ref(true)
 const editing = ref(false)
 const busy = ref(false)
+const publishingId = ref(null)
 const error = ref('')
 const categories = [
   { value: 'karaoke', label: '唱歌' }, { value: 'sport', label: '多人体育' },
@@ -135,11 +139,21 @@ async function save() {
 }
 
 async function approve(t) { try { await api.approveGatheringTemplate(t.id); showToast('模板已批准，将按设置自动发布'); await load() } catch (e) { showToast(e.message, 'error') } }
+async function publishNow(t) {
+  if (!confirm(`立即根据「${t.name}」生成本周组局？`)) return
+  publishingId.value = t.id
+  try {
+    const data = await api.publishGatheringNow(t.id)
+    showToast(data.already_exists ? `本周组局已经存在：${data.event.title}` : `已生成：${data.event.title}`)
+    await load()
+  } catch (e) { showToast(e.message, 'error') }
+  publishingId.value = null
+}
 async function pause(t) { try { await api.pauseGatheringTemplate(t.id); showToast('模板已暂停'); await load() } catch (e) { showToast(e.message, 'error') } }
 const categoryLabel = (value) => categories.find((c) => c.value === value)?.label || value
 const weekdayLabel = (value) => weekdays.find((d) => d.value === Number(value))?.label || value
 const approvalLabel = (value) => ({ draft: '草稿', approved: '自动发布中', paused: '已暂停' }[value] || value)
-const jobTypeLabel = (value) => ({ weekly_publish: '每周自动发布', formation_deadline: '成局判定', arrangement_timeout: '主理人确认超时', admin_takeover: '转交管理员' }[value] || value)
+const jobTypeLabel = (value) => ({ weekly_publish: '每周自动发布', manual_publish: '管理员立即生成', formation_deadline: '成局判定', arrangement_timeout: '主理人确认超时', admin_takeover: '转交管理员' }[value] || value)
 const formatTime = (value) => value ? new Date(Number(value)).toLocaleString('zh-CN', { timeZone: 'Asia/Tokyo', hour12: false }) : '—'
 </script>
 

@@ -111,9 +111,10 @@ export async function refreshGatheringState(env, eventId) {
   return { event, transitioned: false, effectiveCount: count }
 }
 
-export async function createGatheringFromTemplate(env, template, timestamp = Date.now()) {
+export async function createGatheringFromTemplate(env, template, timestamp = Date.now(), options = {}) {
+  const { force = false, jobType = 'weekly_publish', actor = 'system' } = options
   const schedule = templateSchedule(template, timestamp)
-  if (timestamp < schedule.publishAt || timestamp >= schedule.decisionAt) return null
+  if (!force && (timestamp < schedule.publishAt || timestamp >= schedule.decisionAt)) return null
 
   const title = renderTitle(template, schedule.eventAt)
   const eventDate = formatJstDateTime(schedule.eventAt)
@@ -149,8 +150,15 @@ export async function createGatheringFromTemplate(env, template, timestamp = Dat
 
   const eventId = result.meta.last_row_id
   const event = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first()
-  await recordJob(env.DB, 'weekly_publish', { templateId: template.id, eventId, weekKey: schedule.weekKey, detail: title })
-  await audit(env.DB, 'gathering_auto_publish', 'event', eventId, `由模板「${template.name}」自动发布`, 'system')
+  await recordJob(env.DB, jobType, { templateId: template.id, eventId, weekKey: schedule.weekKey, detail: title })
+  await audit(
+    env.DB,
+    force ? 'gathering_manual_publish' : 'gathering_auto_publish',
+    'event',
+    eventId,
+    `由模板「${template.name}」${force ? '立即生成' : '自动发布'}`,
+    actor,
+  )
   await notifyPublished(env, event)
   return event
 }

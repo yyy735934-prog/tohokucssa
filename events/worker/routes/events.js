@@ -197,6 +197,34 @@ events.patch('/:id', async (c) => {
   return c.json({ ok: true })
 })
 
+events.post('/:id/signup-lock', async (c) => {
+  const session = await requireAuth(c)
+  const id = Number(c.req.param('id'))
+  const event = await c.env.DB.prepare('SELECT id, title, status, created_by, event_mode, gathering_state FROM events WHERE id = ?')
+    .bind(id).first()
+  if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
+  if (event.created_by !== session.id && session.role !== 'reviewer') {
+    return c.json({ ok: false, message: '仅活动创建者或管理员可以操作' }, 403)
+  }
+  if (event.status !== 'open' || ['completed', 'cancelled'].includes(event.gathering_state)) {
+    return c.json({ ok: false, message: '当前活动状态不能调整报名锁定' }, 400)
+  }
+
+  const body = await c.req.json().catch(() => ({}))
+  if (typeof body.locked !== 'boolean') return c.json({ ok: false, message: '锁定状态无效' }, 400)
+  let lockAt = null
+  if (body.locked) {
+    const count = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS c FROM signups
+       WHERE event_id = ? AND (? != 'gathering' OR signup_status != 'cancelled')`
+    ).bind(id, event.event_mode).first()
+    lockAt = Number(count?.c || 0)
+  }
+  await c.env.DB.prepare('UPDATE events SET lock_at = ? WHERE id = ?').bind(lockAt, id).run()
+  await audit(c.env.DB, body.locked ? 'signup_lock' : 'signup_unlock', 'event', id, body.locked ? `锁定在 ${lockAt} 人` : '恢复报名', session.email)
+  return c.json({ ok: true, locked: body.locked, lock_at: lockAt })
+})
+
 // POST /api/events/:id/submit — draft → pending (reviewer auto-approves own events → open)
 events.post('/:id/submit', async (c) => {
   const session = await requireAuth(c)

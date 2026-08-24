@@ -6,11 +6,15 @@
       <div><div class="eyebrow">组个局 · {{ categoryLabel }}</div><h1 class="page-title">{{ event.title }}</h1><p class="page-sub">{{ event.event_date }}<span v-if="event.location"> · {{ event.location }}</span></p></div>
       <div class="flex gap-8" style="flex-wrap:wrap">
         <a :href="`/g/${event.id}`" target="_blank" class="btn btn-outline btn-sm">公开页面 ↗</a>
+        <button v-if="event.status === 'open' && !isLocked" class="btn btn-outline btn-sm lock" :disabled="busy" @click="setSignupLock(true)">锁定报名</button>
+        <button v-if="event.status === 'open' && isLocked" class="btn btn-outline btn-sm unlock" :disabled="busy" @click="setSignupLock(false)">恢复报名</button>
         <button v-if="event.gathering_state === 'confirmed'" class="btn btn-primary btn-sm" @click="startEvent">开始活动</button>
         <button v-if="event.gathering_state === 'in_progress'" class="btn btn-danger btn-sm" @click="completeEvent">结束活动</button>
         <button v-if="!['completed','cancelled'].includes(event.gathering_state)" class="btn btn-outline btn-sm danger" @click="cancelEvent">取消组局</button>
       </div>
     </div>
+
+    <div v-if="isLocked" class="card locked-banner mb-16">🔒 报名已锁定在 {{ event.lock_at }} 人；已有成员状态不受影响，其他人暂时不能加入。</div>
 
     <div class="state-grid mb-16">
       <div class="card stat"><strong>{{ stateLabel }}</strong><span>当前状态</span></div>
@@ -83,6 +87,7 @@ const activeSignups = computed(() => signups.value.filter((s) => s.signup_status
 const drivers = computed(() => signups.value.filter((s) => s.transport_mode === 'driver' && s.signup_status === 'joined'))
 const ridePending = computed(() => signups.value.filter((s) => s.signup_status === 'ride_pending'))
 const rideAssigned = computed(() => signups.value.filter((s) => s.signup_status === 'ride_assigned'))
+const isLocked = computed(() => event.value?.lock_at !== null && event.value?.lock_at !== undefined)
 const categoryLabel = computed(() => ({ karaoke: '唱歌', sport: '多人体育', outdoor: '徒步·户外', salon: '沙龙', boardgame: '桌游', movie: '观影', other: '其他' }[event.value?.gathering_category] || '组局'))
 const stateLabel = computed(() => ({ recruiting: '组局中', arrangement_pending: '待确认安排', confirmed: '已成局', in_progress: '进行中', completed: '已结束', cancelled: '已取消' }[event.value?.gathering_state] || ''))
 
@@ -105,6 +110,13 @@ async function finalize() { busy.value = true; try { await api.finalizeGathering
 async function startEvent() { if (!confirm('确认开始活动？')) return; await api.startGathering(event.value.id); showToast('活动已开始'); await load() }
 async function completeEvent() { if (!confirm('确认结束活动？未签到的确认成员将记录为未到场。')) return; await api.completeGathering(event.value.id); showToast('活动已结束'); await load() }
 async function cancelEvent() { const reason = prompt('请输入取消原因'); if (reason === null) return; await api.cancelGatheringEvent(event.value.id, reason); showToast('组局已取消'); await load() }
+async function setSignupLock(locked) {
+  if (locked && !confirm(`锁定后将保留当前 ${activeSignups.value.length} 位参加者，并暂停其他人继续报名。确定锁定？`)) return
+  busy.value = true
+  try { await api.setSignupLock(event.value.id, locked); showToast(locked ? '报名已锁定' : '报名已恢复'); await load() }
+  catch (e) { showToast(e.message, 'error') }
+  busy.value = false
+}
 async function updateAttendance(signup, status) { try { await api.updateGatheringAttendance(event.value.id, signup.id, status); signup.attendance_status = status; signup.checked_in = status === 'attended' ? 1 : 0; showToast('出席状态已更新') } catch (e) { showToast(e.message, 'error'); await load() } }
 
 const signupLabel = (v) => ({ joined: '已确认参加', ride_pending: '乘车候补中', ride_assigned: '已安排乘车', general_waitlist: '人数候补中', cancelled: '已退出' }[v] || v)
@@ -117,6 +129,8 @@ function formatTime(ts) { return new Date(ts).toLocaleString('zh-CN', { timeZone
 .mb-16 { margin-bottom: 16px; }
 .eyebrow { color: var(--c-primary); font-size: 12px; font-weight: 700; }
 .danger { color: var(--c-danger); }
+.lock { color: var(--c-warning); }.unlock { color: var(--c-success); }
+.locked-banner { color: #92400e; background: #fffbeb; border-color: #f59e0b; font-size: 13px; }
 .state-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
 .stat { display: flex; flex-direction: column; gap: 5px; }
 .stat strong { font-size: 19px; }.stat span { font-size: 12px; color: var(--c-text-2); }
