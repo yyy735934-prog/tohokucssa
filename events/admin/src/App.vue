@@ -37,6 +37,7 @@
         <div v-if="auth.isReviewer" class="sidebar-section">
           <div class="sidebar-label">管理</div>
           <router-link to="/admin/overview" class="sidebar-link">数据总览</router-link>
+          <router-link to="/admin/gathering-templates" class="sidebar-link">每周组局模板</router-link>
           <router-link to="/admin/review" class="sidebar-link">
             审核队列
             <span v-if="pendingCount" class="count-badge">{{ pendingCount }}</span>

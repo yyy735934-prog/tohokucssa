@@ -58,11 +58,12 @@ events.get('/dashboard-stats', async (c) => {
     c.env.DB.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'open'").first(),
     c.env.DB.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'active'").first(),
     c.env.DB.prepare("SELECT COUNT(*) as c FROM events WHERE status = 'closed'").first(),
-    c.env.DB.prepare("SELECT COUNT(*) as c FROM signups").first(),
-    c.env.DB.prepare("SELECT COUNT(*) as c FROM signups WHERE checked_in = 1").first(),
+    c.env.DB.prepare("SELECT COUNT(*) as c FROM signups s JOIN events e ON e.id = s.event_id WHERE e.event_mode != 'gathering' OR s.signup_status != 'cancelled'").first(),
+    c.env.DB.prepare("SELECT COUNT(*) as c FROM signups s JOIN events e ON e.id = s.event_id WHERE s.checked_in = 1 AND (e.event_mode != 'gathering' OR s.signup_status != 'cancelled')").first(),
     c.env.DB.prepare(
       `SELECT e.id, e.title, e.event_date, e.status, e.capacity,
-              COUNT(s.id) as signups, SUM(CASE WHEN s.checked_in = 1 THEN 1 ELSE 0 END) as checkins
+              SUM(CASE WHEN s.id IS NOT NULL AND NOT (e.event_mode = 'gathering' AND s.signup_status = 'cancelled') THEN 1 ELSE 0 END) as signups,
+              SUM(CASE WHEN s.checked_in = 1 AND NOT (e.event_mode = 'gathering' AND s.signup_status = 'cancelled') THEN 1 ELSE 0 END) as checkins
        FROM events e LEFT JOIN signups s ON s.event_id = e.id
        WHERE e.status IN ('open', 'active', 'closed')
        GROUP BY e.id ORDER BY e.event_date DESC`
@@ -100,7 +101,7 @@ events.get('/', async (c) => {
       `SELECT e.id, e.title, e.event_date, e.location, e.content, e.capacity, e.lock_at, e.status, e.created_at, e.image_key, e.pinned,
               COUNT(s.id) as signupCount
        FROM events e LEFT JOIN signups s ON s.event_id = e.id
-       WHERE e.status IN ('open', 'active')
+       WHERE e.status IN ('open', 'active') AND COALESCE(e.event_mode, 'standard') = 'standard'
        GROUP BY e.id ORDER BY e.pinned DESC, e.created_at DESC`
     ).all()
     return c.json({ ok: true, events: rows.results })
@@ -110,14 +111,14 @@ events.get('/', async (c) => {
   let rows
   if (session.role === 'reviewer') {
     rows = await c.env.DB.prepare(
-      `SELECT e.*, COUNT(s.id) as signupCount, u.email as creator_email, u.display_name as creator_name
+      `SELECT e.*, SUM(CASE WHEN s.id IS NOT NULL AND NOT (e.event_mode = 'gathering' AND s.signup_status = 'cancelled') THEN 1 ELSE 0 END) as signupCount, u.email as creator_email, u.display_name as creator_name
        FROM events e LEFT JOIN signups s ON s.event_id = e.id
        LEFT JOIN admin_users u ON u.id = e.created_by
        GROUP BY e.id ORDER BY e.created_at DESC`
     ).all()
   } else {
     rows = await c.env.DB.prepare(
-      `SELECT e.*, COUNT(s.id) as signupCount
+      `SELECT e.*, SUM(CASE WHEN s.id IS NOT NULL AND NOT (e.event_mode = 'gathering' AND s.signup_status = 'cancelled') THEN 1 ELSE 0 END) as signupCount
        FROM events e LEFT JOIN signups s ON s.event_id = e.id
        WHERE e.created_by = ?
        GROUP BY e.id ORDER BY e.created_at DESC`

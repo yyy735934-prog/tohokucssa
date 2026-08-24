@@ -820,10 +820,12 @@ function phoneDisplay(s) {
 async function load() {
   const id = route.params.id
   try {
-    const [eventData, signupData] = await Promise.all([
-      api.getEvent(id),
-      api.listSignups(id)
-    ])
+    const eventData = await api.getEvent(id)
+    if (eventData.event.event_mode === 'gathering') {
+      router.replace(`/admin/gatherings/${id}`)
+      return
+    }
+    const signupData = await api.listSignups(id)
     event.value = eventData.event
     signups.value = signupData.signups
   } catch (e) { error.value = e.message }

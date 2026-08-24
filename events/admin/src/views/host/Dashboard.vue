@@ -106,15 +106,15 @@
           </thead>
           <tbody>
             <tr v-for="e in filtered" :key="e.id">
-              <td><router-link :to="`/admin/events/${e.id}`" style="font-weight:500">{{ e.title }}</router-link></td>
+              <td><router-link :to="managePath(e)" style="font-weight:500">{{ e.title }}</router-link><span v-if="e.event_mode === 'gathering'" class="type-tag">组局</span></td>
               <td>{{ e.event_date || '—' }}</td>
-              <td><span class="badge" :class="`badge-${e.status}`">{{ STATUS_MAP[e.status] || e.status }}</span></td>
+              <td><span class="badge" :class="`badge-${e.status}`">{{ e.event_mode === 'gathering' ? gatheringStateLabel(e.gathering_state) : (STATUS_MAP[e.status] || e.status) }}</span></td>
               <td>{{ e.signupCount || 0 }}{{ e.capacity ? `/${e.capacity}` : '' }}</td>
               <td v-if="auth.isReviewer">{{ e.creator_name || e.creator_email || '—' }}</td>
               <td>
                 <div class="flex gap-8">
-                  <router-link :to="`/admin/events/${e.id}`" class="btn btn-outline btn-sm">管理</router-link>
-                  <a v-if="['open','active','closed'].includes(e.status)" :href="`/e/${e.id}`" target="_blank" class="btn btn-outline btn-sm">预览 ↗</a>
+                  <router-link :to="managePath(e)" class="btn btn-outline btn-sm">管理</router-link>
+                  <a v-if="['open','active','closed'].includes(e.status)" :href="publicPath(e)" target="_blank" class="btn btn-outline btn-sm">预览 ↗</a>
                   <router-link v-if="e.status === 'draft'" :to="`/admin/events/${e.id}/edit`" class="btn btn-outline btn-sm">编辑</router-link>
                 </div>
               </td>
@@ -149,6 +149,18 @@ function countByStatus(status) {
   return events.value.filter(e => e.status === status).length
 }
 
+function managePath(event) {
+  return event.event_mode === 'gathering' ? `/admin/gatherings/${event.id}` : `/admin/events/${event.id}`
+}
+
+function publicPath(event) {
+  return event.event_mode === 'gathering' ? `/g/${event.id}` : `/e/${event.id}`
+}
+
+function gatheringStateLabel(value) {
+  return { recruiting: '组局中', arrangement_pending: '待确认安排', confirmed: '已成局', in_progress: '进行中', completed: '已结束', cancelled: '已取消' }[value] || value
+}
+
 const filtered = computed(() => {
   let list = events.value
   if (filter.value !== 'all') list = list.filter(e => e.status === filter.value)
@@ -181,6 +193,7 @@ async function exportAll(format) {
 </script>
 
 <style scoped>
+.type-tag { margin-left: 6px; padding: 2px 6px; border-radius: 99px; background: rgba(79,70,229,.08); color: var(--c-primary); font-size: 11px; font-weight: 700; }
 .workflow-guide { border-left: 3px solid var(--c-primary); }
 .workflow-steps { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
 .step { display: flex; gap: 10px; align-items: flex-start; flex: 1; min-width: 140px; }

@@ -40,6 +40,7 @@ watch(() => route.query.google_token, (token) => {
     role: q.role || '',
     is_super: q.is_super === '1',
     display_name: q.display_name || '',
+    login_method: q.login_method || 'google',
   })
   localStorage.setItem('user_email', q.email || '')
   showToast(q.new === '1' ? '注册成功，欢迎加入！' : '登录成功')

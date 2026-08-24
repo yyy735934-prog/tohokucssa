@@ -30,4 +30,9 @@ export const api = {
   myPendingRequests: () => request('GET', '/users/my-requests'),
   getProfile: () => request('GET', '/auth/profile'),
   saveProfile: (profile) => request('POST', '/auth/profile', { profile }),
+  listGatherings: () => request('GET', '/gatherings'),
+  getGathering: (id) => request('GET', `/gatherings/${id}`),
+  joinGathering: (id, data) => request('POST', `/gatherings/${id}/join`, data),
+  cancelGatheringSignup: (id, reason = '') => request('POST', `/gatherings/${id}/cancel`, { reason }),
+  myGatherings: () => request('GET', '/gatherings/mine'),
 }

@@ -16,8 +16,9 @@ signups.post('/', async (c) => {
   const { event_id, name, email, phone, extra } = body
   if (!event_id || !name || !email) return c.json({ ok: false, message: '姓名和邮箱必填' }, 400)
 
-  const event = await c.env.DB.prepare('SELECT id, title, event_date, location, status, capacity, lock_at FROM events WHERE id = ?').bind(event_id).first()
+  const event = await c.env.DB.prepare('SELECT id, title, event_date, location, status, capacity, lock_at, event_mode FROM events WHERE id = ?').bind(event_id).first()
   if (!event || event.status !== 'open') return c.json({ ok: false, message: '活动未开放报名' }, 400)
+  if (event.event_mode === 'gathering') return c.json({ ok: false, message: '组局必须使用 Google 登录后参加' }, 403)
 
   const emailNorm = email.trim().toLowerCase()
   const token = crypto.randomUUID()
@@ -155,7 +156,7 @@ signups.get('/export-all', async (c) => {
 
   const events = await c.env.DB.prepare(
     `SELECT e.id, e.title, e.event_date, e.location, e.status, e.capacity,
-            COUNT(s.id) as signup_count,
+            SUM(CASE WHEN s.id IS NOT NULL AND NOT (e.event_mode = 'gathering' AND s.signup_status = 'cancelled') THEN 1 ELSE 0 END) as signup_count,
             SUM(CASE WHEN s.checked_in = 1 THEN 1 ELSE 0 END) as checkin_count,
             u.email as creator_email, u.display_name as creator_name
      FROM events e
@@ -223,7 +224,7 @@ signups.post('/checkin-by-token', async (c) => {
   if (!['open', 'active'].includes(signup.status)) return c.json({ ok: false, message: '活动未在进行中' }, 400)
   if (signup.checked_in) return c.json({ ok: true, alreadyCheckedIn: true, name: signup.name })
 
-  await c.env.DB.prepare('UPDATE signups SET checked_in = 1, checked_in_at = ? WHERE id = ?')
+  await c.env.DB.prepare("UPDATE signups SET checked_in = 1, checked_in_at = ?, attendance_status = 'attended' WHERE id = ?")
     .bind(Date.now(), signup.id).run()
 
   const event = { title: signup.title, event_date: signup.event_date, location: signup.location }
@@ -248,7 +249,7 @@ signups.post('/checkin', async (c) => {
   if (!signup) return c.json({ ok: false, message: '未找到该邮箱的报名记录' }, 404)
   if (signup.checked_in) return c.json({ ok: true, alreadyCheckedIn: true, name: signup.name })
 
-  await c.env.DB.prepare('UPDATE signups SET checked_in = 1, checked_in_at = ? WHERE id = ?')
+  await c.env.DB.prepare("UPDATE signups SET checked_in = 1, checked_in_at = ?, attendance_status = 'attended' WHERE id = ?")
     .bind(Date.now(), signup.id).run()
   return c.json({ ok: true, name: signup.name })
 })
@@ -265,7 +266,7 @@ signups.post('/:id/checkin', async (c) => {
     if (!event || event.created_by !== session.id) return c.json({ ok: false, message: '无权操作' }, 403)
   }
 
-  await c.env.DB.prepare('UPDATE signups SET checked_in = 1, checked_in_at = ? WHERE id = ?')
+  await c.env.DB.prepare("UPDATE signups SET checked_in = 1, checked_in_at = ?, attendance_status = 'attended' WHERE id = ?")
     .bind(Date.now(), id).run()
   return c.json({ ok: true })
 })
@@ -282,7 +283,7 @@ signups.post('/batch-checkin', async (c) => {
   }
 
   const result = await c.env.DB.prepare(
-    'UPDATE signups SET checked_in = 1, checked_in_at = ? WHERE event_id = ? AND checked_in = 0'
+    "UPDATE signups SET checked_in = 1, checked_in_at = ?, attendance_status = 'attended' WHERE event_id = ? AND checked_in = 0"
   ).bind(Date.now(), event_id).run()
   return c.json({ ok: true, count: result.meta.changes })
 })
@@ -294,8 +295,9 @@ signups.post('/manual', async (c) => {
   const { event_id, name, email, phone, extra } = body
   if (!event_id || !name || !email) return c.json({ ok: false, message: '姓名和邮箱必填' }, 400)
 
-  const event = await c.env.DB.prepare('SELECT id, created_by, capacity, lock_at FROM events WHERE id = ?').bind(event_id).first()
+  const event = await c.env.DB.prepare('SELECT id, created_by, capacity, lock_at, event_mode FROM events WHERE id = ?').bind(event_id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
+  if (event.event_mode === 'gathering') return c.json({ ok: false, message: '请在组局管理页面添加成员' }, 400)
   if (session.role !== 'reviewer' && event.created_by !== session.id) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }

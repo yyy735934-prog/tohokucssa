@@ -6,6 +6,6 @@ export default defineConfig({
   plugins: [vue()],
   root: resolve(__dirname),
   base: '/admin/',
-  build: { outDir: resolve(__dirname, '../dist/admin'), emptyDir: true },
+  build: { outDir: resolve(__dirname, '../dist/admin'), emptyOutDir: true },
   server: { proxy: { '/api': 'http://localhost:8787' } }
 })

@@ -8,7 +8,9 @@ export async function hashPassword(password) {
 }
 
 export async function verifyPassword(password, stored) {
+  if (!stored || typeof stored !== 'string' || !stored.includes(':')) return false
   const [saltB64, hashB64] = stored.split(':')
+  if (!saltB64 || !hashB64) return false
   const salt = unb64(saltB64)
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'])
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: ITERATIONS, hash: 'SHA-256' }, key, 256)

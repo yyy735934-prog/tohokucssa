@@ -9,6 +9,7 @@
     "build:web": "vite build --config web/vite.config.js",
     "build:admin": "vite build --config admin/vite.config.js",
     "build": "npm run build:web && npm run build:admin",
+    "test": "node --test tests/*.test.mjs",
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
