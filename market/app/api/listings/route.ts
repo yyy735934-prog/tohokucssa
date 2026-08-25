@@ -5,6 +5,7 @@ import { getMemberAccess } from "../../../lib/auth";
 import { inferListingIntelligence } from "../../../lib/listing-intelligence";
 import { listingToMarketItem } from "../../../lib/listings";
 import { publicMemberName } from "../../../lib/public-identity";
+import { canUseMarketplace } from "../../../lib/member-status";
 
 function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -51,9 +52,9 @@ export async function POST(request: Request) {
   if (!member) {
     return Response.json({ error: "请先登录后再发布。" }, { status: 401 });
   }
-  if (member.academicStatus !== "verified" && !member.isAdmin) {
+  if (!canUseMarketplace(member.academicStatus, member.isAdmin)) {
     return Response.json(
-      { error: "学术邮箱尚未通过验证，请先在个人中心完成认证。" },
+      { error: "账号尚未获得发布权限，请先在个人中心完成认证或申诉。" },
       { status: 403 },
     );
   }

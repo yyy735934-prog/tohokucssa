@@ -5,6 +5,7 @@ import { getMemberAccess } from "../../../lib/auth";
 import { inferListingIntelligence } from "../../../lib/listing-intelligence";
 import { batchListingStatus, type ListingRiskLevel } from "../../../lib/listing-moderation";
 import { isOwnedListingImageKey } from "../../../lib/upload-ownership";
+import { canUseMarketplace } from "../../../lib/member-status";
 
 type BatchItemInput = {
   title?: unknown;
@@ -19,8 +20,8 @@ function cleanText(value: unknown, max: number) {
 export async function POST(request: Request) {
   const member = await getMemberAccess();
   if (!member) return Response.json({ error: "请先登录后再发布。" }, { status: 401 });
-  if (member.academicStatus !== "verified" && !member.isAdmin) {
-    return Response.json({ error: "完成学友身份认证后才能批量发布。" }, { status: 403 });
+  if (!canUseMarketplace(member.academicStatus, member.isAdmin)) {
+    return Response.json({ error: "账号尚未获得发布权限，请先完成认证或申诉。" }, { status: 403 });
   }
 
   const payload = (await request.json()) as {

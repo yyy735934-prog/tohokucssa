@@ -1,20 +1,22 @@
 import { desc, eq, inArray, or } from "drizzle-orm";
 import Link from "next/link";
 import { getDb } from "../../db";
-import { contactRequests, listings, users } from "../../db/schema";
+import { contactRequests, listings, users, verificationAppeals } from "../../db/schema";
 import { chatGPTSignOutPath } from "../chatgpt-auth";
 import { requireMemberAccess } from "../../lib/auth";
 import { toContactView } from "../../lib/contact-view";
 import { listingToMarketItem } from "../../lib/listings";
 import { publicMemberName } from "../../lib/public-identity";
 import AccountClient from "./AccountClient";
+import IdentitySettings from "./IdentitySettings";
+import { canUseMarketplace } from "../../lib/member-status";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountPage() {
   const member = await requireMemberAccess("/account");
   const db = await getDb();
-  const [ownedListings, contacts, profileRows] = await Promise.all([
+  const [ownedListings, contacts, profileRows, appealRows] = await Promise.all([
     db
       .select()
       .from(listings)
@@ -39,7 +41,9 @@ export default async function AccountPage() {
     db.select({
       phone: users.phone, wechat: users.wechat, qq: users.qq, wechatQrKey: users.wechatQrKey,
       publicNameMode: users.publicNameMode, publicNickname: users.publicNickname,
+      notificationEmail: users.notificationEmail, academicEmail: users.academicEmail,
     }).from(users).where(eq(users.email, member.email)).limit(1),
+    db.select({ id: verificationAppeals.id, status: verificationAppeals.status, note: verificationAppeals.note, createdAt: verificationAppeals.createdAt }).from(verificationAppeals).where(eq(verificationAppeals.userEmail, member.email)).orderBy(desc(verificationAppeals.createdAt)).limit(1),
   ]);
   const partyEmails = Array.from(new Set(
     contacts.flatMap((contact) => [contact.buyerEmail, contact.sellerEmail]),
@@ -79,11 +83,13 @@ export default async function AccountPage() {
           <p>{member.email}</p>
         </div>
         <div className={`verification-card ${member.academicStatus}`}>
-          <span>{member.academicStatus === "verified" ? "✓" : member.academicStatus === "rejected" ? "!" : "◌"}</span>
+          <span>{member.academicStatus === "verified" ? "✓" : member.academicStatus === "member" ? "普" : member.academicStatus === "rejected" ? "!" : "◌"}</span>
           <div>
             <b>
               {member.academicStatus === "verified"
-                ? "学友身份已验证"
+                ? "学生身份已认证"
+                : member.academicStatus === "member"
+                  ? "普通成员"
                 : member.academicStatus === "rejected"
                   ? "认证未通过"
                   : "等待学术身份审核"}
@@ -91,11 +97,21 @@ export default async function AccountPage() {
             <small>
               {member.academicStatus === "verified"
                 ? "可发布商品并联系卖家"
+                : member.academicStatus === "member"
+                  ? "可发布商品并联系卖家；发布内容需经管理员审核"
                 : "使用 .ac.jp / .edu 邮箱可自动通过，其他邮箱由管理员人工复核"}
             </small>
           </div>
         </div>
       </section>
+
+      <IdentitySettings
+        academicStatus={member.academicStatus}
+        loginEmail={member.email}
+        notificationEmail={profileRows[0]?.notificationEmail ?? member.email}
+        academicEmail={profileRows[0]?.academicEmail ?? ""}
+        initialAppeal={appealRows[0] ?? null}
+      />
 
       <AccountClient
         initialListings={ownedListings.map(listingToMarketItem)}
@@ -116,7 +132,7 @@ export default async function AccountPage() {
             } : null,
           }, member.email);
         })}
-        canPublish={member.academicStatus === "verified" || member.isAdmin}
+        canPublish={canUseMarketplace(member.academicStatus, member.isAdmin)}
         initialProfile={{
           publicNameMode: profileRows[0]?.publicNameMode === "nickname" ? "nickname" : "anonymous",
           publicNickname: profileRows[0]?.publicNickname ?? "",

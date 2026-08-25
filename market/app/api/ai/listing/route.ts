@@ -11,6 +11,7 @@ import {
   type GeminiGenerateContentResponse,
 } from "../../../../lib/gemini-api";
 import { isOwnedListingImageKey } from "../../../../lib/upload-ownership";
+import { canUseMarketplace } from "../../../../lib/member-status";
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const maxImageBytes = 2 * 1024 * 1024;
@@ -96,9 +97,9 @@ export async function POST(request: Request) {
   if (!member) {
     return Response.json({ error: "请先登录后使用 AI 识别。" }, { status: 401 });
   }
-  if (member.academicStatus !== "verified" && !member.isAdmin) {
+  if (!canUseMarketplace(member.academicStatus, member.isAdmin)) {
     return Response.json(
-      { error: "完成学友身份认证后即可使用 AI 识别。" },
+      { error: "账号获得发布权限后即可使用 AI 识别。" },
       { status: 403 },
     );
   }

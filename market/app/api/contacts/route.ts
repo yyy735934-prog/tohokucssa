@@ -2,6 +2,8 @@ import { and, eq, or } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { contactRequests, listings, users } from "../../../db/schema";
 import { getMemberAccess } from "../../../lib/auth";
+import { canUseMarketplace } from "../../../lib/member-status";
+import { sendMemberNotification } from "../../../lib/notification-email";
 
 type ContactStatus = "pending" | "accepted" | "declined";
 
@@ -48,8 +50,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const member = await getMemberAccess();
   if (!member) return Response.json({ error: "请先登录。" }, { status: 401 });
-  if (member.academicStatus !== "verified" && !member.isAdmin) {
-    return Response.json({ error: "完成学友身份认证后才能联系卖家。" }, { status: 403 });
+  if (!canUseMarketplace(member.academicStatus, member.isAdmin)) {
+    return Response.json({ error: "账号尚未获得使用权限，请先完成认证或申诉。" }, { status: 403 });
   }
   if (!member.profileCompleted) {
     return Response.json(
@@ -98,7 +100,7 @@ export async function POST(request: Request) {
     });
   }
 
-  await db
+  const created = await db
     .insert(contactRequests)
     .values({
       id: crypto.randomUUID(),
@@ -109,7 +111,15 @@ export async function POST(request: Request) {
     })
     .onConflictDoNothing({
       target: [contactRequests.listingId, contactRequests.buyerEmail],
-    });
+    }).returning({ id: contactRequests.id });
+
+  if (created[0]) {
+    await sendMemberNotification(
+      listing.ownerEmail,
+      "你收到一条新的商品联系申请",
+      `${member.publicName} 希望联系你购买“${listing.title}”。请进入个人中心处理。`,
+    );
+  }
 
   return Response.json({
     ok: true,
@@ -154,12 +164,21 @@ export async function PATCH(request: Request) {
     ))
     .returning();
 
-  return updated
-    ? Response.json({
+  if (updated) {
+    const [listing] = await db.select({ title: listings.title }).from(listings).where(eq(listings.id, updated.listingId)).limit(1);
+    await sendMemberNotification(
+      updated.buyerEmail,
+      payload.status === "accepted" ? "卖家已接受你的联系申请" : "卖家已处理你的联系申请",
+      payload.status === "accepted"
+        ? `卖家已接受你对“${listing?.title ?? "商品"}”的联系申请，请进入个人中心查看联系方式。`
+        : `卖家未接受你对“${listing?.title ?? "商品"}”的联系申请。`,
+    );
+    return Response.json({
         contact: { id: updated.id, status: updated.status },
         message: payload.status === "accepted"
           ? "已接受申请，双方现在可以查看联系方式。"
           : "已拒绝联系申请。",
-      })
-    : Response.json({ error: "未找到联系申请或没有操作权限。" }, { status: 404 });
+      });
+  }
+  return Response.json({ error: "未找到联系申请或没有操作权限。" }, { status: 404 });
 }

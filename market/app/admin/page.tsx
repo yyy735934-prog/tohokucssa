@@ -1,7 +1,7 @@
 import { desc, sql } from "drizzle-orm";
 import Link from "next/link";
 import { getDb } from "../../db";
-import { listings, users } from "../../db/schema";
+import { listings, users, verificationAppeals } from "../../db/schema";
 import { requireAdminAccess } from "../../lib/auth";
 import { listingCategoryLabel } from "../../lib/listing-intelligence";
 import AdminClient from "./AdminClient";
@@ -23,7 +23,7 @@ export default async function AdminPage() {
   }
 
   const db = await getDb();
-  const [listingRows, userRows, countRows] = await Promise.all([
+  const [listingRows, userRows, countRows, appealRows] = await Promise.all([
     db.select().from(listings).orderBy(desc(listings.createdAt)).limit(100),
     db.select().from(users).orderBy(desc(users.createdAt)).limit(100),
     db
@@ -33,6 +33,15 @@ export default async function AdminPage() {
         active: sql<number>`sum(case when ${listings.status} = 'active' then 1 else 0 end)`,
       })
       .from(listings),
+    db.select({
+      id: verificationAppeals.id,
+      userEmail: verificationAppeals.userEmail,
+      displayName: users.displayName,
+      status: verificationAppeals.status,
+      note: verificationAppeals.note,
+      hasImage: sql<boolean>`${verificationAppeals.imageKey} is not null`,
+      createdAt: verificationAppeals.createdAt,
+    }).from(verificationAppeals).innerJoin(users, sql`${verificationAppeals.userEmail} = ${users.email}`).orderBy(desc(verificationAppeals.createdAt)).limit(100),
   ]);
   const counts = countRows[0] ?? { total: 0, pending: 0, active: 0 };
   const pendingUsers = userRows.filter((user) => user.academicStatus === "pending").length;
@@ -64,7 +73,7 @@ export default async function AdminPage() {
         <article><span>待审核商品</span><b>{Number(counts.pending ?? 0)}</b><small>需要运营确认</small></article>
         <article><span>展示中商品</span><b>{Number(counts.active ?? 0)}</b><small>当前公开可见</small></article>
         <article><span>累计商品</span><b>{Number(counts.total ?? 0)}</b><small>包含售出与下架</small></article>
-        <article><span>待认证用户</span><b>{pendingUsers}</b><small>非学术邮箱复核</small></article>
+        <article><span>待认证 / 申诉</span><b>{pendingUsers + appealRows.filter((appeal) => appeal.status === "pending").length}</b><small>成员身份与学生证明</small></article>
       </section>
 
       <AdminClient
@@ -73,6 +82,7 @@ export default async function AdminPage() {
           category: listingCategoryLabel(listing.category),
         }))}
         initialUsers={userRows}
+        initialAppeals={appealRows}
       />
     </main>
   );

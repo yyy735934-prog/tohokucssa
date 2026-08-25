@@ -1,7 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { listings, moderationLog, users } from "../../../db/schema";
+import { listings, moderationLog, users, verificationAppeals } from "../../../db/schema";
 import {
+  isAppealModerationAction,
   isListingModerationAction,
   isUserModerationAction,
 } from "../../../lib/admin-moderation";
@@ -12,7 +13,7 @@ export async function PATCH(request: Request) {
   if (!admin) return Response.json({ error: "没有管理员权限。" }, { status: 403 });
 
   const payload = (await request.json()) as {
-    targetType?: "listing" | "user" | "batch";
+    targetType?: "listing" | "user" | "batch" | "appeal";
     targetId?: string;
     action?: string;
   };
@@ -41,6 +42,24 @@ export async function PATCH(request: Request) {
       .where(and(eq(listings.batchId, payload.targetId), eq(listings.status, "pending")))
       .returning({ id: listings.id });
     updated = rows.length > 0;
+  } else if (
+    payload.targetType === "appeal" &&
+    payload.targetId &&
+    isAppealModerationAction(payload.action)
+  ) {
+    const [appeal] = await db.select().from(verificationAppeals).where(and(eq(verificationAppeals.id, payload.targetId), eq(verificationAppeals.status, "pending"))).limit(1);
+    if (!appeal) return Response.json({ error: "未找到待处理申诉。" }, { status: 404 });
+    if (appeal.imageKey) {
+      const { env } = await import("cloudflare:workers");
+      const runtimeEnv = env as unknown as { BUCKET: R2Bucket };
+      try { await runtimeEnv.BUCKET.delete(appeal.imageKey); }
+      catch { return Response.json({ error: "证明图片清理失败，请稍后重试。" }, { status: 502 }); }
+    }
+    const rows = await db.update(verificationAppeals).set({ status: payload.action!, imageKey: null, updatedAt: new Date().toISOString() }).where(and(eq(verificationAppeals.id, payload.targetId), eq(verificationAppeals.status, "pending"))).returning({ id: verificationAppeals.id });
+    if (rows[0] && payload.action === "verified") {
+      await db.update(users).set({ academicStatus: "verified" }).where(eq(users.email, appeal.userEmail));
+    }
+    updated = Boolean(rows[0]);
   } else if (
     payload.targetType === "user" &&
     payload.targetId &&

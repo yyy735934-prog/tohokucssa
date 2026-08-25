@@ -10,6 +10,7 @@ import {
   publicMemberName,
   type PublicNameMode,
 } from "./public-identity";
+import type { AcademicStatus } from "./member-status";
 
 export type MemberAccess = {
   email: string;
@@ -18,7 +19,7 @@ export type MemberAccess = {
   publicNameMode: PublicNameMode;
   publicNickname: string | null;
   isAdmin: boolean;
-  academicStatus: "verified" | "pending" | "rejected";
+  academicStatus: AcademicStatus;
   profileCompleted: boolean;
 };
 
@@ -68,9 +69,10 @@ async function upsertMember(user: ChatGPTUser): Promise<MemberAccess> {
     .from(users)
     .where(eq(users.email, user.email))
     .limit(1);
+  const savedStatus = existing[0]?.academicStatus;
   const academicStatus =
-    existing[0]?.academicStatus === "verified" || existing[0]?.academicStatus === "rejected"
-      ? existing[0].academicStatus
+    savedStatus === "verified" || savedStatus === "member" || savedStatus === "rejected"
+      ? savedStatus
       : autoStatus;
   const publicNameMode = existing[0]?.publicNameMode === "nickname" ? "nickname" : "anonymous";
   const publicNickname = existing[0]?.publicNickname ?? null;

@@ -8,6 +8,8 @@ export const users = sqliteTable("users", {
   publicNickname: text("public_nickname"),
   role: text("role").notNull().default("member"),
   academicStatus: text("academic_status").notNull().default("pending"),
+  academicEmail: text("academic_email"),
+  notificationEmail: text("notification_email"),
   phone: text("phone"),
   wechat: text("wechat"),
   qq: text("qq"),
@@ -15,7 +17,43 @@ export const users = sqliteTable("users", {
   profileCompleted: integer("profile_completed", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   lastSeenAt: text("last_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("users_academic_email_idx").on(table.academicEmail)]);
+
+export const emailChangeChallenges = sqliteTable("email_change_challenges", {
+  userEmail: text("user_email").primaryKey().references(() => users.email),
+  newEmail: text("new_email").notNull(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  lastSentAt: integer("last_sent_at").notNull(),
 });
+
+export const academicEmailChallenges = sqliteTable("academic_email_challenges", {
+  userEmail: text("user_email").primaryKey().references(() => users.email),
+  academicEmail: text("academic_email").notNull(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  lastSentAt: integer("last_sent_at").notNull(),
+});
+
+export const verificationAppeals = sqliteTable(
+  "verification_appeals",
+  {
+    id: text("id").primaryKey(),
+    userEmail: text("user_email").notNull().references(() => users.email),
+    method: text("method").notNull().default("student_card"),
+    imageKey: text("image_key"),
+    status: text("status").notNull().default("pending"),
+    note: text("note").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("verification_appeals_user_idx").on(table.userEmail, table.createdAt),
+    index("verification_appeals_status_idx").on(table.status, table.createdAt),
+  ],
+);
 
 export const listingBatches = sqliteTable(
   "listing_batches",

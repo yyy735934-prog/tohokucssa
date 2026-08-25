@@ -27,6 +27,16 @@ type AdminUser = {
   createdAt: string;
 };
 
+type AdminAppeal = {
+  id: string;
+  userEmail: string;
+  displayName: string;
+  status: string;
+  note: string;
+  hasImage: boolean;
+  createdAt: string;
+};
+
 const listingStatusText: Record<string, string> = {
   pending: "待审核",
   active: "展示中",
@@ -38,19 +48,23 @@ const listingStatusText: Record<string, string> = {
 const academicStatusText: Record<string, string> = {
   pending: "待认证",
   verified: "已认证",
+  member: "普通成员",
   rejected: "未通过",
 };
 
 export default function AdminClient({
   initialListings,
   initialUsers,
+  initialAppeals,
 }: {
   initialListings: AdminListing[];
   initialUsers: AdminUser[];
+  initialAppeals: AdminAppeal[];
 }) {
-  const [tab, setTab] = useState<"listings" | "users">("listings");
+  const [tab, setTab] = useState<"listings" | "users" | "appeals">("listings");
   const [listingRows, setListingRows] = useState(initialListings);
   const [userRows, setUserRows] = useState(initialUsers);
+  const [appealRows, setAppealRows] = useState(initialAppeals);
   const [filter, setFilter] = useState("pending");
   const [message, setMessage] = useState("");
 
@@ -60,7 +74,7 @@ export default function AdminClient({
   );
 
   const moderate = async (
-    targetType: "listing" | "user" | "batch",
+    targetType: "listing" | "user" | "batch" | "appeal",
     targetId: string,
     action: string,
   ) => {
@@ -81,10 +95,16 @@ export default function AdminClient({
       setListingRows((current) => current.map((listing) =>
         listing.batchId === targetId && listing.status === "pending" ? { ...listing, status: "active" } : listing,
       ));
-    } else {
+    } else if (targetType === "user") {
       setUserRows((current) =>
         current.map((user) => (user.email === targetId ? { ...user, academicStatus: action } : user)),
       );
+    } else {
+      const appeal = appealRows.find((row) => row.id === targetId);
+      setAppealRows((current) => current.map((row) => row.id === targetId ? { ...row, status: action, hasImage: false } : row));
+      if (appeal && action === "verified") {
+        setUserRows((current) => current.map((user) => user.email === appeal.userEmail ? { ...user, academicStatus: "verified" } : user));
+      }
     }
     setMessage("已保存审核结果。");
   };
@@ -99,6 +119,10 @@ export default function AdminClient({
         <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
           用户认证
           <b>{userRows.filter((user) => user.academicStatus === "pending").length}</b>
+        </button>
+        <button className={tab === "appeals" ? "active" : ""} onClick={() => setTab("appeals")}>
+          学生身份申诉
+          <b>{appealRows.filter((appeal) => appeal.status === "pending").length}</b>
         </button>
       </nav>
 
@@ -158,7 +182,7 @@ export default function AdminClient({
             {!visibleListings.length && <div className="admin-empty">当前没有需要处理的商品。</div>}
           </div>
         </div>
-      ) : (
+      ) : tab === "users" ? (
         <div className="admin-panel">
           <div className="admin-panel-heading">
             <div><span>MEMBERS</span><h2>学术身份认证</h2></div>
@@ -174,12 +198,31 @@ export default function AdminClient({
                 </span>
                 {shouldShowUserModerationActions(user.role, user.academicStatus) && (
                   <div className="admin-row-actions">
-                    <button className="approve" onClick={() => moderate("user", user.email, "verified")}>通过认证</button>
+                    <button className="approve" onClick={() => moderate("user", user.email, "verified")}>认证为学生</button>
+                    <button onClick={() => moderate("user", user.email, "member")}>允许普通成员发布</button>
                     <button onClick={() => moderate("user", user.email, "rejected")}>拒绝</button>
                   </div>
                 )}
               </article>
             ))}
+          </div>
+        </div>
+      ) : (
+        <div className="admin-panel">
+          <div className="admin-panel-heading">
+            <div><span>STUDENT APPEALS</span><h2>学生身份申诉</h2></div>
+            <small>证明照片仅限本页查看，处理完成后会从存储中删除</small>
+          </div>
+          <div className="admin-appeals">
+            {appealRows.map((appeal) => (
+              <article key={appeal.id}>
+                {appeal.hasImage ? <a className="appeal-image" href={`/api/verification/image?appeal=${encodeURIComponent(appeal.id)}`} target="_blank" rel="noreferrer">查看学生证证明</a> : <span className="appeal-image unavailable">证明已删除</span>}
+                <div><b>{appeal.displayName}</b><span>{appeal.userEmail}</span><small>{new Date(appeal.createdAt).toLocaleString("zh-CN")}</small></div>
+                <span className={`status-pill ${appeal.status}`}>{appeal.status === "pending" ? "待审核" : appeal.status === "verified" ? "已认证" : "未通过"}</span>
+                {appeal.status === "pending" && <div className="admin-row-actions"><button className="approve" onClick={() => moderate("appeal", appeal.id, "verified")}>认证为学生</button><button onClick={() => moderate("appeal", appeal.id, "rejected")}>拒绝</button></div>}
+              </article>
+            ))}
+            {!appealRows.length && <div className="admin-empty">当前没有学生身份申诉。</div>}
           </div>
         </div>
       )}

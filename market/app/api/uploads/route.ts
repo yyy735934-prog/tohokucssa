@@ -1,4 +1,6 @@
 import { getMemberAccess } from "../../../lib/auth";
+import { canUseMarketplace } from "../../../lib/member-status";
+import { uploadOwnerHash } from "../../../lib/upload-ownership";
 
 const allowedTypes: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -10,9 +12,10 @@ export async function POST(request: Request) {
   const member = await getMemberAccess();
   if (!member) return Response.json({ error: "请先登录。" }, { status: 401 });
   const form = await request.formData();
-  const purpose = form.get("purpose") === "profile" ? "profile" : "listing";
-  if (purpose === "listing" && member.academicStatus !== "verified" && !member.isAdmin) {
-    return Response.json({ error: "完成学友身份认证后才能上传商品照片。" }, { status: 403 });
+  const rawPurpose = form.get("purpose");
+  const purpose = rawPurpose === "profile" || rawPurpose === "verification" ? rawPurpose : "listing";
+  if (purpose === "listing" && !canUseMarketplace(member.academicStatus, member.isAdmin)) {
+    return Response.json({ error: "账号获得发布权限后才能上传商品照片。" }, { status: 403 });
   }
 
   const image = form.get("image");
@@ -23,19 +26,13 @@ export async function POST(request: Request) {
   if (!extension) {
     return Response.json({ error: "仅支持 JPG、PNG 或 WebP 图片。" }, { status: 400 });
   }
-  if (image.size > 2 * 1024 * 1024) {
-    return Response.json({ error: "照片优化后仍超过 2 MB，请重新选择。" }, { status: 400 });
+  const maxBytes = purpose === "verification" ? 4 * 1024 * 1024 : 2 * 1024 * 1024;
+  if (image.size > maxBytes) {
+    return Response.json({ error: `照片超过 ${purpose === "verification" ? 4 : 2} MB，请重新选择。` }, { status: 400 });
   }
 
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(member.email.toLowerCase()),
-  );
-  const ownerHash = Array.from(new Uint8Array(digest))
-    .slice(0, 10)
-    .map((value) => value.toString(16).padStart(2, "0"))
-    .join("");
-  const folder = purpose === "profile" ? "profiles" : "listings";
+  const ownerHash = await uploadOwnerHash(member.email);
+  const folder = purpose === "profile" ? "profiles" : purpose === "verification" ? "verification" : "listings";
   const key = `${folder}/${ownerHash}/${crypto.randomUUID()}.${extension}`;
   const { env } = await import("cloudflare:workers");
   const runtimeEnv = env as unknown as { BUCKET: R2Bucket };
