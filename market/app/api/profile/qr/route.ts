@@ -6,19 +6,28 @@ import { getMemberAccess } from "../../../../lib/auth";
 export async function GET(request: Request) {
   const member = await getMemberAccess();
   if (!member) return new Response("Unauthorized", { status: 401 });
-  const targetEmail = new URL(request.url).searchParams.get("email")?.trim().toLowerCase() ?? "";
-  if (!targetEmail) return new Response("Missing email", { status: 400 });
-  if (targetEmail !== member.email.toLowerCase() && !member.isAdmin) {
-    const db = await getDb();
-    const shared = await db.select({ id: contactRequests.id }).from(contactRequests).where(
-      and(eq(contactRequests.status, "accepted"), or(
-        and(eq(contactRequests.buyerEmail, member.email), eq(contactRequests.sellerEmail, targetEmail)),
-        and(eq(contactRequests.sellerEmail, member.email), eq(contactRequests.buyerEmail, targetEmail)),
-      )),
-    ).limit(1);
-    if (!shared.length) return new Response("Forbidden", { status: 403 });
-  }
   const db = await getDb();
+  const contactId = new URL(request.url).searchParams.get("contact")?.trim() ?? "";
+  let targetEmail = member.email;
+  if (contactId) {
+    const [shared] = await db.select({
+      buyerEmail: contactRequests.buyerEmail,
+      sellerEmail: contactRequests.sellerEmail,
+    }).from(contactRequests).where(
+      and(
+        eq(contactRequests.id, contactId),
+        eq(contactRequests.status, "accepted"),
+        or(
+          eq(contactRequests.buyerEmail, member.email),
+          eq(contactRequests.sellerEmail, member.email),
+        ),
+      ),
+    ).limit(1);
+    if (!shared) return new Response("Forbidden", { status: 403 });
+    targetEmail = shared.buyerEmail === member.email
+      ? shared.sellerEmail
+      : shared.buyerEmail;
+  }
   const [profile] = await db.select({ key: users.wechatQrKey }).from(users).where(eq(users.email, targetEmail)).limit(1);
   if (!profile?.key?.startsWith("profiles/")) return new Response("Not found", { status: 404 });
   const { env } = await import("cloudflare:workers");

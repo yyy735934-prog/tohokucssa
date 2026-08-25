@@ -25,7 +25,6 @@ type ContactRequest = {
   status: "pending" | "accepted" | "declined";
   createdAt: string;
   counterpartContact: {
-    email: string;
     phone: string | null;
     wechat: string | null;
     qq: string | null;
@@ -50,7 +49,14 @@ export default function AccountClient({
   initialListings: Listing[];
   initialContacts: ContactRequest[];
   canPublish: boolean;
-  initialProfile: { phone: string; wechat: string; qq: string; qrUrl: string | null };
+  initialProfile: {
+    publicNameMode: "anonymous" | "nickname";
+    publicNickname: string;
+    phone: string;
+    wechat: string;
+    qq: string;
+    qrUrl: string | null;
+  };
 }) {
   const [listings, setListings] = useState(initialListings);
   const [contacts, setContacts] = useState(initialContacts);
@@ -181,7 +187,6 @@ export default function AccountClient({
                     </div>
                     {contact.status === "accepted" && contact.counterpartContact && (
                       <div className="shared-contact">
-                        <span>邮箱 <b>{contact.counterpartContact.email}</b></span>
                         {contact.counterpartContact.phone && <span>电话 <b>{contact.counterpartContact.phone}</b></span>}
                         {contact.counterpartContact.wechat && <span>微信 <b>{contact.counterpartContact.wechat}</b></span>}
                         {contact.counterpartContact.qq && <span>QQ <b>{contact.counterpartContact.qq}</b></span>}

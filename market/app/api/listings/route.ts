@@ -1,9 +1,10 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { listings } from "../../../db/schema";
+import { listings, users } from "../../../db/schema";
 import { getMemberAccess } from "../../../lib/auth";
 import { inferListingIntelligence } from "../../../lib/listing-intelligence";
 import { listingToMarketItem } from "../../../lib/listings";
+import { publicMemberName } from "../../../lib/public-identity";
 
 function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -22,8 +23,23 @@ export async function GET() {
       .where(eq(listings.status, "active"))
       .orderBy(desc(listings.createdAt))
       .limit(60);
+    const ownerEmails = Array.from(new Set(rows.map((listing) => listing.ownerEmail)));
+    const sellerProfiles = ownerEmails.length
+      ? await db.select({
+          email: users.email,
+          academicStatus: users.academicStatus,
+          publicNameMode: users.publicNameMode,
+          publicNickname: users.publicNickname,
+        }).from(users).where(inArray(users.email, ownerEmails))
+      : [];
+    const sellerByEmail = new Map(sellerProfiles.map((profile) => [profile.email, {
+      name: publicMemberName(profile.publicNameMode, profile.publicNickname),
+      verified: profile.academicStatus === "verified",
+    }]));
     return Response.json({
-      listings: rows.map((listing) => listingToMarketItem(listing, member?.email)),
+      listings: rows.map((listing) =>
+        listingToMarketItem(listing, member?.email, sellerByEmail.get(listing.ownerEmail)),
+      ),
     });
   } catch (error) {
     return Response.json({ error: errorMessage(error) }, { status: 503 });
@@ -89,7 +105,7 @@ export async function POST(request: Request) {
       .values({
         id: crypto.randomUUID(),
         ownerEmail: member.email,
-        ownerName: member.displayName,
+        ownerName: member.publicName,
         title,
         description,
         price,
@@ -106,7 +122,10 @@ export async function POST(request: Request) {
 
     return Response.json(
       {
-        listing: listingToMarketItem(created, member.email),
+        listing: listingToMarketItem(created, member.email, {
+          name: member.publicName,
+          verified: member.academicStatus === "verified",
+        }),
         message: status === "active" ? "发布成功。" : "已提交审核，管理员通过后将公开展示。",
       },
       { status: 201 },

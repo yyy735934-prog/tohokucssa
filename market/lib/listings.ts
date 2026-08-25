@@ -1,9 +1,14 @@
 import type { listings } from "../db/schema";
 import { listingCategoryLabel } from "./listing-intelligence";
+import { ANONYMOUS_SELLER_NAME } from "./public-identity";
 
 type ListingRow = typeof listings.$inferSelect;
 
-export function listingToMarketItem(listing: ListingRow, viewerEmail?: string) {
+export function listingToMarketItem(
+  listing: ListingRow,
+  viewerEmail?: string,
+  sellerIdentity?: { name: string; verified: boolean },
+) {
   return {
     id: listing.id,
     title: listing.title,
@@ -11,7 +16,8 @@ export function listingToMarketItem(listing: ListingRow, viewerEmail?: string) {
     category: listingCategoryLabel(listing.category),
     place: listing.place,
     time: formatRelativeTime(listing.createdAt),
-    seller: listing.ownerName,
+    seller: sellerIdentity?.name ?? ANONYMOUS_SELLER_NAME,
+    sellerVerified: sellerIdentity?.verified ?? false,
     badge: listing.status === "active" ? "学友发布" : listing.status,
     icon: listing.icon,
     tone: listing.tone,

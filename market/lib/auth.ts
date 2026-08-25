@@ -6,10 +6,17 @@ import {
   requireChatGPTUser,
   type ChatGPTUser,
 } from "../app/chatgpt-auth";
+import {
+  publicMemberName,
+  type PublicNameMode,
+} from "./public-identity";
 
 export type MemberAccess = {
   email: string;
   displayName: string;
+  publicName: string;
+  publicNameMode: PublicNameMode;
+  publicNickname: string | null;
   isAdmin: boolean;
   academicStatus: "verified" | "pending" | "rejected";
   profileCompleted: boolean;
@@ -55,6 +62,8 @@ async function upsertMember(user: ChatGPTUser): Promise<MemberAccess> {
     .select({
       academicStatus: users.academicStatus,
       profileCompleted: users.profileCompleted,
+      publicNameMode: users.publicNameMode,
+      publicNickname: users.publicNickname,
     })
     .from(users)
     .where(eq(users.email, user.email))
@@ -63,6 +72,8 @@ async function upsertMember(user: ChatGPTUser): Promise<MemberAccess> {
     existing[0]?.academicStatus === "verified" || existing[0]?.academicStatus === "rejected"
       ? existing[0].academicStatus
       : autoStatus;
+  const publicNameMode = existing[0]?.publicNameMode === "nickname" ? "nickname" : "anonymous";
+  const publicNickname = existing[0]?.publicNickname ?? null;
 
   await db
     .insert(users)
@@ -85,6 +96,9 @@ async function upsertMember(user: ChatGPTUser): Promise<MemberAccess> {
   return {
     email: user.email,
     displayName: user.displayName,
+    publicName: publicMemberName(publicNameMode, publicNickname),
+    publicNameMode,
+    publicNickname,
     isAdmin: admin,
     academicStatus: academicStatus as MemberAccess["academicStatus"],
     profileCompleted: Boolean(existing[0]?.profileCompleted),

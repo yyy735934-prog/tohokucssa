@@ -13,11 +13,10 @@ const contact = {
   status: "pending",
   createdAt: "2026-08-21T00:00:00.000Z",
   counterpartProfile: {
-    email: "seller@example.com",
     phone: "090-0000-0000",
     wechat: "seller-wechat",
     qq: null,
-    qrUrl: "/api/profile/qr?email=seller%40example.com",
+    qrUrl: "/api/profile/qr?contact=contact-1",
   },
 };
 
@@ -28,6 +27,7 @@ test("does not expose counterpart contact details before acceptance", () => {
   assert.equal(view.counterpartContact, null);
   assert.equal("buyerEmail" in view, false);
   assert.equal("sellerEmail" in view, false);
+  assert.equal("email" in (view.counterpartContact ?? {}), false);
 });
 
 test("shares counterpart details after the seller accepts", () => {

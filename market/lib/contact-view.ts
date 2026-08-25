@@ -11,7 +11,6 @@ export type ContactViewInput = {
   status: string;
   createdAt: string;
   counterpartProfile?: {
-    email: string;
     phone: string | null;
     wechat: string | null;
     qq: string | null;

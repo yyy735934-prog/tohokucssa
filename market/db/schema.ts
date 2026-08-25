@@ -4,6 +4,8 @@ import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqli
 export const users = sqliteTable("users", {
   email: text("email").primaryKey(),
   displayName: text("display_name").notNull(),
+  publicNameMode: text("public_name_mode").notNull().default("anonymous"),
+  publicNickname: text("public_nickname"),
   role: text("role").notNull().default("member"),
   academicStatus: text("academic_status").notNull().default("pending"),
   phone: text("phone"),

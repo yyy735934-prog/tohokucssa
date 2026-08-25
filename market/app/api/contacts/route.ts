@@ -104,7 +104,7 @@ export async function POST(request: Request) {
       id: crypto.randomUUID(),
       listingId: listing.id,
       buyerEmail: member.email,
-      buyerName: member.displayName,
+      buyerName: member.publicName,
       sellerEmail: listing.ownerEmail,
     })
     .onConflictDoNothing({

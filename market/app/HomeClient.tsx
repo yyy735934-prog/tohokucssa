@@ -25,6 +25,7 @@ type MarketItem = {
   place: string;
   time: string;
   seller: string;
+  sellerVerified: boolean;
   badge: string;
   icon: string;
   tone: string;
@@ -571,7 +572,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
             <h2>{selectedItem.title}</h2>
             <div className="detail-price">{selectedItem.price === 0 ? "免费赠送" : `¥${selectedItem.price.toLocaleString()}`}</div>
             <p>{selectedItem.note}</p>
-            <div className="seller-row"><span>{selectedItem.seller.slice(0,1)}</span><div><b>{selectedItem.seller}</b><small>✓ 学友身份已验证 · 通常1小时内回复</small></div></div>
+            <div className="seller-row"><span>{selectedItem.seller.slice(0,1)}</span><div><b>{selectedItem.seller}</b><small>{selectedItem.sellerVerified ? "✓ 已认证学友" : "身份待核验"} · 通常1小时内回复</small></div></div>
             <div className="pickup">⌖ 建议交接地点 <b>{selectedItem.place}附近公共场所</b></div>
             <div className="detail-actions">
               <button className={favorites.includes(selectedItem.id) ? "favorited" : ""} onClick={() => toggleFavorite(selectedItem.id)}>{favorites.includes(selectedItem.id) ? "♥ 已收藏" : "♡ 收藏"}</button>

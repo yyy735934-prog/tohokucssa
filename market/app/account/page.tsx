@@ -6,6 +6,7 @@ import { chatGPTSignOutPath } from "../chatgpt-auth";
 import { requireMemberAccess } from "../../lib/auth";
 import { toContactView } from "../../lib/contact-view";
 import { listingToMarketItem } from "../../lib/listings";
+import { publicMemberName } from "../../lib/public-identity";
 import AccountClient from "./AccountClient";
 
 export const dynamic = "force-dynamic";
@@ -26,9 +27,7 @@ export default async function AccountPage() {
         listingId: contactRequests.listingId,
         listingTitle: listings.title,
         buyerEmail: contactRequests.buyerEmail,
-        buyerName: contactRequests.buyerName,
         sellerEmail: contactRequests.sellerEmail,
-        sellerName: listings.ownerName,
         status: contactRequests.status,
         createdAt: contactRequests.createdAt,
       })
@@ -39,19 +38,24 @@ export default async function AccountPage() {
       .limit(50),
     db.select({
       phone: users.phone, wechat: users.wechat, qq: users.qq, wechatQrKey: users.wechatQrKey,
+      publicNameMode: users.publicNameMode, publicNickname: users.publicNickname,
     }).from(users).where(eq(users.email, member.email)).limit(1),
   ]);
-  const counterpartEmails = Array.from(new Set(
-    contacts
-      .filter((contact) => contact.status === "accepted")
-      .map((contact) => contact.sellerEmail === member.email ? contact.buyerEmail : contact.sellerEmail),
+  const partyEmails = Array.from(new Set(
+    contacts.flatMap((contact) => [contact.buyerEmail, contact.sellerEmail]),
   ));
-  const counterpartProfiles = counterpartEmails.length
+  const partyProfiles = partyEmails.length
     ? await db.select({
-        email: users.email, phone: users.phone, wechat: users.wechat, qq: users.qq, wechatQrKey: users.wechatQrKey,
-      }).from(users).where(inArray(users.email, counterpartEmails))
+        email: users.email,
+        phone: users.phone,
+        wechat: users.wechat,
+        qq: users.qq,
+        wechatQrKey: users.wechatQrKey,
+        publicNameMode: users.publicNameMode,
+        publicNickname: users.publicNickname,
+      }).from(users).where(inArray(users.email, partyEmails))
     : [];
-  const profileByEmail = new Map(counterpartProfiles.map((profile) => [profile.email, profile]));
+  const profileByEmail = new Map(partyProfiles.map((profile) => [profile.email, profile]));
 
   return (
     <main className="portal-page">
@@ -98,23 +102,28 @@ export default async function AccountPage() {
         initialContacts={contacts.map((contact) => {
           const counterpartEmail = contact.sellerEmail === member.email ? contact.buyerEmail : contact.sellerEmail;
           const profile = profileByEmail.get(counterpartEmail);
+          const buyerProfile = profileByEmail.get(contact.buyerEmail);
+          const sellerProfile = profileByEmail.get(contact.sellerEmail);
           return toContactView({
             ...contact,
+            buyerName: publicMemberName(buyerProfile?.publicNameMode, buyerProfile?.publicNickname),
+            sellerName: publicMemberName(sellerProfile?.publicNameMode, sellerProfile?.publicNickname),
             counterpartProfile: contact.status === "accepted" ? {
-              email: counterpartEmail,
               phone: profile?.phone ?? null,
               wechat: profile?.wechat ?? null,
               qq: profile?.qq ?? null,
-              qrUrl: profile?.wechatQrKey ? `/api/profile/qr?email=${encodeURIComponent(counterpartEmail)}` : null,
+              qrUrl: profile?.wechatQrKey ? `/api/profile/qr?contact=${encodeURIComponent(contact.id)}` : null,
             } : null,
           }, member.email);
         })}
         canPublish={member.academicStatus === "verified" || member.isAdmin}
         initialProfile={{
+          publicNameMode: profileRows[0]?.publicNameMode === "nickname" ? "nickname" : "anonymous",
+          publicNickname: profileRows[0]?.publicNickname ?? "",
           phone: profileRows[0]?.phone ?? "",
           wechat: profileRows[0]?.wechat ?? "",
           qq: profileRows[0]?.qq ?? "",
-          qrUrl: profileRows[0]?.wechatQrKey ? `/api/profile/qr?email=${encodeURIComponent(member.email)}` : null,
+          qrUrl: profileRows[0]?.wechatQrKey ? "/api/profile/qr" : null,
         }}
       />
     </main>
