@@ -15,6 +15,7 @@ type AdminListing = {
   status: string;
   icon: string;
   imageKey: string | null;
+  batchId: string | null;
   createdAt: string;
 };
 
@@ -59,7 +60,7 @@ export default function AdminClient({
   );
 
   const moderate = async (
-    targetType: "listing" | "user",
+    targetType: "listing" | "user" | "batch",
     targetId: string,
     action: string,
   ) => {
@@ -76,6 +77,10 @@ export default function AdminClient({
       setListingRows((current) =>
         current.map((listing) => (listing.id === targetId ? { ...listing, status: action } : listing)),
       );
+    } else if (targetType === "batch") {
+      setListingRows((current) => current.map((listing) =>
+        listing.batchId === targetId && listing.status === "pending" ? { ...listing, status: "active" } : listing,
+      ));
     } else {
       setUserRows((current) =>
         current.map((user) => (user.email === targetId ? { ...user, academicStatus: action } : user)),
@@ -111,7 +116,7 @@ export default function AdminClient({
             </select>
           </div>
           <div className="admin-list">
-            {visibleListings.map((listing) => (
+            {visibleListings.map((listing, index) => (
               <article key={listing.id}>
                 <div
                   className={`admin-item-icon ${listing.imageKey ? "has-image" : ""}`}
@@ -120,7 +125,7 @@ export default function AdminClient({
                   {listing.imageKey ? null : listing.icon}
                 </div>
                 <div className="admin-item-main">
-                  <span>{listing.category} · {listing.place}</span>
+                  <span>{listing.category} · {listing.place}{listing.batchId ? " · 批量发布" : ""}</span>
                   <h3>{listing.title}</h3>
                   <p>{listing.description}</p>
                   <small>
@@ -129,6 +134,9 @@ export default function AdminClient({
                 </div>
                 <strong>{listing.price === 0 ? "免费" : `¥${listing.price.toLocaleString()}`}</strong>
                 <div className="admin-row-actions">
+                  {listing.status === "pending" && listing.batchId && !visibleListings.slice(0, index).some((row) => row.batchId === listing.batchId && row.status === "pending") && (
+                    <button className="approve batch-approve" onClick={() => moderate("batch", listing.batchId!, "active")}>整批通过</button>
+                  )}
                   {listing.status === "pending" && (
                     <>
                       <button className="approve" onClick={() => moderate("listing", listing.id, "active")}>通过</button>

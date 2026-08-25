@@ -20,8 +20,10 @@
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
+    "html-to-image": "1.11.13",
     "leaflet": "^1.9.4",
     "next": "16.2.6",
+    "qrcode": "1.5.4",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
@@ -30,6 +32,7 @@
     "@tailwindcss/postcss": "4.2.1",
     "@types/leaflet": "^1.9.21",
     "@types/node": "22.19.19",
+    "@types/qrcode": "1.5.5",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",

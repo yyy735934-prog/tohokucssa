@@ -137,7 +137,12 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
         return (await response.json()) as { listings?: MarketItem[] };
       })
       .then((result) => {
-        if (active && result?.listings) setItems(result.listings);
+        if (active && result?.listings) {
+          setItems(result.listings);
+          const listingId = new URLSearchParams(window.location.search).get("listing");
+          const matched = listingId ? result.listings.find((item) => item.id === listingId) : null;
+          if (matched) setSelectedItem(matched);
+        }
       })
       .catch(() => undefined);
     return () => {
@@ -487,6 +492,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
             <section className="hero-action sell-action">
               <div className="action-label"><span>＋</span><div><b>我要出闲置</b><small>拍张照片，AI 帮你完成发布</small></div></div>
               <button className="quick-publish" onClick={openPublisher}><span>▣</span> 拍照发布 <b>→</b></button>
+              <a className="batch-publish-link" href={viewer ? "/batch/new" : "/signin-with-chatgpt?return_to=%2Fbatch%2Fnew"}>多件闲置？批量生成海报 →</a>
             </section>
           </div>
           <div className="hero-links"><span>大家在搜</span><button onClick={() => setQuery("自行车")}>自行车</button><button onClick={() => setQuery("电饭煲")}>电饭煲</button><button onClick={() => setCategory("家具")}>家具</button></div>

@@ -117,6 +117,7 @@ export default function AccountClient({
       <aside className="account-nav">
         <b>我的集市</b>
         <a className="active" href="#my-listings">我的发布</a>
+        {canPublish && <Link href="/batch/new">批量发布与海报</Link>}
         <Link href="/favorites">我的收藏</Link>
         <Link href="/map">附近闲置</Link>
         <a href="#contacts">交易联系</a>
@@ -130,7 +131,7 @@ export default function AccountClient({
             <span>MY LISTINGS</span>
             <h2>我的发布</h2>
           </div>
-          {canPublish ? <Link href="/?publish=1">＋ 发布新闲置</Link> : <button disabled>认证后可发布</button>}
+          {canPublish ? <div className="account-publish-actions"><Link href="/?publish=1">＋ 单件发布</Link><Link href="/batch/new">▦ 批量发布</Link></div> : <button disabled>认证后可发布</button>}
         </div>
 
         {listings.length ? (

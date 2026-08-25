@@ -1,4 +1,6 @@
 import { getMemberAccess } from "../../../../lib/auth";
+import { getDb } from "../../../../db";
+import { listingAnalyses } from "../../../../db/schema";
 import {
   inferListingIntelligence,
   LISTING_CATEGORIES,
@@ -8,6 +10,7 @@ import {
   extractOutputText,
   type GeminiGenerateContentResponse,
 } from "../../../../lib/gemini-api";
+import { isOwnedListingImageKey } from "../../../../lib/upload-ownership";
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const maxImageBytes = 2 * 1024 * 1024;
@@ -17,6 +20,8 @@ type RecognitionPayload = {
   title?: unknown;
   description?: unknown;
   category?: unknown;
+  riskLevel?: unknown;
+  riskReason?: unknown;
 };
 
 function parseRecognitionPayload(outputText: string): RecognitionPayload {
@@ -100,6 +105,7 @@ export async function POST(request: Request) {
 
   const form = await request.formData();
   const image = form.get("image");
+  const imageKey = form.get("imageKey");
   if (!(image instanceof File) || !allowedTypes.has(image.type)) {
     return Response.json(
       { error: "请选择 JPG、PNG 或 WebP 商品照片。" },
@@ -225,10 +231,38 @@ export async function POST(request: Request) {
     }
 
     const visual = inferListingIntelligence(title, description, category);
+    const riskLevel = recognized.riskLevel === "low" ? "low" : "review";
+    const riskReason =
+      typeof recognized.riskReason === "string"
+        ? recognized.riskReason.trim().slice(0, 160)
+        : riskLevel === "low"
+          ? "普通二手物品"
+          : "需要人工确认";
+
+    if (await isOwnedListingImageKey(member.email, imageKey)) {
+      const db = await getDb();
+      await db
+        .insert(listingAnalyses)
+        .values({
+          imageKey: imageKey as string,
+          ownerEmail: member.email,
+          title,
+          description,
+          category: visual.category,
+          riskLevel,
+          riskReason,
+        })
+        .onConflictDoUpdate({
+          target: listingAnalyses.imageKey,
+          set: { title, description, category: visual.category, riskLevel, riskReason },
+        });
+    }
     return Response.json({
       title,
       description,
       ...visual,
+      riskLevel,
+      riskReason,
       source: "gemini",
     });
   } catch (error) {

@@ -17,6 +17,27 @@ export const users = sqliteTable("users", {
   lastSeenAt: text("last_seen_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const listingBatches = sqliteTable(
+  "listing_batches",
+  {
+    id: text("id").primaryKey(),
+    publicId: text("public_id").notNull(),
+    ownerEmail: text("owner_email")
+      .notNull()
+      .references(() => users.email),
+    title: text("title").notNull(),
+    place: text("place").notNull(),
+    latitude: integer("latitude"),
+    longitude: integer("longitude"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("listing_batches_public_id_idx").on(table.publicId),
+    index("listing_batches_owner_idx").on(table.ownerEmail, table.createdAt),
+  ],
+);
+
 export const listings = sqliteTable(
   "listings",
   {
@@ -36,13 +57,33 @@ export const listings = sqliteTable(
     icon: text("icon").notNull().default("📦"),
     tone: text("tone").notNull().default("sage"),
     imageKey: text("image_key"),
+    batchId: text("batch_id").references(() => listingBatches.id),
+    batchPosition: integer("batch_position"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [
     index("listings_status_created_idx").on(table.status, table.createdAt),
     index("listings_owner_idx").on(table.ownerEmail, table.createdAt),
+    index("listings_batch_idx").on(table.batchId, table.batchPosition),
   ],
+);
+
+export const listingAnalyses = sqliteTable(
+  "listing_analyses",
+  {
+    imageKey: text("image_key").primaryKey(),
+    ownerEmail: text("owner_email")
+      .notNull()
+      .references(() => users.email),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    category: text("category").notNull(),
+    riskLevel: text("risk_level").notNull().default("review"),
+    riskReason: text("risk_reason").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("listing_analyses_owner_idx").on(table.ownerEmail, table.createdAt)],
 );
 
 export const favorites = sqliteTable(

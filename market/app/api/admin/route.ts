@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { listings, moderationLog, users } from "../../../db/schema";
 import {
@@ -12,7 +12,7 @@ export async function PATCH(request: Request) {
   if (!admin) return Response.json({ error: "没有管理员权限。" }, { status: 403 });
 
   const payload = (await request.json()) as {
-    targetType?: "listing" | "user";
+    targetType?: "listing" | "user" | "batch";
     targetId?: string;
     action?: string;
   };
@@ -30,6 +30,17 @@ export async function PATCH(request: Request) {
       .where(eq(listings.id, payload.targetId))
       .returning({ id: listings.id });
     updated = Boolean(rows[0]);
+  } else if (
+    payload.targetType === "batch" &&
+    payload.targetId &&
+    payload.action === "active"
+  ) {
+    const rows = await db
+      .update(listings)
+      .set({ status: "active", updatedAt: new Date().toISOString() })
+      .where(and(eq(listings.batchId, payload.targetId), eq(listings.status, "pending")))
+      .returning({ id: listings.id });
+    updated = rows.length > 0;
   } else if (
     payload.targetType === "user" &&
     payload.targetId &&
