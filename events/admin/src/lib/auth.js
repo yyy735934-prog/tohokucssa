@@ -15,6 +15,7 @@ export const auth = reactive({
   role: stored.role || '',
   is_super: !!stored.is_super,
   display_name: stored.display_name || '',
+  login_method: stored.login_method || '',
 
   save(data) {
     this.token = data.token
@@ -22,9 +23,10 @@ export const auth = reactive({
     this.role = data.role
     this.is_super = !!data.is_super
     this.display_name = data.display_name || ''
+    this.login_method = data.login_method || ''
     const payload = JSON.stringify({
       token: this.token, email: this.email, role: this.role,
-      is_super: this.is_super, display_name: this.display_name
+      is_super: this.is_super, display_name: this.display_name, login_method: this.login_method
     })
     localStorage.setItem(ADMIN_KEY, payload)
     localStorage.setItem(PUB_KEY, payload)
@@ -36,6 +38,7 @@ export const auth = reactive({
     this.role = ''
     this.is_super = false
     this.display_name = ''
+    this.login_method = ''
     localStorage.removeItem(ADMIN_KEY)
     localStorage.removeItem(PUB_KEY)
   },
@@ -46,6 +49,7 @@ export const auth = reactive({
     this.role = data.role || ''
     this.is_super = !!data.is_super
     this.display_name = data.display_name || ''
+    this.login_method = data.login_method || ''
   },
 
   get isLoggedIn() { return !!this.token },

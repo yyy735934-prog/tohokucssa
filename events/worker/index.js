@@ -7,6 +7,8 @@ import { users } from './routes/users.js'
 import { participant } from './routes/participant.js'
 import { notifications } from './routes/notifications.js'
 import { images } from './routes/images.js'
+import { gatherings } from './routes/gatherings.js'
+import { gatheringTemplates } from './routes/gathering-templates.js'
 
 const app = new Hono()
 
@@ -14,7 +16,8 @@ app.use('/api/*', cors())
 
 app.onError((err, c) => {
   const msg = err.message || '服务器错误'
-  const status = msg === '未登录' ? 401 : msg.includes('仅') ? 403 : 500
+  const status = err.status || (msg === '未登录' ? 401 : msg.includes('仅') ? 403 : 500)
+  if (status >= 500) console.error(JSON.stringify({ message: 'request failed', error: msg, path: c.req.path }))
   return c.json({ ok: false, message: msg }, status)
 })
 
@@ -25,6 +28,8 @@ app.route('/api/users', users)
 app.route('/api/participant', participant)
 app.route('/api/notifications', notifications)
 app.route('/api/images', images)
+app.route('/api/gatherings', gatherings)
+app.route('/api/gathering-templates', gatheringTemplates)
 
 app.all('/api/*', (c) => c.json({ ok: false, message: 'Not Found' }, 404))
 
@@ -86,6 +91,6 @@ import { handleScheduled } from './cron.js'
 export default {
   fetch: app.fetch,
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(handleScheduled(env))
+    ctx.waitUntil(handleScheduled(env, event.scheduledTime))
   },
 }

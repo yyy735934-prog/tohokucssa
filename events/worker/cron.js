@@ -1,11 +1,19 @@
 import { sendEmail, eventReminderEmail } from './lib/email.js'
 import { audit } from './lib/audit.js'
+import { runGatheringAutomation, jstParts } from './lib/gatherings.js'
 
 const ORIGIN = 'https://events.tohokucssa.org'
 
-export async function handleScheduled(env) {
-  await closeExpiredEvents(env)
-  await sendEventReminders(env)
+export async function handleScheduled(env, scheduledTime = Date.now()) {
+  await runGatheringAutomation(env, scheduledTime)
+
+  // The worker now runs frequently so templates can use custom times.
+  // Preserve the original daily jobs at 09:00 JST only.
+  const currentJst = jstParts(scheduledTime)
+  if (currentJst.hour === 9 && currentJst.minute === 0) {
+    await closeExpiredEvents(env)
+    await sendEventReminders(env)
+  }
 }
 
 async function closeExpiredEvents(env) {
@@ -14,11 +22,19 @@ async function closeExpiredEvents(env) {
   const todayStr = jstNow.toISOString().slice(0, 10)
 
   const expired = await env.DB.prepare(
-    "SELECT id, title, event_date FROM events WHERE status IN ('open', 'active') AND event_date < ?"
+    "SELECT id, title, event_date, event_mode FROM events WHERE status IN ('open', 'active') AND event_date < ?"
   ).bind(todayStr).all()
 
   for (const e of expired.results) {
-    await env.DB.prepare('UPDATE events SET status = ? WHERE id = ?').bind('closed', e.id).run()
+    const statements = [env.DB.prepare(
+      "UPDATE events SET status = 'closed', gathering_state = CASE WHEN event_mode = 'gathering' THEN 'completed' ELSE gathering_state END WHERE id = ?"
+    ).bind(e.id)]
+    if (e.event_mode === 'gathering') {
+      statements.push(env.DB.prepare(
+        "UPDATE signups SET attendance_status = 'no_show' WHERE event_id = ? AND signup_status IN ('joined', 'ride_assigned') AND checked_in = 0"
+      ).bind(e.id))
+    }
+    await env.DB.batch(statements)
     await audit(env.DB, 'auto_close', 'event', e.id, `活动「${e.title}」已过期，自动关闭`, 'system')
     console.log(`[cron] Auto-closed expired event: "${e.title}" (${e.event_date})`)
   }
@@ -45,8 +61,10 @@ async function sendEventReminders(env) {
 
   for (const event of events.results) {
     const signups = await env.DB.prepare(
-      'SELECT name, email, phone, data, token FROM signups WHERE event_id = ?'
-    ).bind(event.id).all()
+      `SELECT name, email, phone, data, token FROM signups
+       WHERE event_id = ?
+         AND (COALESCE(?, 'standard') != 'gathering' OR signup_status IN ('joined', 'ride_assigned'))`
+    ).bind(event.id, event.event_mode).all()
 
     console.log(`[cron] Event "${event.title}" (${tomorrowStr}): ${signups.results.length} participants`)
 

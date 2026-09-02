@@ -153,6 +153,29 @@
       </div>
     </div>
 
+    <!-- Gathering history -->
+    <div v-if="auth.isLoggedIn && myGatherings.length" class="section">
+      <h2 class="section-title">我的组局</h2>
+      <div class="event-list">
+        <div v-for="g in myGatherings" :key="'g-'+g.signup_id" class="card event-item">
+          <div class="head">
+            <h3>{{ g.title }}</h3>
+            <span class="badge">{{ gatheringStateLabel(g.gathering_state) }}</span>
+          </div>
+          <div class="info">{{ g.event_date }}<span v-if="g.location"> · {{ g.location }}</span></div>
+          <div class="status-row">
+            <span class="badge" :class="g.signup_status === 'ride_assigned' || g.signup_status === 'joined' ? 'badge-open' : ''">
+              {{ gatheringSignupLabel(g.signup_status) }}
+            </span>
+            <span v-if="g.attendance_status === 'attended'" class="badge badge-open">已签到</span>
+            <span v-else-if="g.attendance_status === 'no_show'" class="badge" style="color:var(--c-danger)">未到场</span>
+          </div>
+          <div v-if="g.signup_status === 'ride_assigned'" class="info">司机：{{ g.driver_name }}<span v-if="g.driver_vehicle_note"> · {{ g.driver_vehicle_note }}</span></div>
+          <div class="actions"><router-link :to="`/g/${g.id}`" class="btn btn-outline btn-sm">查看组局</router-link></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Signup history section -->
     <div class="section">
       <h2 class="section-title">参加的活动</h2>
@@ -254,6 +277,7 @@ const email = ref('')
 const savedEmail = ref('')
 const signups = ref([])
 const createdEvents = ref([])
+const myGatherings = ref([])
 const loading = ref(false)
 const searched = ref(false)
 const cancelling = ref(false)
@@ -298,12 +322,14 @@ function statusLabel(s) {
 function loadForCurrentUser() {
   signups.value = []
   createdEvents.value = []
+  myGatherings.value = []
   searched.value = false
   if (auth.isLoggedIn) {
     email.value = auth.email
     savedEmail.value = auth.email
     searchSignups()
     loadCreatedEvents()
+    loadMyGatherings()
     syncPendingRequests()
     loadProfile()
   } else {
@@ -382,6 +408,21 @@ async function loadCreatedEvents() {
   } catch { createdEvents.value = [] }
 }
 
+async function loadMyGatherings() {
+  try {
+    const data = await api.myGatherings()
+    myGatherings.value = data.gatherings || []
+  } catch { myGatherings.value = [] }
+}
+
+function gatheringStateLabel(value) {
+  return { recruiting: '组局中', arrangement_pending: '待确认安排', confirmed: '已成局', in_progress: '进行中', completed: '已结束', cancelled: '已取消' }[value] || value
+}
+
+function gatheringSignupLabel(value) {
+  return { joined: '已确认参加', ride_pending: '乘车候补中', ride_assigned: '已安排乘车', general_waitlist: '人数候补中', cancelled: '已退出' }[value] || value
+}
+
 function clearSaved() {
   localStorage.removeItem('user_email')
   localStorage.removeItem('user_name')
@@ -399,6 +440,7 @@ function logout() {
   email.value = ''
   signups.value = []
   createdEvents.value = []
+  myGatherings.value = []
   searched.value = false
 }
 

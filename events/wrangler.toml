@@ -25,9 +25,10 @@ binding = "AI"
 pattern = "events.tohokucssa.org"
 custom_domain = true
 
-# Cron: daily 9am JST (0:00 UTC) — send event reminders + check-in codes
+# Cron: every 15 minutes. Business rules use JST and template-specific times.
+# The original reminder/close jobs still run once daily at 09:00 JST.
 [triggers]
-crons = ["0 0 * * *"]
+crons = ["*/15 * * * *"]
 
 [[r2_buckets]]
 binding = "IMAGES"

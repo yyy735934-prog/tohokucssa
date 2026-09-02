@@ -288,6 +288,73 @@ export function inviteSignupEmail(event, signupUrl) {
   }
 }
 
+export function gatheringNeedsArrangementEmail(event, recipientName, dueText, adminTakeover = false) {
+  return {
+    subject: `${adminTakeover ? '请接管组局安排' : '组局已达标，请确认安排'} — ${event.title}`,
+    html: baseHtml('组局安排待确认', `
+      <h1>${adminTakeover ? '请管理员确认最终安排' : '人数已达标!'}</h1>
+      <p class="sub">${esc(recipientName || '')}，「${esc(event.title)}」已经达到最低成局人数</p>
+      <dl class="info">
+        <dt>活动</dt><dd>${esc(event.title)}</dd>
+        <dt>暂定时间</dt><dd>${esc(event.event_date)}</dd>
+        ${event.location ? `<dt>区域/地点</dt><dd>${esc(event.location)}</dd>` : ''}
+        ${dueText ? `<dt>确认截止</dt><dd>${esc(dueText)}</dd>` : ''}
+      </dl>
+      <p style="margin-top:16px"><a href="https://events.tohokucssa.org/admin/events/${event.id}" class="btn">确认最终安排</a></p>
+    `),
+  }
+}
+
+export function gatheringFinalizedEmail(event, signup) {
+  return {
+    subject: `组局成功 — ${event.title}`,
+    html: baseHtml('组局成功', `
+      <h1 class="success">最终安排已确认!</h1>
+      <p class="sub">${esc(signup.name)}，你参加的组局已经确认</p>
+      <dl class="info">
+        <dt>活动</dt><dd>${esc(event.title)}</dd>
+        <dt>时间</dt><dd>${esc(event.event_date)}</dd>
+        ${event.location ? `<dt>地点</dt><dd>${esc(event.location)}</dd>` : ''}
+        ${event.notes ? `<dt>说明</dt><dd>${esc(event.notes)}</dd>` : ''}
+      </dl>
+      <p style="margin-top:16px"><a href="https://events.tohokucssa.org/g/${event.id}" class="btn">查看组局详情</a></p>
+    `),
+  }
+}
+
+export function gatheringCancelledEmail(event, signup, reason) {
+  return {
+    subject: `组局取消 — ${event.title}`,
+    html: baseHtml('组局取消', `
+      <h1>本次活动未能成局</h1>
+      <p class="sub">${esc(signup.name)}，很遗憾，本次组局已取消</p>
+      <dl class="info">
+        <dt>活动</dt><dd>${esc(event.title)}</dd>
+        <dt>原定时间</dt><dd>${esc(event.event_date)}</dd>
+        ${reason ? `<dt>原因</dt><dd>${esc(reason)}</dd>` : ''}
+      </dl>
+      <p style="font-size:14px;color:#8e8e93">本次取消不会计入个人的取消或缺席记录。</p>
+    `),
+  }
+}
+
+export function gatheringCarpoolAssignedEmail(event, passenger, driver) {
+  return {
+    subject: `乘车已安排 — ${event.title}`,
+    html: baseHtml('乘车安排', `
+      <h1 class="success">已为你安排乘车</h1>
+      <p class="sub">${esc(passenger.name)}，你的乘车候补已转为确认参加</p>
+      <dl class="info">
+        <dt>活动</dt><dd>${esc(event.title)}</dd>
+        <dt>司机</dt><dd>${esc(driver.name)}</dd>
+        ${driver.vehicle_note ? `<dt>车辆说明</dt><dd>${esc(driver.vehicle_note)}</dd>` : ''}
+        ${driver.phone ? `<dt>司机电话</dt><dd>${esc(driver.phone)}</dd>` : ''}
+      </dl>
+      <p style="font-size:14px;color:#8e8e93">请仅将联系方式用于本次活动的集合与乘车沟通。</p>
+    `),
+  }
+}
+
 function signupInfoBlock(signup) {
   let html = `<dt>姓名</dt><dd>${esc(signup.name)}</dd>`
   html += `<dt>邮箱</dt><dd>${esc(signup.email)}</dd>`

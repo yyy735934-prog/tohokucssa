@@ -18,7 +18,7 @@ participant.get('/my-events', async (c) => {
     `SELECT s.id as signup_id, s.name, s.email, s.phone, s.data, s.checked_in, s.checked_in_at, s.token, s.created_at as signup_at,
             e.id as event_id, e.title, e.event_date, e.location, e.status, e.custom_fields
      FROM signups s JOIN events e ON e.id = s.event_id
-     WHERE s.email = ?
+     WHERE s.email = ? AND COALESCE(e.event_mode, 'standard') = 'standard'
      ORDER BY e.event_date DESC`
   ).bind(email).all()
 

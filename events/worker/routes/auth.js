@@ -126,8 +126,10 @@ auth.get('/google', async (c) => {
   const origin = new URL(c.req.url).origin
   const redirectUri = `${origin}/api/auth/google/callback`
   const from = c.req.query('from') || 'admin'
+  const requestedReturnTo = c.req.query('return_to') || ''
+  const returnTo = requestedReturnTo.startsWith('/') && !requestedReturnTo.startsWith('//') ? requestedReturnTo : ''
   const state = crypto.randomUUID()
-  await c.env.SESSIONS.put(`oauth:${state}`, from, { expirationTtl: 600 })
+  await c.env.SESSIONS.put(`oauth:${state}`, JSON.stringify({ from, returnTo }), { expirationTtl: 600 })
 
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -145,11 +147,19 @@ auth.get('/google/callback', async (c) => {
   const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = c.env
   const { code, state, error } = c.req.query()
 
-  if (error) return c.redirect('/admin/login?error=google_denied')
-
-  const from = await c.env.SESSIONS.get(`oauth:${state}`)
-  if (!from) return c.redirect('/admin/login?error=invalid_state')
+  const oauthState = await c.env.SESSIONS.get(`oauth:${state}`)
+  if (!oauthState) return c.redirect('/?error=invalid_state')
   await c.env.SESSIONS.delete(`oauth:${state}`)
+  let from = oauthState
+  let returnTo = ''
+  try {
+    const parsed = JSON.parse(oauthState)
+    from = parsed.from || 'admin'
+    returnTo = typeof parsed.returnTo === 'string' && parsed.returnTo.startsWith('/') && !parsed.returnTo.startsWith('//') ? parsed.returnTo : ''
+  } catch {}
+  const errorPage = from === 'admin' ? '/admin/login' : (returnTo || '/')
+  const errorSeparator = errorPage.includes('?') ? '&' : '?'
+  if (error) return c.redirect(`${errorPage}${errorSeparator}error=google_denied`)
 
   const origin = new URL(c.req.url).origin
   const redirectUri = `${origin}/api/auth/google/callback`
@@ -162,14 +172,13 @@ auth.get('/google/callback', async (c) => {
       redirect_uri: redirectUri, grant_type: 'authorization_code',
     }),
   })
-  const errorPage = from === 'admin' ? '/admin/login' : '/'
-  if (!tokenRes.ok) return c.redirect(`${errorPage}?error=token_failed`)
+  if (!tokenRes.ok) return c.redirect(`${errorPage}${errorSeparator}error=token_failed`)
   const tokens = await tokenRes.json()
 
   const infoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
     headers: { authorization: `Bearer ${tokens.access_token}` },
   })
-  if (!infoRes.ok) return c.redirect(`${errorPage}?error=userinfo_failed`)
+  if (!infoRes.ok) return c.redirect(`${errorPage}${errorSeparator}error=userinfo_failed`)
   const profile = await infoRes.json()
 
   const email = (profile.email || '').toLowerCase()
@@ -178,18 +187,31 @@ auth.get('/google/callback', async (c) => {
 
   if (!user) {
     const displayName = profile.name || email.split('@')[0]
-    const initialPassword = email.split('@')[0]
-    const hash = await hashPassword(initialPassword)
     const res = await c.env.DB.prepare(
-      'INSERT INTO admin_users (email, password_hash, role, display_name) VALUES (?, ?, ?, ?)'
-    ).bind(email, hash, 'user', displayName).run()
-    user = { id: res.meta.last_row_id, email, role: 'user', display_name: displayName, is_super: 0 }
+      'INSERT INTO admin_users (email, password_hash, role, display_name, google_linked) VALUES (?, ?, ?, ?, 1)'
+    ).bind(email, '', 'user', displayName).run()
+    user = { id: res.meta.last_row_id, email, role: 'user', display_name: displayName, is_super: 0, google_linked: 1 }
     isNew = true
+  } else {
+    // Legacy Google-created ordinary accounts received a predictable local password.
+    // Clear it when the owner next proves control through Google OAuth.
+    if (user.role === 'user' && !user.google_linked) {
+      await c.env.DB.prepare('UPDATE admin_users SET password_hash = ?, google_linked = 1 WHERE id = ?')
+        .bind('', user.id).run()
+      user.password_hash = ''
+    } else if (!user.google_linked) {
+      await c.env.DB.prepare('UPDATE admin_users SET google_linked = 1 WHERE id = ?').bind(user.id).run()
+    }
+    user.google_linked = 1
   }
 
-  const sessionToken = await createSession(c.env.SESSIONS, user)
-  const params = `google_token=${sessionToken}&email=${encodeURIComponent(user.email)}&role=${user.role}&is_super=${user.is_super ? 1 : 0}&display_name=${encodeURIComponent(user.display_name || '')}`
+  const sessionToken = await createSession(c.env.SESSIONS, user, 'google')
+  const params = `google_token=${sessionToken}&email=${encodeURIComponent(user.email)}&role=${user.role}&is_super=${user.is_super ? 1 : 0}&display_name=${encodeURIComponent(user.display_name || '')}&login_method=google`
 
+  if (returnTo) {
+    const separator = returnTo.includes('?') ? '&' : '?'
+    return c.redirect(`${returnTo}${separator}${params}`)
+  }
   if (from === 'admin') {
     return c.redirect(`/admin/login?${params}&new=${isNew ? 1 : 0}`)
   }

@@ -41,6 +41,7 @@ export const api = {
   getEvent: (id) => request('GET', `/events/${id}`),
   createEvent: (data) => request('POST', '/events', data),
   updateEvent: (id, data) => request('PATCH', `/events/${id}`, data),
+  setSignupLock: (id, locked) => request('POST', `/events/${id}/signup-lock`, { locked }),
   deleteEvent: (id) => request('DELETE', `/events/${id}`),
   submitEvent: (id) => request('POST', `/events/${id}/submit`),
   approveEvent: (id) => request('POST', `/events/${id}/approve`),
@@ -111,4 +112,20 @@ export const api = {
     if (!res.ok || data.ok === false) throw new Error(data.message || '上传失败')
     return data
   },
+
+  listGatheringTemplates: () => request('GET', '/gathering-templates'),
+  listGatheringJobs: (limit = 30) => request('GET', `/gathering-templates/jobs?limit=${limit}`),
+  createGatheringTemplate: (data) => request('POST', '/gathering-templates', data),
+  updateGatheringTemplate: (id, data) => request('PATCH', `/gathering-templates/${id}`, data),
+  approveGatheringTemplate: (id) => request('POST', `/gathering-templates/${id}/approve`),
+  publishGatheringNow: (id) => request('POST', `/gathering-templates/${id}/publish-now`),
+  pauseGatheringTemplate: (id) => request('POST', `/gathering-templates/${id}/pause`),
+  getGatheringManage: (id) => request('GET', `/gatherings/${id}/manage`),
+  finalizeGathering: (id, data) => request('POST', `/gatherings/${id}/finalize`, data),
+  assignCarpool: (id, passenger_signup_id, driver_signup_id) => request('POST', `/gatherings/${id}/carpool/assign`, { passenger_signup_id, driver_signup_id }),
+  unassignCarpool: (id, passenger_signup_id) => request('POST', `/gatherings/${id}/carpool/unassign`, { passenger_signup_id }),
+  cancelGatheringEvent: (id, reason) => request('POST', `/gatherings/${id}/cancel-event`, { reason }),
+  startGathering: (id) => request('POST', `/gatherings/${id}/start`),
+  completeGathering: (id) => request('POST', `/gatherings/${id}/complete`),
+  updateGatheringAttendance: (id, signup_id, attendance_status) => request('POST', `/gatherings/${id}/attendance`, { signup_id, attendance_status }),
 }

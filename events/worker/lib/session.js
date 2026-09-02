@@ -1,8 +1,15 @@
 const TTL = 7 * 24 * 3600
 
-export async function createSession(kv, user) {
+export async function createSession(kv, user, loginMethod = 'password') {
   const token = crypto.randomUUID()
-  await kv.put(`session:${token}`, JSON.stringify({ id: user.id, email: user.email, role: user.role, display_name: user.display_name || '', is_super: !!user.is_super }), { expirationTtl: TTL })
+  await kv.put(`session:${token}`, JSON.stringify({
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    display_name: user.display_name || '',
+    is_super: !!user.is_super,
+    login_method: loginMethod,
+  }), { expirationTtl: TTL })
   return token
 }
 
@@ -12,7 +19,7 @@ export async function getSession(kv, token, db) {
   if (!raw) return null
   const session = JSON.parse(raw)
   if (db) {
-    const user = await db.prepare('SELECT id, role, display_name, is_super FROM admin_users WHERE id = ?').bind(session.id).first()
+    const user = await db.prepare('SELECT id, role, display_name, is_super, google_linked FROM admin_users WHERE id = ?').bind(session.id).first()
     if (!user) {
       await kv.delete(`session:${token}`)
       return null
@@ -23,6 +30,7 @@ export async function getSession(kv, token, db) {
       session.is_super = !!user.is_super
       await kv.put(`session:${token}`, JSON.stringify(session), { expirationTtl: TTL })
     }
+    session.google_linked = !!user.google_linked
   }
   return session
 }
