@@ -32,10 +32,9 @@ export async function sendMemberNotification(userEmail: string, subject: string,
       from: { email: from, name: "东北集市" },
       subject,
       text,
-      html: `<div style="font-family:system-ui,sans-serif;line-height:1.7;color:#18382e"><h2>${escapeEmailHtml(subject)}</h2><p>${escapeEmailHtml(text).replaceAll("\n", "<br>")}</p><p><a href="https://tohoku-market.2ndplatform.workers.dev/account">前往个人中心</a></p></div>`,
+      html: `<div style="font-family:system-ui,sans-serif;line-height:1.7;color:#18382e"><h2>${escapeEmailHtml(subject)}</h2><p>${escapeEmailHtml(text).replaceAll("\n", "<br>")}</p><p><a href="https://market.tohokucssa.org/account">前往个人中心</a></p></div>`,
     });
   } catch (error) {
     console.error(JSON.stringify({ event: "member_notification_failed", error: error instanceof Error ? error.message.slice(0, 160) : "unknown" }));
   }
 }
-
