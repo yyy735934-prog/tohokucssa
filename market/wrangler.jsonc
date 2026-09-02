@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "tohoku-market",
+  "account_id": "2bc255aa48bd3bd1e9b4d6ae1dbbea2f",
   "main": "./dist/server/index.js",
   "compatibility_date": "2026-08-18",
   "compatibility_flags": ["nodejs_compat"],
@@ -18,10 +19,17 @@
     "directory": "./dist/client",
     "binding": "ASSETS"
   },
+  "routes": [
+    {
+      "pattern": "market.tohokucssa.org",
+      "custom_domain": true
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "tohoku-market-db",
+      "database_id": "9b6c4a99-2b83-4efd-81ed-955838116fb3",
       "migrations_dir": "./drizzle"
     }
   ],
@@ -34,11 +42,13 @@
   "send_email": [
     {
       "name": "EMAIL",
-      "remote": true
+      "remote": true,
+      "allowed_sender_addresses": ["noreply@tohokucssa.org"]
     }
   ],
   "vars": {
-    "ADMIN_EMAILS": "ding.junzhong.p4@dc.tohoku.ac.jp"
+    "ADMIN_EMAILS": "ding.junzhong.p4@dc.tohoku.ac.jp",
+    "EMAIL_FROM": "noreply@tohokucssa.org"
   },
   "secrets": {
     "required": ["GEMINI_API_KEY", "SESSION_SECRET"]
