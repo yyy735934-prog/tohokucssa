@@ -39,19 +39,12 @@
       "bucket_name": "tohoku-market-uploads"
     }
   ],
-  "send_email": [
-    {
-      "name": "EMAIL",
-      "remote": true,
-      "allowed_sender_addresses": ["noreply@tohokucssa.org"]
-    }
-  ],
   "vars": {
     "ADMIN_EMAILS": "ding.junzhong.p4@dc.tohoku.ac.jp",
     "EMAIL_FROM": "noreply@tohokucssa.org"
   },
   "secrets": {
-    "required": ["GEMINI_API_KEY", "SESSION_SECRET"]
+    "required": ["GEMINI_API_KEY", "SESSION_SECRET", "RESEND_API_KEY"]
   },
   "observability": {
     "enabled": true,

@@ -9,21 +9,15 @@ import {
   isValidLoginEmail,
   normalizeLoginEmail,
 } from "../../../../../lib/email-auth";
+import {
+  outboundEmailRuntime,
+  sendOutboundEmail,
+} from "../../../../../lib/outbound-email";
 
 const CODE_LIFETIME_MS = 10 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const IP_WINDOW_MS = 10 * 60 * 1000;
 const MAX_IP_REQUESTS = 8;
-
-type EmailBinding = {
-  send(message: {
-    to: string;
-    from: { email: string; name: string };
-    subject: string;
-    text: string;
-    html: string;
-  }): Promise<{ messageId: string }>;
-};
 
 export async function POST(request: Request) {
   if (!isSameOriginRequest(request)) {
@@ -40,12 +34,10 @@ export async function POST(request: Request) {
 
   const { env } = await import("cloudflare:workers");
   const runtimeEnv = env as unknown as {
-    EMAIL?: EmailBinding;
-    EMAIL_FROM?: string;
     SESSION_SECRET?: string;
   };
-  const from = runtimeEnv.EMAIL_FROM?.trim().toLowerCase();
-  if (!runtimeEnv.EMAIL || !from || !isValidLoginEmail(from)) {
+  const emailRuntime = await outboundEmailRuntime();
+  if (!emailRuntime.enabled) {
     return Response.json(
       { error: "邮箱验证码登录正在配置中，请暂时使用 Google 登录。" },
       { status: 503 },
@@ -120,9 +112,9 @@ export async function POST(request: Request) {
     });
 
   try {
-    await runtimeEnv.EMAIL.send({
+    await sendOutboundEmail(emailRuntime, {
       to: email,
-      from: { email: from, name: "东北集市" },
+      from: { email: emailRuntime.from, name: "东北集市" },
       subject: `${code}｜东北集市登录验证码`,
       text: `你的东北集市登录验证码是：${code}\n\n验证码 10 分钟内有效，仅可使用一次。如果不是你本人操作，请忽略本邮件。`,
       html: `<div style="font-family:system-ui,sans-serif;line-height:1.7;color:#18382e"><h2>东北集市登录验证码</h2><p>你的验证码是：</p><p style="font-size:30px;font-weight:800;letter-spacing:8px">${code}</p><p>验证码 10 分钟内有效，仅可使用一次。</p><p style="color:#718078">如果不是你本人操作，请忽略本邮件。</p></div>`,

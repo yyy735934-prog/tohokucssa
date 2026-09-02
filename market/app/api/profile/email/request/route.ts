@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "请输入不同于当前收件邮箱的新地址。" }, { status: 400 });
   }
   const runtime = await verificationEmailRuntime();
-  if (!runtime.email || !runtime.from || !runtime.secret) return Response.json({ error: "邮件验证服务暂不可用。" }, { status: 503 });
+  if (!runtime.enabled || !runtime.secret) return Response.json({ error: "邮件验证服务暂不可用。" }, { status: 503 });
   const now = Date.now();
   const [existing] = await db.select({ lastSentAt: emailChangeChallenges.lastSentAt }).from(emailChangeChallenges).where(eq(emailChangeChallenges.userEmail, member.email)).limit(1);
   if (existing && now - existing.lastSentAt < VERIFICATION_RESEND_COOLDOWN_MS) {
@@ -43,11 +43,10 @@ export async function POST(request: Request) {
   const codeHash = await hashEmailLoginCode(runtime.secret, `notification:${member.email}:${newEmail}`, code);
   await db.insert(emailChangeChallenges).values({ userEmail: member.email, newEmail, codeHash, expiresAt: now + VERIFICATION_CODE_LIFETIME_MS, attempts: 0, lastSentAt: now }).onConflictDoUpdate({ target: emailChangeChallenges.userEmail, set: { newEmail, codeHash, expiresAt: now + VERIFICATION_CODE_LIFETIME_MS, attempts: 0, lastSentAt: now } });
   try {
-    await sendVerificationCode(runtime.email, runtime.from, newEmail, code, "notification");
+    await sendVerificationCode(runtime, newEmail, code, "notification");
   } catch {
     await db.delete(emailChangeChallenges).where(eq(emailChangeChallenges.userEmail, member.email));
     return Response.json({ error: "验证码发送失败，请稍后重试。" }, { status: 502 });
   }
   return Response.json({ ok: true, message: "验证码已发送，请检查新邮箱。" });
 }
-

@@ -17,15 +17,14 @@ export async function POST(request: Request) {
   const [claimed] = await db.select({ email: users.email }).from(users).where(or(eq(users.email, academicEmail), eq(users.academicEmail, academicEmail))).limit(1);
   if (claimed && claimed.email !== member.email) return Response.json({ error: "该学术邮箱已被其他账号使用。" }, { status: 409 });
   const runtime = await verificationEmailRuntime();
-  if (!runtime.email || !runtime.from || !runtime.secret) return Response.json({ error: "邮件验证服务暂不可用。" }, { status: 503 });
+  if (!runtime.enabled || !runtime.secret) return Response.json({ error: "邮件验证服务暂不可用。" }, { status: 503 });
   const now = Date.now();
   const [existing] = await db.select({ lastSentAt: academicEmailChallenges.lastSentAt }).from(academicEmailChallenges).where(eq(academicEmailChallenges.userEmail, member.email)).limit(1);
   if (existing && now - existing.lastSentAt < VERIFICATION_RESEND_COOLDOWN_MS) return Response.json({ ok: true, message: "验证码已发送，请检查学术邮箱。" });
   const code = createEmailLoginCode();
   const codeHash = await hashEmailLoginCode(runtime.secret, `academic:${member.email}:${academicEmail}`, code);
   await db.insert(academicEmailChallenges).values({ userEmail: member.email, academicEmail, codeHash, expiresAt: now + VERIFICATION_CODE_LIFETIME_MS, attempts: 0, lastSentAt: now }).onConflictDoUpdate({ target: academicEmailChallenges.userEmail, set: { academicEmail, codeHash, expiresAt: now + VERIFICATION_CODE_LIFETIME_MS, attempts: 0, lastSentAt: now } });
-  try { await sendVerificationCode(runtime.email, runtime.from, academicEmail, code, "academic"); }
+  try { await sendVerificationCode(runtime, academicEmail, code, "academic"); }
   catch { await db.delete(academicEmailChallenges).where(eq(academicEmailChallenges.userEmail, member.email)); return Response.json({ error: "验证码发送失败，请稍后重试。" }, { status: 502 }); }
   return Response.json({ ok: true, message: "验证码已发送，请检查学术邮箱。" });
 }
-

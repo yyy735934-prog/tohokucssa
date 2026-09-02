@@ -24,9 +24,13 @@ export default async function SignInPage({
   const runtimeEnv = env as unknown as {
     EMAIL?: unknown;
     EMAIL_FROM?: string;
+    RESEND_API_KEY?: string;
     GOOGLE_CLIENT_ID?: string;
   };
-  const emailEnabled = Boolean(runtimeEnv.EMAIL && runtimeEnv.EMAIL_FROM?.trim());
+  const emailEnabled = Boolean(
+    (runtimeEnv.EMAIL || runtimeEnv.RESEND_API_KEY?.trim()) &&
+      runtimeEnv.EMAIL_FROM?.trim(),
+  );
   const googleEnabled = Boolean(runtimeEnv.GOOGLE_CLIENT_ID?.trim());
 
   return (
