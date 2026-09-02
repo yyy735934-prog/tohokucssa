@@ -41,7 +41,7 @@
   ],
   "vars": {
     "ADMIN_EMAILS": "ding.junzhong.p4@dc.tohoku.ac.jp",
-    "EMAIL_FROM": "noreply@tohokucssa.org"
+    "EMAIL_FROM": "noreply@market-mail.tohokucssa.org"
   },
   "secrets": {
     "required": ["GEMINI_API_KEY", "SESSION_SECRET", "RESEND_API_KEY"]
