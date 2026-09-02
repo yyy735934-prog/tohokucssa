@@ -44,7 +44,13 @@
     "EMAIL_FROM": "noreply@market-mail.tohokucssa.org"
   },
   "secrets": {
-    "required": ["GEMINI_API_KEY", "SESSION_SECRET", "RESEND_API_KEY"]
+    "required": [
+      "GEMINI_API_KEY",
+      "SESSION_SECRET",
+      "RESEND_API_KEY",
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET"
+    ]
   },
   "observability": {
     "enabled": true,
