@@ -44,7 +44,7 @@ async function requireManager(c, eventId) {
 gatherings.get('/', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT e.id, e.title, e.event_date, e.location, e.content, e.notes, e.capacity, e.lock_at,
-            e.status, e.image_key, e.gathering_state, e.gathering_category,
+            e.status, e.image_key, e.pinned, e.created_at, e.gathering_state, e.gathering_category,
             e.min_participants, e.formation_deadline, e.arrangement_due_at,
             e.requires_host, e.carpool_enabled, e.cancel_reason,
             u.display_name AS host_name,
