@@ -521,8 +521,14 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
             </section>
             <section className="hero-action sell-action">
               <div className="action-label"><span>＋</span><div><b>我要出闲置</b><small>拍张照片，AI 帮你完成发布</small></div></div>
-              <button className="quick-publish" onClick={openPublisher}><span>▣</span> 拍照发布 <b>→</b></button>
-              <a className="batch-publish-link" href={viewer ? "/batch/new" : "/signin-with-chatgpt?return_to=%2Fbatch%2Fnew"}>多件闲置？批量生成海报 →</a>
+              <div className="sell-publish-actions">
+                <button className="quick-publish" onClick={openPublisher}>
+                  <span>▣</span><span><b>拍照发布</b><small>发布单件物品</small></span>
+                </button>
+                <a className="batch-publish-link" href={viewer ? "/batch/new" : "/signin-with-chatgpt?return_to=%2Fbatch%2Fnew"}>
+                  <span>▦</span><span><b>批量发布</b><small>多件物品并生成海报</small></span>
+                </a>
+              </div>
             </section>
           </div>
           <div className="hero-links"><span>大家在搜</span><button onClick={() => setQuery("自行车")}>自行车</button><button onClick={() => setQuery("电饭煲")}>电饭煲</button><button onClick={() => setCategory("家具")}>家具</button></div>
