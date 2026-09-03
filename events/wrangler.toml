@@ -12,6 +12,8 @@ not_found_handling = "none"
 binding = "DB"
 database_name = "event-platform-db"
 database_id = "68a64b77-9303-4349-b6b5-d4a4c61ef4c3"
+migrations_dir = "migrations"
+migrations_table = "d1_migrations"
 
 [[kv_namespaces]]
 binding = "SESSIONS"
