@@ -166,6 +166,9 @@ export const contactRequests = sqliteTable(
       .notNull()
       .references(() => users.email),
     status: text("status").notNull().default("pending"),
+    buyerNotifiedAt: text("buyer_notified_at"),
+    buyerNotificationAttempts: integer("buyer_notification_attempts").notNull().default(0),
+    buyerNotificationError: text("buyer_notification_error"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },

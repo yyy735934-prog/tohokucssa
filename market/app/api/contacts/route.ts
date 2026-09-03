@@ -4,7 +4,7 @@ import { contactRequests, listings, users } from "../../../db/schema";
 import { getMemberAccess } from "../../../lib/auth";
 import { canUseMarketplace } from "../../../lib/member-status";
 import { sendMemberNotification } from "../../../lib/notification-email";
-import { acceptedContactEmailText, type SellerContact } from "../../../lib/contact-notification";
+import { deliverAcceptedContactEmail, type ContactEmailEnv } from "../../../lib/contact-email-delivery";
 
 type ContactStatus = "pending" | "accepted" | "declined";
 
@@ -139,16 +139,9 @@ export async function PATCH(request: Request) {
   }
 
   const db = await getDb();
-  let sellerContact: SellerContact | null = null;
   if (payload.status === "accepted") {
     const sellerProfiles = await db
-      .select({
-        profileCompleted: users.profileCompleted,
-        phone: users.phone,
-        wechat: users.wechat,
-        qq: users.qq,
-        wechatQrKey: users.wechatQrKey,
-      })
+      .select({ profileCompleted: users.profileCompleted })
       .from(users)
       .where(eq(users.email, member.email))
       .limit(1);
@@ -161,12 +154,6 @@ export async function PATCH(request: Request) {
         { status: 409 },
       );
     }
-    sellerContact = {
-      phone: sellerProfiles[0].phone,
-      wechat: sellerProfiles[0].wechat,
-      qq: sellerProfiles[0].qq,
-      hasWechatQr: Boolean(sellerProfiles[0].wechatQrKey),
-    };
   }
   const [updated] = await db
     .update(contactRequests)
@@ -180,18 +167,26 @@ export async function PATCH(request: Request) {
 
   if (updated) {
     const [listing] = await db.select({ title: listings.title }).from(listings).where(eq(listings.id, updated.listingId)).limit(1);
-    await sendMemberNotification(
-      updated.buyerEmail,
-      payload.status === "accepted" ? "卖家已接受你的联系申请" : "卖家已处理你的联系申请",
-      payload.status === "accepted"
-        ? acceptedContactEmailText(listing?.title ?? "商品", sellerContact!)
-        : `卖家未接受你对“${listing?.title ?? "商品"}”的联系申请。`,
-    );
+    let emailDelivered = true;
+    if (payload.status === "accepted") {
+      const { env } = await import("cloudflare:workers");
+      const delivery = await deliverAcceptedContactEmail(env as unknown as ContactEmailEnv, updated.id);
+      emailDelivered = delivery.delivered;
+    } else {
+      await sendMemberNotification(
+        updated.buyerEmail,
+        "卖家已处理你的联系申请",
+        `卖家未接受你对“${listing?.title ?? "商品"}”的联系申请。`,
+      );
+    }
     return Response.json({
         contact: { id: updated.id, status: updated.status },
         message: payload.status === "accepted"
-          ? "已接受申请，双方现在可以查看联系方式。"
+          ? emailDelivered
+            ? "已接受申请，联系方式已通过邮件通知买家。"
+            : "已接受申请；邮件暂未送出，系统会自动重试，买家也可在个人中心查看联系方式。"
           : "已拒绝联系申请。",
+        emailDelivered,
       });
   }
   return Response.json({ error: "未找到联系申请或没有操作权限。" }, { status: 404 });

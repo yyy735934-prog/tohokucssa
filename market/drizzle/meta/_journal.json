@@ -78,6 +78,13 @@
       "when": 1787650647359,
       "tag": "0010_loud_bastion",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1788404400000,
+      "tag": "0011_contact_email_delivery",
+      "breakpoints": true
     }
   ]
 }

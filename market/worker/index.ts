@@ -2,6 +2,7 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { sendDailyAdminReviewReminder } from "../lib/admin-reminder";
+import { retryAcceptedContactEmails } from "../lib/contact-email-delivery";
 
 interface Env {
   ASSETS: Fetcher;
@@ -17,6 +18,7 @@ interface Env {
   ADMIN_EMAILS?: string;
   EMAIL_FROM?: string;
   RESEND_API_KEY?: string;
+  EMAIL?: import("../lib/outbound-email").EmailBinding;
 }
 
 interface ExecutionContext {
@@ -52,9 +54,11 @@ const worker = {
     env: Env,
     ctx: ExecutionContext,
   ) {
-    ctx.waitUntil(sendDailyAdminReviewReminder(env).catch((error) => {
+    const tasks: Promise<unknown>[] = [retryAcceptedContactEmails(env)];
+    if (_controller.cron === "0 9 * * *") tasks.push(sendDailyAdminReviewReminder(env));
+    ctx.waitUntil(Promise.all(tasks).catch((error) => {
       console.error(JSON.stringify({
-        event: "daily_admin_review_reminder_failed",
+        event: "scheduled_email_task_failed",
         error: error instanceof Error ? error.message.slice(0, 180) : "unknown",
       }));
     }));

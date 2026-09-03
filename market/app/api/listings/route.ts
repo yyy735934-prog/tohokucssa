@@ -2,7 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { listingAnalyses, listings, users } from "../../../db/schema";
 import { getMemberAccess } from "../../../lib/auth";
-import { inferListingIntelligence } from "../../../lib/listing-intelligence";
+import { inferListingIntelligence, isListingCategory } from "../../../lib/listing-intelligence";
 import { listingToMarketItem } from "../../../lib/listings";
 import { publicMemberName } from "../../../lib/public-identity";
 import { canUseMarketplace } from "../../../lib/member-status";
@@ -69,6 +69,7 @@ export async function POST(request: Request) {
       lat?: number;
       lng?: number;
       imageKey?: string | null;
+      category?: string;
     };
     const title = payload.title?.trim() ?? "";
     const description = payload.description?.trim() ?? "";
@@ -106,7 +107,11 @@ export async function POST(request: Request) {
           .where(and(eq(listingAnalyses.imageKey, imageKey), eq(listingAnalyses.ownerEmail, member.email)))
           .limit(1)
       : [];
-    const visual = inferListingIntelligence(title, description);
+    const visual = inferListingIntelligence(
+      title,
+      description,
+      isListingCategory(payload.category) ? payload.category : undefined,
+    );
     const aiRisk: ListingRiskLevel | null = analysis?.riskLevel === "low" ? "low" : analysis ? "review" : null;
     const status = listingPublicationStatus({
       verifiedSeller: member.academicStatus === "verified",

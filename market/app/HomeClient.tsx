@@ -119,6 +119,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
   const [itemTitle, setItemTitle] = useState("");
   const [itemDescription, setItemDescription] = useState("");
   const [itemCategory, setItemCategory] = useState<ListingCategory>("其他");
+  const [categoryManuallySelected, setCategoryManuallySelected] = useState(false);
   const [itemIcon, setItemIcon] = useState("📦");
   const [aiMessage, setAiMessage] = useState("");
   const [pickup, setPickup] = useState("");
@@ -219,6 +220,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
     setItemTitle("");
     setItemDescription("");
     setItemCategory("其他");
+    setCategoryManuallySelected(false);
     setItemIcon("📦");
     setAiMessage("");
     setPickup("");
@@ -293,6 +295,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
           lat: publishLocation?.lat,
           lng: publishLocation?.lng,
           imageKey,
+          category: itemCategory,
         }),
       });
       const result = await readJson<{ error?: string; message?: string; listing?: MarketItem }>(response);
@@ -376,7 +379,11 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
     description: string,
     preferredCategory?: ListingCategory,
   ) => {
-    const visual = inferListingIntelligence(title, description, preferredCategory);
+    const visual = inferListingIntelligence(
+      title,
+      description,
+      preferredCategory ?? (categoryManuallySelected ? itemCategory : undefined),
+    );
     setItemCategory(visual.category);
     setItemIcon(visual.icon);
   };
@@ -389,6 +396,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
     setPhotoName(file?.name ?? "IMG_2026_0723.jpg");
     setPhotoFile(file ?? null);
     setPhotoImageKey(null);
+    setCategoryManuallySelected(false);
     setPublishStep(2);
     setAiLoading(true);
     setAiMessage("");
@@ -649,9 +657,10 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
                 <div className="ai-preview"><span>{itemIcon}</span><small>{photoName}</small><b>{itemCategory} · 自动匹配</b></div>
                 <div className="ai-fields">
                   <div className="ai-badge">{aiMessage || "填写商品名称后，将自动匹配栏目与地图图标"}</div>
-                  <div className="ai-result-meta"><span>{itemIcon}</span><div><b>{itemCategory}</b><small>栏目与地图图标会随商品名称自动更新</small></div></div>
+                  <div className="ai-result-meta"><span>{itemIcon}</span><div><b>{itemCategory}</b><small>AI 已推荐栏目，你也可以自行更改</small></div></div>
                   <label><span>商品名称</span><input aria-label="商品名称" required value={itemTitle} placeholder="例如：宜家书桌、山地自行车" onChange={(e) => { const value = e.target.value; setItemTitle(value); updateItemIntelligence(value, itemDescription); }} /></label>
                   <label><span>商品描述</span><textarea aria-label="商品描述" required value={itemDescription} placeholder="简要说明成色、功能和配件" onChange={(e) => { const value = e.target.value; setItemDescription(value); updateItemIntelligence(itemTitle, value); }} /></label>
+                  <label><span>商品栏目</span><select aria-label="商品栏目" value={itemCategory} onChange={(event) => { const value = event.target.value as ListingCategory; setCategoryManuallySelected(true); setItemCategory(value); updateItemIntelligence(itemTitle, itemDescription, value); }}>{LISTING_CATEGORIES.map((listingCategory) => <option key={listingCategory} value={listingCategory}>{listingCategory}</option>)}</select></label>
                   <div className="wizard-actions"><button type="button" className="back-button" onClick={() => setPublishStep(1)}>重拍</button><button type="button" onClick={() => setPublishStep(3)} disabled={!itemTitle || !itemDescription}>内容没问题，下一步 →</button></div>
                 </div>
               </>}
