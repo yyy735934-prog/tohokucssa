@@ -51,6 +51,7 @@ export default async function SignInPage({
         />
         <small className={styles.footnote}>
           学术邮箱自动认证；其他邮箱注册后由学友会管理员确认成员身份。
+          登录即表示你已阅读<Link href="/policies/terms">使用规范</Link>和<Link href="/policies/privacy">隐私说明</Link>。
         </small>
       </section>
     </main>

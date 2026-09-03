@@ -586,8 +586,8 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
 
       <footer id="about">
         <div className="footer-brand"><span className="brand-mark">东</span><div><b>东北集市</b><small>让闲置流动，让同学连接</small></div></div>
-        <p>由东北地区中国学生学者友好联谊会发起</p>
-        <div><button onClick={() => showNotice("使用规范文案正在审核，暂未正式发布。")}>使用规范</button><button onClick={() => showNotice("举报与建议渠道正在完善，请暂时联系管理员。")}>举报与建议</button><button onClick={() => showNotice("隐私说明文案正在审核，暂未正式发布。")}>隐私说明</button></div>
+        <p>由東北地区中国留学生学友会发起</p>
+        <div><a href="/policies/terms">使用规范</a><a href="/policies/report">举报与建议</a><a href="/policies/privacy">隐私说明</a></div>
       </footer>
 
       <nav className="mobile-nav" aria-label="移动端导航">
@@ -692,7 +692,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
                 <label><span>你的价格</span><div className="price-input"><b>¥</b><input aria-label="商品价格" type="number" min="0" required value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" /></div></label>
                 <div className="price-chips"><span>请根据物品成色自行定价</span><button type="button" onClick={() => setPrice("0")}>设为免费赠送</button></div>
                 <div className="wizard-actions"><button type="button" className="back-button" onClick={() => setPublishStep(3)}>上一步</button><button type="submit" disabled={publishing}>{publishing ? "正在提交…" : viewer ? "确认并发布" : "登录后发布"}</button></div>
-                <small className="terms">发布即表示你确认信息真实，并同意遵守平台交易规范。</small>
+                <small className="terms">发布即表示你确认信息真实，并同意遵守<a href="/policies/terms" target="_blank">平台交易规范</a>。</small>
               </div>
             </form>}
           </>}
