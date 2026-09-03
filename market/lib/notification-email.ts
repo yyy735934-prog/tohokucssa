@@ -3,6 +3,7 @@ import { getDb } from "../db";
 import { users } from "../db/schema";
 import { isValidLoginEmail } from "./email-auth";
 import { outboundEmailRuntime, sendOutboundEmail } from "./outbound-email";
+import { renderMarketEmail } from "./email-template";
 
 export function escapeEmailHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
@@ -21,7 +22,13 @@ export async function sendMemberNotification(userEmail: string, subject: string,
       from: { email: runtime.from, name: "东北集市" },
       subject,
       text,
-      html: `<div style="font-family:system-ui,sans-serif;line-height:1.7;color:#18382e"><h2>${escapeEmailHtml(subject)}</h2><p>${escapeEmailHtml(text).replaceAll("\n", "<br>")}</p><p><a href="https://market.tohokucssa.org/account">前往个人中心</a></p><hr><small>你收到此邮件，是因为你的邮箱用于东北集市账号通知。请勿向任何人提供验证码或密码。</small></div>`,
+      html: renderMarketEmail({
+        title: subject,
+        subtitle: "东北集市账号通知",
+        contentHtml: `<div style="padding:16px;border-radius:12px;background:#f1f6ed">${escapeEmailHtml(text).replaceAll("\n", "<br>")}</div>`,
+        action: { href: "https://market.tohokucssa.org/account", label: "前往个人中心" },
+        footer: "你收到此邮件，是因为该邮箱用于东北集市账号通知。请勿向任何人提供验证码或密码。",
+      }),
       auditLabel: subject,
     });
   } catch (error) {

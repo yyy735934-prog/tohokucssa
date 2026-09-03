@@ -76,6 +76,37 @@ export const listingBatches = sqliteTable(
   ],
 );
 
+export const listingPosters = sqliteTable(
+  "listing_posters",
+  {
+    id: text("id").primaryKey(),
+    publicId: text("public_id").notNull(),
+    creatorEmail: text("creator_email").notNull().references(() => users.email),
+    kind: text("kind").notNull().default("seller"),
+    title: text("title").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("listing_posters_public_id_idx").on(table.publicId),
+    index("listing_posters_creator_idx").on(table.creatorEmail, table.createdAt),
+  ],
+);
+
+export const listingPosterItems = sqliteTable(
+  "listing_poster_items",
+  {
+    posterId: text("poster_id").notNull().references(() => listingPosters.id),
+    listingId: text("listing_id").notNull().references(() => listings.id),
+    position: integer("position").notNull(),
+  },
+  (table) => [
+    uniqueIndex("listing_poster_items_unique_idx").on(table.posterId, table.listingId),
+    index("listing_poster_items_poster_idx").on(table.posterId, table.position),
+    index("listing_poster_items_listing_idx").on(table.listingId),
+  ],
+);
+
 export const listings = sqliteTable(
   "listings",
   {

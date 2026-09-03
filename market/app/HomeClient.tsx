@@ -10,6 +10,7 @@ import {
 import { matchesMarketSearch } from "../lib/market-search";
 import ProfileSetup from "./ProfileSetup";
 import PublishLocationMap, { type PublishLocation } from "./PublishLocationMap";
+import PwaInstallPrompt from "./PwaInstallPrompt";
 
 type Viewer = {
   displayName: string;
@@ -491,6 +492,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
           <a href="#about">关于平台</a>
         </nav>
         <div className="top-actions">
+          <PwaInstallPrompt />
           <button
             className="circle-btn message-button"
             aria-label={pendingIncoming ? `${pendingIncoming} 条待处理联系申请` : "交易联系"}

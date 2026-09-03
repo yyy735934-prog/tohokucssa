@@ -1,6 +1,7 @@
 import { isValidLoginEmail } from "./email-auth.ts";
 import { acceptedContactEmailText } from "./contact-notification.ts";
 import { sendOutboundEmail, type EmailBinding } from "./outbound-email.ts";
+import { renderMarketEmail } from "./email-template.ts";
 
 export type ContactEmailEnv = {
   DB: D1Database;
@@ -77,7 +78,13 @@ export async function deliverAcceptedContactEmail(env: ContactEmailEnv, requestI
       from: { email: from, name: "东北集市" },
       subject: "卖家已接受你的联系申请",
       text,
-      html: `<div style="font-family:system-ui,sans-serif;line-height:1.7;color:#18382e"><h2>卖家已接受你的联系申请</h2><p>${escapeHtml(text).replaceAll("\n", "<br>")}</p><p><a href="https://market.tohokucssa.org/account#contacts">查看交易联系</a></p><hr><small>你收到此邮件，是因为你曾在东北集市申请联系该商品卖家。</small></div>`,
+      html: renderMarketEmail({
+        title: "卖家已接受你的联系申请",
+        subtitle: `你申请联系的商品「${contact.title}」已有回复`,
+        contentHtml: `<div style="padding:16px;border-radius:12px;background:#f1f6ed">${escapeHtml(text).replaceAll("\n", "<br>")}</div><p style="margin:16px 0 0;color:#718078;font-size:12px">请在公共场所当面验货，确认后再交易；不要提前转账。</p>`,
+        action: { href: "https://market.tohokucssa.org/account#contacts", label: "查看交易联系" },
+        footer: "你收到此邮件，是因为你曾在东北集市申请联系该商品卖家。",
+      }),
       auditLabel: "交易联系申请通过通知",
     });
     await env.DB.prepare(`

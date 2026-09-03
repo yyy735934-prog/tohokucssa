@@ -14,6 +14,13 @@ export type PosterItem = {
   status: string;
 };
 
+const posterStatusText: Record<string, string> = {
+  pending: "审核中",
+  sold: "已售出",
+  withdrawn: "已下架",
+  rejected: "未通过",
+};
+
 export default function BatchPoster({
   title, sellerName, sellerVerified, place, items,
 }: {
@@ -54,7 +61,7 @@ export default function BatchPoster({
               <article key={item.id}>
                 <div className="poster-item-photo">
                   {item.imageUrl ? <Image src={item.imageUrl} alt="" fill sizes="330px" unoptimized /> : <span>{item.icon}</span>}
-                  {item.status !== "active" && <small>{item.status === "sold" ? "已售出" : "审核中"}</small>}
+                  {item.status !== "active" && <small>{posterStatusText[item.status] ?? "暂不可用"}</small>}
                 </div>
                 <h2>{item.title}</h2>
                 <strong>{item.price === 0 ? "免费" : `¥${item.price.toLocaleString()}`}</strong>

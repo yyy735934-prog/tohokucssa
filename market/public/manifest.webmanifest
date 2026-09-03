@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "东北集市｜学友会二手平台",
+  "short_name": "东北集市",
+  "description": "面向东北地区中国留学生的可信闲置交易平台",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f4e9",
+  "theme_color": "#17352d",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icons/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -13,6 +13,7 @@ import {
   outboundEmailRuntime,
   sendOutboundEmail,
 } from "../../../../../lib/outbound-email";
+import { renderMarketEmail } from "../../../../../lib/email-template";
 
 const CODE_LIFETIME_MS = 10 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
@@ -117,7 +118,12 @@ export async function POST(request: Request) {
       from: { email: emailRuntime.from, name: "东北集市" },
       subject: `${code}｜东北集市登录验证码`,
       text: `你的东北集市登录验证码是：${code}\n\n验证码 10 分钟内有效，仅可使用一次。如果不是你本人操作，请忽略本邮件。`,
-      html: `<div style="font-family:system-ui,sans-serif;line-height:1.7;color:#18382e"><h2>东北集市登录验证码</h2><p>你的验证码是：</p><p style="font-size:30px;font-weight:800;letter-spacing:8px">${code}</p><p>验证码 10 分钟内有效，仅可使用一次。</p><p style="color:#718078">如果不是你本人操作，请忽略本邮件。</p></div>`,
+      html: renderMarketEmail({
+        title: "东北集市登录验证码",
+        subtitle: "无需密码，输入验证码即可登录或注册",
+        contentHtml: `<div style="padding:18px;border-radius:12px;background:#f1f6ed;text-align:center"><span style="display:block;color:#718078;font-size:12px">你的验证码</span><b style="display:block;margin-top:7px;color:#17352d;font-size:30px;letter-spacing:8px">${code}</b></div><p style="margin:16px 0 0">验证码 10 分钟内有效，仅可使用一次。</p>`,
+        footer: "如果不是你本人操作，请忽略本邮件。东北集市不会索要你的验证码。",
+      }),
       auditLabel: "东北集市登录验证码",
     });
   } catch (error) {

@@ -1,5 +1,6 @@
 import { isValidLoginEmail } from "./email-auth.ts";
 import { sendOutboundEmail } from "./outbound-email.ts";
+import { renderMarketEmail } from "./email-template.ts";
 
 export type ReviewCounts = {
   listings: number;
@@ -58,7 +59,13 @@ export async function sendDailyAdminReviewReminder(env: ReminderEnv) {
     enabled: true,
     db: env.DB,
   };
-  const html = `<div style="font-family:system-ui,sans-serif;line-height:1.7;color:#18382e"><h2>${reminder.subject}</h2><p>${reminder.text.replaceAll("\n", "<br>")}</p><p><a href="https://market.tohokucssa.org/admin">进入管理后台</a></p><hr><small>你收到此邮件，是因为该邮箱被配置为东北集市管理员邮箱。</small></div>`;
+  const html = renderMarketEmail({
+    title: reminder.subject,
+    subtitle: "每日 18:00 审核提醒",
+    contentHtml: `<dl style="margin:0;padding:16px;border-radius:12px;background:#f1f6ed"><dt style="color:#829089;font-size:12px">待审核商品</dt><dd style="margin:2px 0 13px;font-size:17px;font-weight:700">${numericCount(listingRow?.count)} 件</dd><dt style="color:#829089;font-size:12px">学生身份申诉</dt><dd style="margin:2px 0 0;font-size:17px;font-weight:700">${numericCount(appealRow?.count)} 件</dd></dl>`,
+    action: { href: "https://market.tohokucssa.org/admin", label: "进入管理后台" },
+    footer: "你收到此邮件，是因为该邮箱被配置为东北集市管理员邮箱。",
+  });
   const results = await Promise.allSettled(recipients.map((to) => sendOutboundEmail(runtime, {
     to,
     from: { email: from, name: "东北集市" },

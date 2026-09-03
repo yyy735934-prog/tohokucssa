@@ -81,11 +81,37 @@ export default function AdminClient({
   const [appealRows, setAppealRows] = useState(initialAppeals);
   const [filter, setFilter] = useState("pending");
   const [message, setMessage] = useState("");
+  const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
+  const [posterTitle, setPosterTitle] = useState("东北集市 · 本周精选");
+  const [creatingPoster, setCreatingPoster] = useState(false);
 
   const visibleListings = useMemo(
     () => (filter === "all" ? listingRows : listingRows.filter((listing) => listing.status === filter)),
     [filter, listingRows],
   );
+
+  const togglePosterListing = (id: string) => {
+    setSelectedListingIds((current) => current.includes(id)
+      ? current.filter((value) => value !== id)
+      : current.length < 9 ? [...current, id] : current);
+  };
+
+  const createAdminPoster = async () => {
+    if (selectedListingIds.length < 2 || selectedListingIds.length > 9) return;
+    setCreatingPoster(true);
+    const response = await fetch("/api/posters", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ listingIds: selectedListingIds, title: posterTitle, scope: "admin" }),
+    });
+    const result = await response.json().catch(() => null) as { poster?: { url: string }; error?: string } | null;
+    if (!response.ok || !result?.poster) {
+      setMessage(result?.error ?? "海报生成失败，请稍后重试。");
+      setCreatingPoster(false);
+      return;
+    }
+    window.location.assign(result.poster.url);
+  };
 
   const moderate = async (
     targetType: "listing" | "user" | "batch" | "appeal",
@@ -105,6 +131,7 @@ export default function AdminClient({
       setListingRows((current) =>
         current.map((listing) => (listing.id === targetId ? { ...listing, status: action } : listing)),
       );
+      if (action !== "active") setSelectedListingIds((current) => current.filter((id) => id !== targetId));
     } else if (targetType === "batch") {
       setListingRows((current) => current.map((listing) =>
         listing.batchId === targetId && listing.status === "pending" ? { ...listing, status: "active" } : listing,
@@ -157,6 +184,13 @@ export default function AdminClient({
               <option value="all">全部商品</option>
             </select>
           </div>
+          <div className="admin-poster-toolbar">
+            <div><b>制作综合商品海报</b><small>勾选 2 至 9 件展示中的商品，生成带实时网页二维码的海报。</small></div>
+            <input aria-label="海报标题" value={posterTitle} maxLength={60} onChange={(event) => setPosterTitle(event.target.value)} />
+            <button type="button" disabled={selectedListingIds.length < 2 || creatingPoster} onClick={() => void createAdminPoster()}>
+              {creatingPoster ? "正在生成…" : `生成海报（${selectedListingIds.length}/9）`}
+            </button>
+          </div>
           <div className="admin-list">
             {visibleListings.map((listing, index) => (
               <article key={listing.id}>
@@ -165,6 +199,10 @@ export default function AdminClient({
                   style={listing.imageKey ? { backgroundImage: `url("/api/images?key=${encodeURIComponent(listing.imageKey)}")` } : undefined}
                 >
                   {listing.imageKey ? null : listing.icon}
+                  {listing.status === "active" && <label className="admin-poster-select" title="选择加入综合海报">
+                    <input type="checkbox" checked={selectedListingIds.includes(listing.id)} onChange={() => togglePosterListing(listing.id)} />
+                    <span>{selectedListingIds.includes(listing.id) ? "✓" : "+"}</span>
+                  </label>}
                 </div>
                 <div className="admin-item-main">
                   <span>{listing.category} · {listing.place}{listing.batchId ? " · 批量发布" : ""}</span>
