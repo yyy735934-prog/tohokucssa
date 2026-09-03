@@ -2,6 +2,7 @@ import {
   sendEmail,
   gatheringNeedsArrangementEmail,
   gatheringCancelledEmail,
+  gatheringHostOfferEmail,
 } from './email.js'
 import { audit } from './audit.js'
 
@@ -74,6 +75,11 @@ export async function effectiveSignupCount(db, eventId) {
   return Number(row?.c || 0)
 }
 
+export function formationRequirementsMet(event, effectiveCount) {
+  return Number(effectiveCount) >= Number(event.min_participants || 1)
+    && (!event.requires_host || !!event.created_by)
+}
+
 export async function refreshGatheringState(env, eventId) {
   const event = await env.DB.prepare(
     "SELECT * FROM events WHERE id = ? AND event_mode = 'gathering'"
@@ -84,8 +90,9 @@ export async function refreshGatheringState(env, eventId) {
 
   const count = await effectiveSignupCount(env.DB, eventId)
   const minimum = Number(event.min_participants || 1)
+  const hasArrangementOwner = !event.requires_host || !!event.created_by
 
-  if (event.gathering_state === 'recruiting' && count >= minimum) {
+  if (event.gathering_state === 'recruiting' && formationRequirementsMet(event, count)) {
     const dueAt = Date.now() + 12 * 60 * 60 * 1000
     const result = await env.DB.prepare(
       "UPDATE events SET gathering_state = 'arrangement_pending', arrangement_due_at = ?, admin_takeover_at = NULL WHERE id = ? AND gathering_state = 'recruiting'"
@@ -98,7 +105,7 @@ export async function refreshGatheringState(env, eventId) {
     }
   }
 
-  if (event.gathering_state === 'arrangement_pending' && count < minimum) {
+  if (event.gathering_state === 'arrangement_pending' && (count < minimum || !hasArrangementOwner)) {
     const result = await env.DB.prepare(
       "UPDATE events SET gathering_state = 'recruiting', arrangement_due_at = NULL, admin_takeover_at = NULL WHERE id = ? AND gathering_state = 'arrangement_pending'"
     ).bind(eventId).run()
@@ -134,7 +141,7 @@ export async function createGatheringFromTemplate(env, template, timestamp = Dat
     template.notes || '',
     template.max_participants || null,
     `gathering-${template.category}`,
-    template.host_user_id || null,
+    null,
     timestamp,
     timestamp,
     template.category,
@@ -150,6 +157,7 @@ export async function createGatheringFromTemplate(env, template, timestamp = Dat
 
   const eventId = result.meta.last_row_id
   const event = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first()
+  await createHostOffers(env.DB, eventId, template.id, template.host_user_id)
   await recordJob(env.DB, jobType, { templateId: template.id, eventId, weekKey: schedule.weekKey, detail: title })
   await audit(
     env.DB,
@@ -211,8 +219,11 @@ export async function runGatheringAutomation(env, timestamp = Date.now()) {
     const current = refreshed.event || event
     if (current.gathering_state === 'recruiting' && current.formation_deadline && timestamp >= current.formation_deadline) {
       const count = await effectiveSignupCount(env.DB, current.id)
-      if (count < Number(current.min_participants || 1)) {
-        const reason = `截至成局时间有效人数为 ${count} 人，未达到最低 ${current.min_participants} 人`
+      const missingHost = !!current.requires_host && !current.created_by
+      if (count < Number(current.min_participants || 1) || missingHost) {
+        const reason = missingHost && count >= Number(current.min_participants || 1)
+          ? '截至成局时间仍没有候选主理人接单'
+          : `截至成局时间有效人数为 ${count} 人，未达到最低 ${current.min_participants} 人`
         if (await cancelGathering(env, current, reason)) {
           await recordJob(env.DB, 'formation_deadline', { eventId: current.id, weekKey: current.week_key, detail: reason })
         }
@@ -281,18 +292,80 @@ async function notifyArrangementOwner(env, event, adminTakeover) {
 }
 
 async function notifyPublished(env, event) {
-  let recipients
-  if (event.created_by) {
-    recipients = await env.DB.prepare('SELECT id, email FROM admin_users WHERE id = ?').bind(event.created_by).all()
-  } else {
-    recipients = await env.DB.prepare("SELECT id, email FROM admin_users WHERE role = 'reviewer'").all()
+  let recipients = await env.DB.prepare(
+    `SELECT u.id, u.email, u.display_name, o.accept_token
+     FROM gathering_host_offers o JOIN admin_users u ON u.id = o.user_id
+     WHERE o.event_id = ? AND o.status = 'pending'`
+  ).bind(event.id).all()
+  if (!recipients.results.length && !event.requires_host) {
+    recipients = await env.DB.prepare("SELECT id, email, display_name, NULL AS accept_token FROM admin_users WHERE role = 'reviewer'").all()
   }
   for (const user of recipients.results) {
     await env.DB.prepare(
       `INSERT INTO notifications (user_id, type, title, body, event_id)
        VALUES (?, 'gathering_published', '本周组局已发布', ?, ?)`
     ).bind(user.id, `「${event.title}」已开放参加`, event.id).run()
+    if (user.accept_token) {
+      const acceptUrl = `https://events.tohokucssa.org/g/${event.id}/host-offer?token=${encodeURIComponent(user.accept_token)}`
+      await sendEmail(env, { to: user.email, ...gatheringHostOfferEmail(event, user.display_name || user.email, acceptUrl) })
+    }
   }
+}
+
+export async function getGatheringHostOffers(db, eventId) {
+  const rows = await db.prepare(
+    `SELECT o.user_id, o.status, o.responded_at, u.display_name, u.email
+     FROM gathering_host_offers o JOIN admin_users u ON u.id = o.user_id
+     WHERE o.event_id = ? ORDER BY CASE o.status WHEN 'accepted' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END, o.created_at`
+  ).bind(eventId).all()
+  return rows.results
+}
+
+export async function acceptGatheringHost(env, eventId, userId, actor = 'system') {
+  const offer = await env.DB.prepare(
+    'SELECT status FROM gathering_host_offers WHERE event_id = ? AND user_id = ?'
+  ).bind(eventId, userId).first()
+  if (!offer) return { ok: false, reason: 'not_candidate' }
+
+  const event = await env.DB.prepare(
+    "SELECT id, title, created_by, gathering_state FROM events WHERE id = ? AND event_mode = 'gathering'"
+  ).bind(eventId).first()
+  if (!event || ['completed', 'cancelled'].includes(event.gathering_state)) return { ok: false, reason: 'closed' }
+  if (event.created_by && Number(event.created_by) !== Number(userId)) return { ok: false, reason: 'already_taken' }
+
+  const now = Date.now()
+  const claimed = event.created_by
+    ? { meta: { changes: 0 } }
+    : await env.DB.prepare(
+      "UPDATE events SET created_by = ? WHERE id = ? AND created_by IS NULL AND gathering_state NOT IN ('completed', 'cancelled')"
+    ).bind(userId, eventId).run()
+  const current = await env.DB.prepare('SELECT created_by FROM events WHERE id = ?').bind(eventId).first()
+  if (Number(current?.created_by) !== Number(userId)) return { ok: false, reason: 'already_taken' }
+
+  await env.DB.batch([
+    env.DB.prepare(
+      "UPDATE gathering_host_offers SET status = 'accepted', responded_at = ? WHERE event_id = ? AND user_id = ?"
+    ).bind(now, eventId, userId),
+    env.DB.prepare(
+      "UPDATE gathering_host_offers SET status = 'closed', responded_at = ? WHERE event_id = ? AND user_id != ? AND status = 'pending'"
+    ).bind(now, eventId, userId),
+  ])
+  if (claimed.meta.changes) {
+    await audit(env.DB, 'gathering_host_accepted', 'event', eventId, `候选主理人已接单：${actor}`, actor)
+  }
+  return { ok: true, newlyAccepted: !!claimed.meta.changes }
+}
+
+async function createHostOffers(db, eventId, templateId, legacyHostUserId) {
+  const candidates = await db.prepare(
+    `SELECT user_id FROM gathering_template_hosts WHERE template_id = ?
+     UNION SELECT ? AS user_id WHERE ? IS NOT NULL`
+  ).bind(templateId, legacyHostUserId || null, legacyHostUserId || null).all()
+  if (!candidates.results.length) return
+  await db.batch(candidates.results.map(({ user_id }) => db.prepare(
+    `INSERT OR IGNORE INTO gathering_host_offers (event_id, user_id, accept_token)
+     VALUES (?, ?, ?)`
+  ).bind(eventId, user_id, crypto.randomUUID())))
 }
 
 function parseTime(value) {

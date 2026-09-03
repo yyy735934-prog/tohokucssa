@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   formatJstDateTime,
+  formationRequirementsMet,
   isoWeekKey,
   isValidClock,
   jstParts,
@@ -40,4 +41,12 @@ test('clock validation accepts only 24-hour HH:mm values', () => {
   assert.equal(isValidClock('8:00'), false)
   assert.equal(isValidClock('24:00'), false)
   assert.equal(isValidClock('18:60'), false)
+})
+
+test('required-host gatherings advance only after both conditions are met', () => {
+  const event = { min_participants: 4, requires_host: 1, created_by: null }
+  assert.equal(formationRequirementsMet(event, 4), false)
+  assert.equal(formationRequirementsMet({ ...event, created_by: 12 }, 3), false)
+  assert.equal(formationRequirementsMet({ ...event, created_by: 12 }, 4), true)
+  assert.equal(formationRequirementsMet({ ...event, requires_host: 0 }, 4), true)
 })

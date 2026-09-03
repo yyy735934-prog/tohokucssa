@@ -18,6 +18,7 @@
         <div class="formation-head">
           <div><strong>{{ gathering.effective_count }}</strong> / {{ gathering.min_participants }} 人</div>
           <span v-if="gathering.gathering_state === 'recruiting' && remaining > 0">还差 {{ remaining }} 人成局</span>
+          <span v-else-if="gathering.gathering_state === 'recruiting' && gathering.requires_host && !gathering.has_host">人数已达标，等待主理人接单</span>
           <span v-else-if="gathering.gathering_state === 'arrangement_pending'">人数已达标</span>
           <span v-else-if="gathering.gathering_state === 'confirmed'">已经成局</span>
         </div>
@@ -52,6 +53,7 @@
         <form v-else @submit.prevent="join">
           <h2>参加这个组局</h2>
           <p class="form-hint">将使用账号 {{ auth.email }} 报名</p>
+          <div v-if="myHostOfferStatus === 'pending'" class="host-offer-note">你是本周候选主理人，确认参加将同时视为同意接单。</div>
 
           <div v-if="gathering.carpool_enabled" class="field">
             <label class="label">交通方式</label>
@@ -76,7 +78,7 @@
 
           <div v-if="form.transport_mode === 'passenger'" class="ride-notice">提交后将显示“乘车候补中”，获分配座位后才计入有效成局人数。</div>
           <p v-if="formError" class="error">{{ formError }}</p>
-          <button class="btn btn-primary" type="submit" :disabled="busy">{{ busy ? '提交中…' : '确认参加' }}</button>
+          <button class="btn btn-primary" type="submit" :disabled="busy">{{ busy ? '提交中…' : myHostOfferStatus === 'pending' ? '确认参加并接单' : '确认参加' }}</button>
         </form>
       </div>
 
@@ -102,6 +104,7 @@ import { auth } from '../auth.js'
 const route = useRoute()
 const gathering = ref(null)
 const mySignup = ref(null)
+const myHostOfferStatus = ref(null)
 const loading = ref(true)
 const error = ref('')
 const formError = ref('')
@@ -135,6 +138,7 @@ async function load() {
     const data = await api.getGathering(route.params.id)
     gathering.value = data.gathering
     mySignup.value = data.my_signup
+    myHostOfferStatus.value = data.my_host_offer_status
   } catch (e) { error.value = e.message }
   loading.value = false
 }
@@ -175,7 +179,8 @@ function formatDate(timestamp) {
 .state-arrangement_pending { color: #b45309; background: #fef3c7; }
 .meta, .content, .notes { margin-top: 8px; color: var(--c-text-2); line-height: 1.6; }
 .content { white-space: pre-wrap; color: var(--c-text); }
-.notes, .pending-note, .ride-notice { background: var(--c-bg); border-radius: 8px; padding: 12px; font-size: 13px; }
+.notes, .pending-note, .ride-notice, .host-offer-note { background: var(--c-bg); border-radius: 8px; padding: 12px; font-size: 13px; }
+.host-offer-note { margin: 12px 0; color: #166534; background: var(--c-success-bg); }
 .formation-head strong { color: var(--c-primary); font-size: 28px; }
 .formation-head span, .formation-meta { color: var(--c-text-2); font-size: 13px; }
 .progress { height: 8px; background: var(--c-border); border-radius: 99px; overflow: hidden; margin: 12px 0; }

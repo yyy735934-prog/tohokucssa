@@ -5,6 +5,8 @@ import {
   effectiveSignupCount,
   refreshGatheringState,
   cancelGathering,
+  acceptGatheringHost,
+  getGatheringHostOffers,
 } from '../lib/gatherings.js'
 import { sendEmail, gatheringFinalizedEmail, gatheringCarpoolAssignedEmail } from '../lib/email.js'
 import { audit } from '../lib/audit.js'
@@ -78,6 +80,37 @@ gatherings.get('/mine', async (c) => {
   return c.json({ ok: true, gatherings: rows.results })
 })
 
+gatherings.get('/host-offers/:token', async (c) => {
+  const offer = await c.env.DB.prepare(
+    `SELECT o.event_id, o.status, o.user_id, u.display_name, u.email,
+            e.title, e.event_date, e.location, e.gathering_state, e.created_by,
+            selected.display_name AS selected_host_name
+     FROM gathering_host_offers o
+     JOIN admin_users u ON u.id = o.user_id
+     JOIN events e ON e.id = o.event_id
+     LEFT JOIN admin_users selected ON selected.id = e.created_by
+     WHERE o.accept_token = ?`
+  ).bind(c.req.param('token')).first()
+  if (!offer) return c.json({ ok: false, message: '接单邀请无效或已过期' }, 404)
+  return c.json({ ok: true, offer })
+})
+
+gatherings.post('/host-offers/:token/accept', async (c) => {
+  const offer = await c.env.DB.prepare(
+    `SELECT o.event_id, o.user_id, u.email
+     FROM gathering_host_offers o JOIN admin_users u ON u.id = o.user_id
+     WHERE o.accept_token = ?`
+  ).bind(c.req.param('token')).first()
+  if (!offer) return c.json({ ok: false, message: '接单邀请无效或已过期' }, 404)
+  const accepted = await acceptGatheringHost(c.env, offer.event_id, offer.user_id, offer.email)
+  if (!accepted.ok) {
+    const message = accepted.reason === 'already_taken' ? '已有另一位候选主理人接单' : '本次组局已经结束，无法接单'
+    return c.json({ ok: false, message }, 409)
+  }
+  await refreshGatheringState(c.env, offer.event_id)
+  return c.json({ ok: true, event_id: offer.event_id, newly_accepted: accepted.newlyAccepted })
+})
+
 gatherings.get('/:id/manage', async (c) => {
   const id = Number(c.req.param('id'))
   const managed = await requireManager(c, id)
@@ -92,7 +125,8 @@ gatherings.get('/:id/manage', async (c) => {
        WHEN 'ride_assigned' THEN 3 ELSE 4 END, s.created_at ASC`
   ).bind(id).all()
   const count = await effectiveSignupCount(c.env.DB, id)
-  return c.json({ ok: true, event: managed.event, signups: signups.results, effective_count: count })
+  const hostOffers = await getGatheringHostOffers(c.env.DB, id)
+  return c.json({ ok: true, event: managed.event, signups: signups.results, effective_count: count, host_offers: hostOffers })
 })
 
 gatherings.post('/:id/join', async (c) => {
@@ -167,9 +201,10 @@ gatherings.post('/:id/join', async (c) => {
 
   const signupId = existing?.id || result.meta.last_row_id
   const signup = await c.env.DB.prepare('SELECT * FROM signups WHERE id = ?').bind(signupId).first()
+  const hostAcceptance = await acceptGatheringHost(c.env, id, session.id, session.email)
   await refreshGatheringState(c.env, id)
   await audit(c.env.DB, 'gathering_join', 'event', id, `${session.email}：${signup.signup_status}`, session.email)
-  return c.json({ ok: true, signup })
+  return c.json({ ok: true, signup, host_accepted: hostAcceptance.ok && hostAcceptance.newlyAccepted })
 })
 
 gatherings.post('/:id/cancel', async (c) => {
@@ -274,6 +309,7 @@ gatherings.post('/:id/finalize', async (c) => {
   if (managed.event.gathering_state !== 'arrangement_pending') return c.json({ ok: false, message: '当前状态不能确认安排' }, 400)
   const count = await effectiveSignupCount(c.env.DB, id)
   if (count < Number(managed.event.min_participants || 1)) return c.json({ ok: false, message: '有效人数尚未达到成局要求' }, 400)
+  if (managed.event.requires_host && !managed.event.created_by) return c.json({ ok: false, message: '尚无候选主理人接单' }, 400)
 
   const body = await c.req.json()
   const eventDate = String(body.event_date || managed.event.event_date).trim()
@@ -361,7 +397,7 @@ gatherings.get('/:id', async (c) => {
             e.status, e.image_key, e.gathering_state, e.gathering_category,
             e.min_participants, e.formation_deadline, e.arrangement_due_at,
             e.requires_host, e.carpool_enabled, e.cancel_reason,
-            u.display_name AS host_name
+            u.display_name AS host_name, CASE WHEN e.created_by IS NULL THEN 0 ELSE 1 END AS has_host
      FROM events e LEFT JOIN admin_users u ON u.id = e.created_by
      WHERE e.id = ? AND e.event_mode = 'gathering'`
   ).bind(id).first()
@@ -372,6 +408,7 @@ gatherings.get('/:id', async (c) => {
   ).bind(id).first()
   const session = await getOptionalSession(c)
   let mySignup = null
+  let myHostOfferStatus = null
   if (session) {
     mySignup = await c.env.DB.prepare(
       `SELECT s.id, s.signup_status, s.transport_mode, s.vehicle_note, s.seats_offered,
@@ -380,8 +417,17 @@ gatherings.get('/:id', async (c) => {
        FROM signups s LEFT JOIN signups d ON d.id = s.assigned_driver_signup_id
        WHERE s.event_id = ? AND s.user_id = ?`
     ).bind(id, session.id).first()
+    const hostOffer = await c.env.DB.prepare(
+      'SELECT status FROM gathering_host_offers WHERE event_id = ? AND user_id = ?'
+    ).bind(id, session.id).first()
+    myHostOfferStatus = hostOffer?.status || null
   }
-  return c.json({ ok: true, gathering: { ...event, effective_count: effectiveCount, interest_count: Number(interest?.c || 0) }, my_signup: mySignup })
+  return c.json({
+    ok: true,
+    gathering: { ...event, effective_count: effectiveCount, interest_count: Number(interest?.c || 0) },
+    my_signup: mySignup,
+    my_host_offer_status: myHostOfferStatus,
+  })
 })
 
 async function promoteGeneralWaitlist(db, event) {

@@ -23,6 +23,11 @@
       <div class="card stat"><strong>{{ ridePending.length }}</strong><span>乘车候补</span></div>
     </div>
 
+    <div v-if="hostOffers.length" class="card host-card mb-16">
+      <div class="section-head"><div><h2>候选主理人</h2><p>任意一人报名或通过邮件接单，即成为本周主理人</p></div></div>
+      <div class="host-list"><span v-for="host in hostOffers" :key="host.user_id" :class="`host-${host.status}`"><strong>{{ host.display_name || host.email }}</strong> · {{ hostOfferLabel(host.status) }}</span></div>
+    </div>
+
     <div v-if="event.gathering_state === 'arrangement_pending'" class="card attention mb-16">
       <div><h2>确认最终安排</h2><p>人数已经达标，请在截止时间前确认。<span v-if="event.arrangement_due_at">截止：{{ formatTime(event.arrangement_due_at) }}</span></p></div>
       <form @submit.prevent="finalize">
@@ -76,6 +81,7 @@ import { showToast } from '../../lib/toast.js'
 const route = useRoute()
 const event = ref(null)
 const signups = ref([])
+const hostOffers = ref([])
 const effectiveCount = ref(0)
 const loading = ref(true)
 const error = ref('')
@@ -97,7 +103,7 @@ async function load() {
   loading.value = true
   try {
     const data = await api.getGatheringManage(route.params.id)
-    event.value = data.event; signups.value = data.signups; effectiveCount.value = data.effective_count
+    event.value = data.event; signups.value = data.signups; hostOffers.value = data.host_offers || []; effectiveCount.value = data.effective_count
     finalForm.event_date = data.event.event_date || ''; finalForm.location = data.event.location || ''; finalForm.notes = data.event.notes || ''
   } catch (e) { error.value = e.message }
   loading.value = false
@@ -122,6 +128,7 @@ async function updateAttendance(signup, status) { try { await api.updateGatherin
 const signupLabel = (v) => ({ joined: '已确认参加', ride_pending: '乘车候补中', ride_assigned: '已安排乘车', general_waitlist: '人数候补中', cancelled: '已退出' }[v] || v)
 const transportLabel = (v) => ({ self: '自行前往', public_transport: '公共交通', driver: '提供车辆', passenger: '需要乘车' }[v] || v)
 const attendanceLabel = (v) => ({ pending: '待签到', attended: '已签到', excused: '已请假', no_show: '未到场' }[v] || v)
+const hostOfferLabel = (v) => ({ pending: '等待接单', accepted: '已接单', closed: '已有他人接单' }[v] || v)
 function formatTime(ts) { return new Date(ts).toLocaleString('zh-CN', { timeZone: 'Asia/Tokyo' }) }
 </script>
 
@@ -138,6 +145,7 @@ function formatTime(ts) { return new Date(ts).toLocaleString('zh-CN', { timeZone
 .attention form { margin-top: 16px; }.form-row { display: flex; gap: 12px; }.form-row .field { flex: 1; }
 .section-head { display: flex; justify-content: space-between; margin-bottom: 14px; }
 .notice { color: var(--c-text-2); font-size: 13px; padding: 12px; background: var(--c-bg); border-radius: 8px; }
+.host-list { display: flex; flex-wrap: wrap; gap: 8px; }.host-list span { font-size: 12px; color: var(--c-text-2); background: var(--c-bg); border-radius: 99px; padding: 7px 10px; }.host-list .host-accepted { color: var(--c-success); background: var(--c-success-bg); }
 .assignment-list, .assigned-list { display: flex; flex-direction: column; gap: 8px; }.assignment-row, .assigned-row { display: grid; grid-template-columns: 1fr 220px auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--c-border); border-radius: 8px; }.assignment-row div { display: flex; flex-direction: column; }.assignment-row span, .sub { font-size: 12px; color: var(--c-text-2); }.assigned-list { margin-top: 16px; }.assigned-list h3 { font-size: 14px; }.assigned-row { grid-template-columns: 1fr auto; }
 .muted { opacity: .5; }.sub { margin-top: 3px; }.attendance-select { min-width: 92px; padding: 6px 8px; font-size: 12px; }
 @media (max-width: 760px) { .state-grid { grid-template-columns: repeat(2,1fr); }.form-row { flex-direction: column; gap: 0; }.assignment-row { grid-template-columns: 1fr; } }

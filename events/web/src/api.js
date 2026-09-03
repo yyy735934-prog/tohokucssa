@@ -32,6 +32,8 @@ export const api = {
   saveProfile: (profile) => request('POST', '/auth/profile', { profile }),
   listGatherings: () => request('GET', '/gatherings'),
   getGathering: (id) => request('GET', `/gatherings/${id}`),
+  getGatheringHostOffer: (token) => request('GET', `/gatherings/host-offers/${encodeURIComponent(token || '')}`),
+  acceptGatheringHostOffer: (token) => request('POST', `/gatherings/host-offers/${encodeURIComponent(token || '')}/accept`),
   joinGathering: (id, data) => request('POST', `/gatherings/${id}/join`, data),
   cancelGatheringSignup: (id, reason = '') => request('POST', `/gatherings/${id}/cancel`, { reason }),
   myGatherings: () => request('GET', '/gatherings/mine'),

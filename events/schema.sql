@@ -145,6 +145,27 @@ CREATE TABLE IF NOT EXISTS gathering_templates (
 
 CREATE INDEX IF NOT EXISTS idx_gathering_templates_schedule ON gathering_templates(approval_status, publish_weekday, publish_time);
 
+CREATE TABLE IF NOT EXISTS gathering_template_hosts (
+  template_id INTEGER NOT NULL REFERENCES gathering_templates(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES admin_users(id),
+  created_at  INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+  PRIMARY KEY (template_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gathering_template_hosts_user ON gathering_template_hosts(user_id, template_id);
+
+CREATE TABLE IF NOT EXISTS gathering_host_offers (
+  event_id     INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  user_id      INTEGER NOT NULL REFERENCES admin_users(id),
+  accept_token TEXT    NOT NULL UNIQUE,
+  status       TEXT    NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'closed')),
+  responded_at INTEGER,
+  created_at   INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+  PRIMARY KEY (event_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gathering_host_offers_event ON gathering_host_offers(event_id, status);
+
 CREATE TABLE IF NOT EXISTS gathering_jobs (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   job_type    TEXT    NOT NULL,
