@@ -54,7 +54,7 @@ export default function BatchPoster({
     <div className="poster-panel">
       <div className="batch-poster-scale">
         <div className={`batch-poster poster-count-${items.length}`} ref={posterRef}>
-          <div className="poster-topline"><b>东北集市</b><span>TOHOKU STUDENT MARKET</span></div>
+          <div className="poster-topline"><div className="poster-logo"><Image src="/icons/pwa-192.png" alt="" width={40} height={40} /><b>东北集市</b></div><span>TOHOKU STUDENT MARKET</span></div>
           <div className="poster-seller"><b>{sellerName}</b>{sellerVerified && <em>✓ 学友身份已认证</em>}<span>⌖ {place}</span></div>
           <div className="poster-item-grid">
             {items.map((item) => (
