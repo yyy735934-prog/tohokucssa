@@ -29,7 +29,7 @@
         <div class="form-grid">
           <div class="field"><label class="label">最低成局人数 *</label><input v-model.number="form.min_participants" type="number" min="1" required /></div>
           <div class="field"><label class="label">最多人数</label><input v-model.number="form.max_participants" type="number" :min="form.min_participants" placeholder="不限" /></div>
-          <div class="field"><label class="label">主理人</label><select v-model.number="form.host_user_id"><option :value="null">暂不指定</option><option v-for="u in hosts" :key="u.id" :value="u.id">{{ u.display_name || u.email }}</option></select><p v-if="hostRequired" class="hint">此类别必须指定主理人</p></div>
+          <div class="field host-field"><label class="label">候选主理人（可多选）</label><div class="host-options"><label v-for="u in hosts" :key="u.id"><input v-model="form.host_user_ids" type="checkbox" :value="u.id" /> <span>{{ u.display_name || u.email }}</span></label><span v-if="!hosts.length" class="hint">请先在用户管理中添加主理人</span></div><p class="hint">任意一人报名或通过邮件接单，即成为本周主理人。<template v-if="hostRequired">此类别至少需要一人。</template></p></div>
           <div class="field option-field"><label><input v-model="form.requires_host" type="checkbox" :disabled="hostRequired" /> 必须由主理人确认</label><label><input v-model="form.carpool_enabled" type="checkbox" /> 启用拼车收集</label></div>
         </div>
 
@@ -51,7 +51,7 @@
           <span>周{{ weekdayLabel(t.publish_weekday) }} {{ t.publish_time }} 发布</span>
           <span>周{{ weekdayLabel(t.decision_weekday) }} {{ t.decision_time }} 判定</span>
           <span>{{ t.min_participants }} 人成局{{ t.max_participants ? `，最多 ${t.max_participants} 人` : '' }}</span>
-          <span>{{ t.host_name ? `主理人：${t.host_name}` : '管理员确认' }}</span>
+          <span>{{ t.hosts?.length ? `候选主理人：${t.hosts.map((h) => h.display_name || h.email).join('、')}` : '管理员确认' }}</span>
           <span v-if="t.carpool_enabled">启用拼车</span>
         </div>
         <div class="actions">
@@ -99,7 +99,7 @@ const categories = [
 ]
 const weekdays = [1,2,3,4,5,6,7].map((value, i) => ({ value, label: ['一','二','三','四','五','六','日'][i] }))
 
-const defaults = () => ({ id: null, name: '', category: 'karaoke', sport_name: '', title_template: '本周唱歌局 · {date}', description: '', notes: '', region: '仙台市内', default_location: '', event_weekday: 6, event_time: '14:00', publish_weekday: 1, publish_time: '08:00', decision_weekday: 5, decision_time: '18:00', min_participants: 4, max_participants: null, requires_host: false, host_user_id: null, carpool_enabled: false })
+const defaults = () => ({ id: null, name: '', category: 'karaoke', sport_name: '', title_template: '本周唱歌局 · {date}', description: '', notes: '', region: '仙台市内', default_location: '', event_weekday: 6, event_time: '14:00', publish_weekday: 1, publish_time: '08:00', decision_weekday: 5, decision_time: '18:00', min_participants: 4, max_participants: null, requires_host: false, host_user_ids: [], carpool_enabled: false })
 const form = reactive(defaults())
 const hosts = computed(() => users.value.filter((u) => ['host', 'reviewer'].includes(u.role)))
 const hostRequired = computed(() => !['karaoke', 'sport'].includes(form.category))
@@ -118,7 +118,7 @@ async function load() {
 }
 
 function startNew() { Object.assign(form, defaults()); editing.value = true; error.value = '' }
-function editTemplate(t) { Object.assign(form, defaults(), t, { requires_host: !!t.requires_host, carpool_enabled: !!t.carpool_enabled }); editing.value = true; error.value = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
+function editTemplate(t) { Object.assign(form, defaults(), t, { host_user_ids: [...(t.host_user_ids || [])], requires_host: !!t.requires_host, carpool_enabled: !!t.carpool_enabled }); editing.value = true; error.value = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
 function applyCategoryDefaults() {
   if (hostRequired.value) form.requires_host = true
   if (form.category === 'karaoke' || form.category === 'sport') form.min_participants = 4
@@ -128,7 +128,7 @@ function applyCategoryDefaults() {
 async function save() {
   error.value = ''; busy.value = true
   try {
-    const payload = { ...form, max_participants: form.max_participants || null, host_user_id: form.host_user_id || null }
+    const payload = { ...form, host_user_ids: [...form.host_user_ids], max_participants: form.max_participants || null }
     if (form.id) await api.updateGatheringTemplate(form.id, payload)
     else await api.createGatheringTemplate(payload)
     showToast('模板已保存为草稿')
@@ -171,6 +171,9 @@ const formatTime = (value) => value ? new Date(Number(value)).toLocaleString('zh
 .option-field { display: flex; flex-direction: column; gap: 10px; justify-content: center; }
 .option-field label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .option-field input { width: auto; }
+.host-options { display: flex; flex-direction: column; gap: 7px; min-height: 42px; max-height: 150px; overflow: auto; border: 1px solid var(--c-border); border-radius: 8px; padding: 10px; }
+.host-options label { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+.host-options input { width: auto; }
 .hint { font-size: 12px; color: var(--c-warning); margin-top: 4px; }
 .template-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .template-head h3 { font-size: 17px; }

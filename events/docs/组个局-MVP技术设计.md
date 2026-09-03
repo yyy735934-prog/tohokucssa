@@ -1,6 +1,6 @@
 # “组个局”MVP 技术设计
 
-更新日期：2026-08-24
+更新日期：2026-09-03
 
 ## 1. 实施原则
 
@@ -28,7 +28,9 @@
 - `publish_weekday`、`publish_time`：默认周一 08:00，可单独调整。
 - `decision_weekday`、`decision_time`：默认周五 18:00，可单独调整。
 - `min_participants`、`max_participants`：最低和最多人数。
-- `requires_host`、`host_user_id`：是否必须绑定主理人及默认主理人。
+- `requires_host`：是否必须有主理人接单；`host_user_id` 仅保留首位候选人以兼容旧数据。
+- `gathering_template_hosts`：模板与候选主理人的多对多关系，可为同一模板配置多人。
+- `gathering_host_offers`：每周实例的候选接单邀请、独立令牌及接单状态。首位接单者写入 `events.created_by`，其余邀请自动关闭。
 - `carpool_enabled`：是否启用拼车。
 - `approval_status`：`draft`、`approved` 或 `paused`。
 - `approved_by`、`approved_at`、`created_by`、`created_at`、`updated_at`：管理和审计字段。
@@ -86,6 +88,8 @@
 - `GET /api/gatherings`：组局广场列表。
 - `GET /api/gatherings/:id`：详情及本人参加状态。
 - `POST /api/gatherings/:id/join`：登录后参加并提交交通信息。
+- 候选主理人通过上述接口报名时自动接单；人数和主理人两个条件同时满足后才进入 `arrangement_pending`。
+- `GET /api/gatherings/host-offers/:token` 与 `POST /api/gatherings/host-offers/:token/accept`：查看邮件邀请并明确接单。查看链接本身不改变状态。
 - `POST /api/gatherings/:id/cancel`：保留历史地取消参加。
 - `GET /api/gatherings/mine`：当前登录用户的组局记录。
 

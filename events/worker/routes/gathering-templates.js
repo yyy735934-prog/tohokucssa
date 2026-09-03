@@ -15,14 +15,21 @@ async function requireReviewer(c) {
 gatheringTemplates.get('/', async (c) => {
   await requireReviewer(c)
   const rows = await c.env.DB.prepare(
-    `SELECT t.*, u.display_name AS host_name, u.email AS host_email,
-            approver.display_name AS approver_name
+    `SELECT t.*, approver.display_name AS approver_name,
+            COALESCE((
+              SELECT json_group_array(json_object('id', u.id, 'display_name', u.display_name, 'email', u.email))
+              FROM gathering_template_hosts h JOIN admin_users u ON u.id = h.user_id
+              WHERE h.template_id = t.id
+            ), '[]') AS hosts_json
      FROM gathering_templates t
-     LEFT JOIN admin_users u ON u.id = t.host_user_id
      LEFT JOIN admin_users approver ON approver.id = t.approved_by
      ORDER BY t.updated_at DESC, t.id DESC`
   ).all()
-  return c.json({ ok: true, templates: rows.results })
+  const templates = rows.results.map((template) => {
+    const hosts = JSON.parse(template.hosts_json || '[]')
+    return { ...template, hosts, host_user_ids: hosts.map((host) => host.id) }
+  })
+  return c.json({ ok: true, templates })
 })
 
 gatheringTemplates.get('/jobs', async (c) => {
@@ -61,6 +68,8 @@ gatheringTemplates.post('/', async (c) => {
     data.carpool_enabled, session.id, Date.now(),
   ).run()
 
+  await syncTemplateHosts(c.env.DB, result.meta.last_row_id, data.host_user_ids)
+
   await audit(c.env.DB, 'gathering_template_create', 'gathering_template', result.meta.last_row_id, data.name, session.email)
   return c.json({ ok: true, id: result.meta.last_row_id })
 })
@@ -72,7 +81,8 @@ gatheringTemplates.patch('/:id', async (c) => {
   if (!existing) return c.json({ ok: false, message: '模板不存在' }, 404)
 
   const body = await c.req.json()
-  const data = await validateTemplate(c.env.DB, { ...existing, ...body })
+  const existingHostIds = await getTemplateHostIds(c.env.DB, id, existing.host_user_id)
+  const data = await validateTemplate(c.env.DB, { ...existing, host_user_ids: existingHostIds, ...body })
   if (data.error) return c.json({ ok: false, message: data.error }, 400)
 
   await c.env.DB.prepare(
@@ -90,6 +100,8 @@ gatheringTemplates.patch('/:id', async (c) => {
     data.carpool_enabled, Date.now(), id,
   ).run()
 
+  await syncTemplateHosts(c.env.DB, id, data.host_user_ids)
+
   await audit(c.env.DB, 'gathering_template_update', 'gathering_template', id, data.name, session.email)
   return c.json({ ok: true })
 })
@@ -99,7 +111,8 @@ gatheringTemplates.post('/:id/approve', async (c) => {
   const id = Number(c.req.param('id'))
   const template = await c.env.DB.prepare('SELECT * FROM gathering_templates WHERE id = ?').bind(id).first()
   if (!template) return c.json({ ok: false, message: '模板不存在' }, 404)
-  const validated = await validateTemplate(c.env.DB, template)
+  const hostUserIds = await getTemplateHostIds(c.env.DB, id, template.host_user_id)
+  const validated = await validateTemplate(c.env.DB, { ...template, host_user_ids: hostUserIds })
   if (validated.error) return c.json({ ok: false, message: validated.error }, 400)
 
   await c.env.DB.prepare(
@@ -147,6 +160,11 @@ gatheringTemplates.post('/:id/pause', async (c) => {
 async function validateTemplate(db, body) {
   const category = String(body.category || '').trim()
   const requiresHost = ['karaoke', 'sport'].includes(category) ? !!body.requires_host : true
+  const hostUserIds = [...new Set((Array.isArray(body.host_user_ids)
+    ? body.host_user_ids
+    : body.host_user_id ? [body.host_user_id] : [])
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0))]
   const data = {
     name: String(body.name || '').trim(),
     category,
@@ -165,7 +183,8 @@ async function validateTemplate(db, body) {
     min_participants: Number(body.min_participants || 0),
     max_participants: body.max_participants ? Number(body.max_participants) : null,
     requires_host: requiresHost ? 1 : 0,
-    host_user_id: body.host_user_id ? Number(body.host_user_id) : null,
+    host_user_ids: hostUserIds,
+    host_user_id: hostUserIds[0] || null,
     carpool_enabled: body.carpool_enabled ? 1 : 0,
   }
 
@@ -181,13 +200,33 @@ async function validateTemplate(db, body) {
   }
   const schedule = templateSchedule(data)
   if (schedule.decisionAt <= schedule.publishAt) return { error: '成局判定时间必须晚于发布时间' }
-  if (data.requires_host && !data.host_user_id) return { error: '此类活动必须选择主理人' }
-  if (data.host_user_id) {
-    const host = await db.prepare("SELECT id FROM admin_users WHERE id = ? AND role IN ('host', 'reviewer')")
-      .bind(data.host_user_id).first()
-    if (!host) return { error: '所选主理人不存在或没有主理人权限' }
+  if (data.requires_host && !data.host_user_ids.length) return { error: '此类活动必须选择至少一名候选主理人' }
+  if (data.host_user_ids.length) {
+    const placeholders = data.host_user_ids.map(() => '?').join(',')
+    const hosts = await db.prepare(
+      `SELECT COUNT(*) AS c FROM admin_users WHERE id IN (${placeholders}) AND role IN ('host', 'reviewer')`
+    ).bind(...data.host_user_ids).first()
+    if (Number(hosts?.c || 0) !== data.host_user_ids.length) return { error: '所选主理人不存在或没有主理人权限' }
   }
   return data
+}
+
+async function getTemplateHostIds(db, templateId, legacyHostUserId = null) {
+  const rows = await db.prepare('SELECT user_id FROM gathering_template_hosts WHERE template_id = ? ORDER BY created_at, user_id')
+    .bind(templateId).all()
+  const ids = rows.results.map((row) => Number(row.user_id))
+  if (!ids.length && legacyHostUserId) ids.push(Number(legacyHostUserId))
+  return ids
+}
+
+async function syncTemplateHosts(db, templateId, hostUserIds) {
+  const statements = [db.prepare('DELETE FROM gathering_template_hosts WHERE template_id = ?').bind(templateId)]
+  for (const userId of hostUserIds) {
+    statements.push(db.prepare(
+      'INSERT INTO gathering_template_hosts (template_id, user_id) VALUES (?, ?)'
+    ).bind(templateId, userId))
+  }
+  await db.batch(statements)
 }
 
 export { gatheringTemplates }

@@ -305,6 +305,23 @@ export function gatheringNeedsArrangementEmail(event, recipientName, dueText, ad
   }
 }
 
+export function gatheringHostOfferEmail(event, recipientName, acceptUrl) {
+  return {
+    subject: `邀请你主理本周组局 — ${event.title}`,
+    html: baseHtml('组局主理人邀请', `
+      <h1>愿意接下本周组局吗？</h1>
+      <p class="sub">${esc(recipientName || '')}，你被列为「${esc(event.title)}」的候选主理人</p>
+      <dl class="info">
+        <dt>活动</dt><dd>${esc(event.title)}</dd>
+        <dt>暂定时间</dt><dd>${esc(event.event_date)}</dd>
+        ${event.location ? `<dt>区域/地点</dt><dd>${esc(event.location)}</dd>` : ''}
+      </dl>
+      <p style="font-size:14px">任意一位候选主理人接单即可。你也可以直接报名该组局，报名时将自动视为同意接单。</p>
+      <p style="margin-top:16px"><a href="${acceptUrl}" class="btn">查看并同意接单</a></p>
+    `),
+  }
+}
+
 export function gatheringFinalizedEmail(event, signup) {
   return {
     subject: `组局成功 — ${event.title}`,
