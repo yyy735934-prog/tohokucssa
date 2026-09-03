@@ -56,6 +56,7 @@ export async function sendDailyAdminReviewReminder(env: ReminderEnv) {
     resendApiKey: env.RESEND_API_KEY.trim(),
     from,
     enabled: true,
+    db: env.DB,
   };
   const html = `<div style="font-family:system-ui,sans-serif;line-height:1.7;color:#18382e"><h2>${reminder.subject}</h2><p>${reminder.text.replaceAll("\n", "<br>")}</p><p><a href="https://market.tohokucssa.org/admin">进入管理后台</a></p><hr><small>你收到此邮件，是因为该邮箱被配置为东北集市管理员邮箱。</small></div>`;
   const results = await Promise.allSettled(recipients.map((to) => sendOutboundEmail(runtime, {
@@ -64,6 +65,7 @@ export async function sendDailyAdminReviewReminder(env: ReminderEnv) {
     subject: reminder.subject,
     text: reminder.text,
     html,
+    auditLabel: "管理员待审核提醒",
   })));
   const failed = results.filter((result) => result.status === "rejected");
   if (failed.length) throw new Error(`Failed to send ${failed.length} admin reminder email(s)`);

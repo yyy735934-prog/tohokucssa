@@ -197,3 +197,22 @@ export const emailLoginChallenges = sqliteTable(
     ),
   ],
 );
+
+export const emailDeliveryLogs = sqliteTable(
+  "email_delivery_logs",
+  {
+    id: text("id").primaryKey(),
+    recipientMasked: text("recipient_masked").notNull(),
+    subject: text("subject").notNull(),
+    provider: text("provider").notNull(),
+    status: text("status").notNull().default("sending"),
+    providerMessageId: text("provider_message_id"),
+    error: text("error"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("email_delivery_logs_created_idx").on(table.createdAt),
+    index("email_delivery_logs_status_created_idx").on(table.status, table.createdAt),
+  ],
+);

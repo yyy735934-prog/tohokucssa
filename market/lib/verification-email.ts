@@ -30,5 +30,6 @@ export async function sendVerificationCode(
     subject: `${code}｜东北集市${title}验证码`,
     text: `你的东北集市${title}验证码是：${code}\n\n验证码 10 分钟内有效，仅可使用一次。如果不是你本人操作，请忽略本邮件。`,
     html: `<div style="font-family:system-ui,sans-serif;line-height:1.7;color:#18382e"><h2>东北集市${title}</h2><p>你的验证码是：</p><p style="font-size:30px;font-weight:800;letter-spacing:8px">${code}</p><p>验证码 10 分钟内有效，仅可使用一次。</p><p style="color:#718078">如果不是你本人操作，请忽略本邮件。</p></div>`,
+    auditLabel: `东北集市${title}验证码`,
   });
 }

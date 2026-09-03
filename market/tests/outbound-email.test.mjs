@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sendOutboundEmail } from "../lib/outbound-email.ts";
+import { emailAuditSubject, maskEmailForLog, sendOutboundEmail } from "../lib/outbound-email.ts";
 
 const message = {
   to: "member@example.com",
@@ -67,4 +67,10 @@ test("rejects sends when no outbound email provider is configured", async () => 
     ),
     /not configured/,
   );
+});
+
+test("email audit fields never retain a verification code or full recipient", () => {
+  assert.equal(maskEmailForLog("Darwinding@outlook.com"), "da***@outlook.com");
+  assert.equal(emailAuditSubject({ subject: "123456｜东北集市登录验证码" }), "[验证码]｜东北集市登录验证码");
+  assert.equal(emailAuditSubject({ subject: "123456｜验证码", auditLabel: "登录验证码" }), "登录验证码");
 });

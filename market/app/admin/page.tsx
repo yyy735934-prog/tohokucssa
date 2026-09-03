@@ -1,7 +1,7 @@
 import { desc, sql } from "drizzle-orm";
 import Link from "next/link";
 import { getDb } from "../../db";
-import { listings, users, verificationAppeals } from "../../db/schema";
+import { emailDeliveryLogs, listings, users, verificationAppeals } from "../../db/schema";
 import { requireAdminAccess } from "../../lib/auth";
 import { listingCategoryLabel } from "../../lib/listing-intelligence";
 import AdminClient from "./AdminClient";
@@ -23,7 +23,7 @@ export default async function AdminPage() {
   }
 
   const db = await getDb();
-  const [listingRows, userRows, countRows, appealRows] = await Promise.all([
+  const [listingRows, userRows, countRows, appealRows, emailLogRows] = await Promise.all([
     db.select().from(listings).orderBy(desc(listings.createdAt)).limit(100),
     db.select().from(users).orderBy(desc(users.createdAt)).limit(100),
     db
@@ -42,6 +42,7 @@ export default async function AdminPage() {
       hasImage: sql<boolean>`${verificationAppeals.imageKey} is not null`,
       createdAt: verificationAppeals.createdAt,
     }).from(verificationAppeals).innerJoin(users, sql`${verificationAppeals.userEmail} = ${users.email}`).orderBy(desc(verificationAppeals.createdAt)).limit(100),
+    db.select().from(emailDeliveryLogs).orderBy(desc(emailDeliveryLogs.createdAt)).limit(200),
   ]);
   const counts = countRows[0] ?? { total: 0, pending: 0, active: 0 };
   const pendingUsers = userRows.filter((user) => user.academicStatus === "pending").length;
@@ -83,6 +84,7 @@ export default async function AdminPage() {
         }))}
         initialUsers={userRows}
         initialAppeals={appealRows}
+        initialEmailLogs={emailLogRows}
       />
     </main>
   );

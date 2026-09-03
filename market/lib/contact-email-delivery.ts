@@ -71,12 +71,14 @@ export async function deliverAcceptedContactEmail(env: ContactEmailEnv, requestI
       resendApiKey: env.RESEND_API_KEY?.trim() ?? "",
       from,
       enabled: true,
+      db: env.DB,
     }, {
       to: recipient,
       from: { email: from, name: "东北集市" },
       subject: "卖家已接受你的联系申请",
       text,
       html: `<div style="font-family:system-ui,sans-serif;line-height:1.7;color:#18382e"><h2>卖家已接受你的联系申请</h2><p>${escapeHtml(text).replaceAll("\n", "<br>")}</p><p><a href="https://market.tohokucssa.org/account#contacts">查看交易联系</a></p><hr><small>你收到此邮件，是因为你曾在东北集市申请联系该商品卖家。</small></div>`,
+      auditLabel: "交易联系申请通过通知",
     });
     await env.DB.prepare(`
       UPDATE contact_requests

@@ -37,6 +37,18 @@ type AdminAppeal = {
   createdAt: string;
 };
 
+type AdminEmailLog = {
+  id: string;
+  recipientMasked: string;
+  subject: string;
+  provider: string;
+  status: string;
+  providerMessageId: string | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const listingStatusText: Record<string, string> = {
   pending: "待审核",
   active: "展示中",
@@ -56,12 +68,14 @@ export default function AdminClient({
   initialListings,
   initialUsers,
   initialAppeals,
+  initialEmailLogs,
 }: {
   initialListings: AdminListing[];
   initialUsers: AdminUser[];
   initialAppeals: AdminAppeal[];
+  initialEmailLogs: AdminEmailLog[];
 }) {
-  const [tab, setTab] = useState<"listings" | "users" | "appeals">("listings");
+  const [tab, setTab] = useState<"listings" | "users" | "appeals" | "emails">("listings");
   const [listingRows, setListingRows] = useState(initialListings);
   const [userRows, setUserRows] = useState(initialUsers);
   const [appealRows, setAppealRows] = useState(initialAppeals);
@@ -123,6 +137,10 @@ export default function AdminClient({
         <button className={tab === "appeals" ? "active" : ""} onClick={() => setTab("appeals")}>
           学生身份申诉
           <b>{appealRows.filter((appeal) => appeal.status === "pending").length}</b>
+        </button>
+        <button className={tab === "emails" ? "active" : ""} onClick={() => setTab("emails")}>
+          邮件日志
+          <b>{initialEmailLogs.filter((log) => log.status === "failed").length}</b>
         </button>
       </nav>
 
@@ -207,7 +225,7 @@ export default function AdminClient({
             ))}
           </div>
         </div>
-      ) : (
+      ) : tab === "appeals" ? (
         <div className="admin-panel">
           <div className="admin-panel-heading">
             <div><span>STUDENT APPEALS</span><h2>学生身份申诉</h2></div>
@@ -223,6 +241,32 @@ export default function AdminClient({
               </article>
             ))}
             {!appealRows.length && <div className="admin-empty">当前没有学生身份申诉。</div>}
+          </div>
+        </div>
+      ) : (
+        <div className="admin-panel">
+          <div className="admin-panel-heading email-log-heading">
+            <div><span>EMAIL DELIVERY</span><h2>邮件发送情况</h2></div>
+            <small>仅保存脱敏收件地址与投递结果；“服务已接受”不代表邮件一定进入收件箱。</small>
+          </div>
+          <div className="admin-email-logs">
+            {initialEmailLogs.map((log) => (
+              <article key={log.id}>
+                <span className={`email-status ${log.status}`}>
+                  {log.status === "accepted" ? "服务已接受" : log.status === "failed" ? "发送失败" : "发送中"}
+                </span>
+                <div className="email-log-main">
+                  <b>{log.subject}</b>
+                  <span>收件人 {log.recipientMasked} · {log.provider === "resend" ? "Resend" : "Cloudflare Email"}</span>
+                  {log.error && <small>失败原因：{log.error}</small>}
+                </div>
+                <div className="email-log-meta">
+                  <time>{new Date(log.createdAt).toLocaleString("zh-CN")}</time>
+                  {log.providerMessageId && <code title={log.providerMessageId}>{log.providerMessageId.slice(0, 12)}</code>}
+                </div>
+              </article>
+            ))}
+            {!initialEmailLogs.length && <div className="admin-empty">暂无邮件发送记录，新发送的邮件会自动出现在这里。</div>}
           </div>
         </div>
       )}
