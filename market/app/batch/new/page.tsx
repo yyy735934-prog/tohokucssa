@@ -5,9 +5,8 @@ import BatchPublishClient from "./BatchPublishClient";
 import { canUseMarketplace } from "../../../lib/member-status";
 import MyMarketNav from "../../MyMarketNav";
 import { getDb } from "../../../db";
-import { listingBatches, listingPosters, listings } from "../../../db/schema";
-import { listingToMarketItem } from "../../../lib/listings";
-import ExistingListingPosterBuilder from "./ExistingListingPosterBuilder";
+import { listingBatches, listingPosters } from "../../../db/schema";
+import { PosterHistory } from "./ExistingListingPosterBuilder";
 
 export const dynamic = "force-dynamic";
 
@@ -15,11 +14,10 @@ export default async function NewBatchPage() {
   const member = await requireMemberAccess("/batch/new");
   const canPublish = canUseMarketplace(member.academicStatus, member.isAdmin);
   const db = await getDb();
-  const [activeListings, batches, posters] = canPublish ? await Promise.all([
-    db.select().from(listings).where(and(eq(listings.ownerEmail, member.email), eq(listings.status, "active"))).orderBy(desc(listings.createdAt)).limit(50),
+  const [batches, posters] = canPublish ? await Promise.all([
     db.select().from(listingBatches).where(eq(listingBatches.ownerEmail, member.email)).orderBy(desc(listingBatches.createdAt)).limit(20),
     db.select().from(listingPosters).where(and(eq(listingPosters.creatorEmail, member.email), eq(listingPosters.kind, "seller"))).orderBy(desc(listingPosters.createdAt)).limit(20),
-  ]) : [[], [], []];
+  ]) : [[], []];
   const posterHistory = [
     ...batches.map((batch) => ({ id: batch.id, title: batch.title, url: `/b/${batch.publicId}`, kind: "batch" as const, createdAt: batch.createdAt })),
     ...posters.map((poster) => ({ id: poster.id, title: poster.title, url: `/p/${poster.publicId}`, kind: "selection" as const, createdAt: poster.createdAt })),
@@ -36,22 +34,9 @@ export default async function NewBatchPage() {
       </header>
       <MyMarketNav active="batch" canPublish={canPublish} />
       {canPublish ? (
-        <>
-          <section className="batch-builder batch-poster-tools">
-            <div className="batch-builder-heading">
-              <span>POSTER STUDIO</span><h1>把正在出售的商品重新组合成海报</h1>
-              <p>适合毕业季分批转发；商品售出后，扫码页面会同步更新状态。</p>
-            </div>
-            <ExistingListingPosterBuilder
-              listings={activeListings.map((listing) => {
-                const item = listingToMarketItem(listing, member.email);
-                return { id: item.id, title: item.title, price: item.price, place: item.place, icon: item.icon, tone: item.tone, imageUrl: item.imageUrl };
-              })}
-              history={posterHistory}
-            />
-          </section>
-          <BatchPublishClient sellerName={member.publicName} sellerVerified={member.academicStatus === "verified"} />
-        </>
+        <BatchPublishClient sellerName={member.publicName} sellerVerified={member.academicStatus === "verified"}>
+          <PosterHistory history={posterHistory} />
+        </BatchPublishClient>
       ) : (
         <section className="batch-access-card">
           <span>IDENTITY REQUIRED</span>

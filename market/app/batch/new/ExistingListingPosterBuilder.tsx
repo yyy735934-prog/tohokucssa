@@ -21,7 +21,7 @@ export type PosterHistoryItem = {
   createdAt: string;
 };
 
-export default function ExistingListingPosterBuilder({ listings, history }: { listings: PosterListingOption[]; history: PosterHistoryItem[] }) {
+export default function ExistingListingPosterBuilder({ listings }: { listings: PosterListingOption[] }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [title, setTitle] = useState("我的闲置合集");
   const [message, setMessage] = useState("");
@@ -53,8 +53,7 @@ export default function ExistingListingPosterBuilder({ listings, history }: { li
   };
 
   return (
-    <>
-      <section className="batch-section-card existing-poster-builder">
+    <section className="batch-section-card existing-poster-builder">
         <div className="batch-section-title"><b>选</b><div><h2>从已发布商品生成海报</h2><p>选择 2 至 9 件展示中的商品，二维码会打开实时商品合集</p></div></div>
         {listings.length >= 2 ? (
           <>
@@ -76,12 +75,16 @@ export default function ExistingListingPosterBuilder({ listings, history }: { li
           </>
         ) : <p className="poster-builder-empty">至少有 2 件正在展示的商品后，即可在这里组合生成海报。</p>}
         {message && <p className="batch-notice">{message}</p>}
-      </section>
+    </section>
+  );
+}
 
-      {history.length > 0 && <section className="batch-section-card poster-history">
-        <div className="batch-section-title"><b>↻</b><div><h2>重新生成与下载</h2><p>打开以前的批量发布或商品合集，按当前状态重新生成二维码海报</p></div></div>
-        <div>{history.map((item) => <a href={item.url} key={`${item.kind}-${item.id}`}><span>{item.kind === "batch" ? "批量发布" : "商品合集"}</span><b>{item.title}</b><small>{new Date(item.createdAt).toLocaleDateString("zh-CN")} · 打开并下载 →</small></a>)}</div>
-      </section>}
-    </>
+export function PosterHistory({ history }: { history: PosterHistoryItem[] }) {
+  if (!history.length) return null;
+  return (
+    <section className="batch-section-card poster-history">
+      <div className="batch-section-title"><b>↻</b><div><h2>重新生成与下载</h2><p>打开以前的批量发布或商品合集，按当前状态重新生成二维码海报</p></div></div>
+      <div>{history.map((item) => <a href={item.url} key={`${item.kind}-${item.id}`}><span>{item.kind === "batch" ? "批量发布" : "商品合集"}</span><b>{item.title}</b><small>{new Date(item.createdAt).toLocaleDateString("zh-CN")} · 打开并下载 →</small></a>)}</div>
+    </section>
   );
 }

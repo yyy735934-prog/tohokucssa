@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import PublishLocationMap, { type PublishLocation } from "../../PublishLocationMap";
 
@@ -38,7 +39,7 @@ async function compressPhoto(file: File) {
   return new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "item"}.jpg`, { type: "image/jpeg" });
 }
 
-export default function BatchPublishClient({ sellerName, sellerVerified }: { sellerName: string; sellerVerified: boolean }) {
+export default function BatchPublishClient({ sellerName, sellerVerified, children }: { sellerName: string; sellerVerified: boolean; children?: ReactNode }) {
   const [title, setTitle] = useState("毕业搬家·闲置出清");
   const [place, setPlace] = useState("");
   const [location, setLocation] = useState<PublishLocation | null>(null);
@@ -198,6 +199,7 @@ export default function BatchPublishClient({ sellerName, sellerVerified }: { sel
         <div><b>发布后立即生成专属网页和竖版海报</b><span>审核中的商品也能预览和转发，联系按钮暂不可用。</span></div>
         <button type="button" disabled={!ready || submitting} onClick={() => void submit()}>{submitting ? "正在生成…" : "生成批次与海报"}</button>
       </div>
+      {children}
     </section>
   );
 }

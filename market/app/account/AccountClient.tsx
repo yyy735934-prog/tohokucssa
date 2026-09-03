@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import ProfileSetup from "../ProfileSetup";
 import MyMarketNav from "../MyMarketNav";
+import ExistingListingPosterBuilder from "../batch/new/ExistingListingPosterBuilder";
 
 type Listing = {
   id: string;
@@ -152,6 +153,16 @@ export default function AccountClient({
             <h3>还没有发布闲置</h3>
             <p>拍一张照片，最快一分钟完成发布。</p>
             {canPublish && <Link href="/?publish=1">发布第一件闲置</Link>}
+          </div>
+        )}
+
+        {canPublish && (
+          <div className="account-poster-builder">
+            <ExistingListingPosterBuilder
+              listings={listings
+                .filter((listing) => listing.status === "active")
+                .map((listing) => ({ ...listing, imageUrl: listing.imageUrl ?? null }))}
+            />
           </div>
         )}
 
