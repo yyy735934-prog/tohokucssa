@@ -14,6 +14,10 @@
         <p v-if="gathering.notes && gathering.gathering_state === 'confirmed'" class="notes">{{ gathering.notes }}</p>
       </div>
 
+      <div v-if="gathering.image_key" class="card mb event-image-card">
+        <img :src="`/api/images/serve/${gathering.id}`" :alt="`${gathering.title}活动图片`" class="event-image" />
+      </div>
+
       <div class="card mb formation-card">
         <div class="formation-head">
           <div><strong>{{ gathering.effective_count }}</strong> / {{ gathering.min_participants }} 人</div>
@@ -172,6 +176,7 @@ function formatDate(timestamp) {
 <style scoped>
 .mb { margin-bottom: 16px; }
 .hero-card h1 { font-size: 24px; margin-top: 8px; }
+.event-image-card { padding: 0; overflow: hidden; }.event-image { display: block; width: 100%; height: auto; max-height: 520px; object-fit: cover; }
 .topline, .formation-head, .formation-meta, .my-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .category { color: var(--c-primary); font-size: 13px; font-weight: 700; }
 .state { font-size: 12px; font-weight: 700; border-radius: 99px; padding: 5px 10px; background: var(--c-bg); }

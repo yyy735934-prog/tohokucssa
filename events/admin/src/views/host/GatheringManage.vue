@@ -16,6 +16,19 @@
 
     <div v-if="isLocked" class="card locked-banner mb-16">🔒 报名已锁定在 {{ event.lock_at }} 人；已有成员状态不受影响，其他人暂时不能加入。</div>
 
+    <div class="card image-card mb-16">
+      <div class="image-head"><h2>活动图片</h2><span>将在统一活动广场和组局详情中展示</span></div>
+      <div v-if="event.image_key" class="img-preview">
+        <img :src="`/api/images/serve/${event.id}`" alt="活动图片" />
+        <button class="btn btn-outline btn-sm img-delete" :disabled="busy" @click="deleteImage">删除图片</button>
+      </div>
+      <div v-else class="img-upload-area" @click="$refs.imageInput.click()" @dragover.prevent @drop.prevent="handleDrop">
+        <div class="img-upload-icon">+</div><div class="img-upload-text">点击或拖拽上传图片</div><div class="img-upload-hint">支持 JPG/PNG/WebP/GIF，最大 5MB</div>
+      </div>
+      <input ref="imageInput" type="file" accept="image/*" style="display:none" @change="handleImageSelect" />
+      <div v-if="imageUploading" class="uploading">上传中…</div>
+    </div>
+
     <div class="state-grid mb-16">
       <div class="card stat"><strong>{{ stateLabel }}</strong><span>当前状态</span></div>
       <div class="card stat"><strong>{{ effectiveCount }} / {{ event.min_participants }}</strong><span>有效成局人数</span></div>
@@ -86,6 +99,7 @@ const effectiveCount = ref(0)
 const loading = ref(true)
 const error = ref('')
 const busy = ref(false)
+const imageUploading = ref(false)
 const assignments = reactive({})
 const finalForm = reactive({ event_date: '', location: '', notes: '' })
 
@@ -110,6 +124,21 @@ async function load() {
 }
 
 function driverRemaining(driver) { return Math.max(0, Number(driver.seats_offered || 0) - rideAssigned.value.filter((p) => p.assigned_driver_signup_id === driver.id).length) }
+async function uploadImage(file) {
+  imageUploading.value = true
+  try { await api.uploadEventImage(event.value.id, file); showToast('图片已上传'); await load() }
+  catch (e) { showToast(e.message, 'error') }
+  imageUploading.value = false
+}
+function handleImageSelect(e) { const file = e.target.files[0]; if (file) uploadImage(file); e.target.value = '' }
+function handleDrop(e) { const file = e.dataTransfer.files[0]; if (file?.type.startsWith('image/')) uploadImage(file) }
+async function deleteImage() {
+  if (!confirm('确定删除活动图片？')) return
+  busy.value = true
+  try { await api.deleteEventImage(event.value.id); event.value.image_key = null; showToast('图片已删除') }
+  catch (e) { showToast(e.message, 'error') }
+  busy.value = false
+}
 async function assign(passenger) { busy.value = true; try { await api.assignCarpool(event.value.id, passenger.id, Number(assignments[passenger.id])); showToast('乘车已分配'); await load() } catch (e) { showToast(e.message, 'error') } busy.value = false }
 async function unassign(passenger) { busy.value = true; try { await api.unassignCarpool(event.value.id, passenger.id); showToast('已撤销乘车分配'); await load() } catch (e) { showToast(e.message, 'error') } busy.value = false }
 async function finalize() { busy.value = true; try { await api.finalizeGathering(event.value.id, finalForm); showToast('最终安排已确认，正在通知成员'); await load() } catch (e) { showToast(e.message, 'error') } busy.value = false }
@@ -138,6 +167,7 @@ function formatTime(ts) { return new Date(ts).toLocaleString('zh-CN', { timeZone
 .danger { color: var(--c-danger); }
 .lock { color: var(--c-warning); }.unlock { color: var(--c-success); }
 .locked-banner { color: #92400e; background: #fffbeb; border-color: #f59e0b; font-size: 13px; }
+.image-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }.image-head h2 { font-size: 16px; }.image-head span, .uploading { color: var(--c-text-3); font-size: 12px; }.img-preview { position: relative; overflow: hidden; border-radius: 8px; }.img-preview img { display: block; width: 100%; max-height: 480px; object-fit: cover; }.img-delete { position: absolute; right: 10px; bottom: 10px; background: rgba(255,255,255,.94); }.img-upload-area { padding: 34px 20px; border: 2px dashed var(--c-border); border-radius: 8px; text-align: center; cursor: pointer; }.img-upload-icon { color: var(--c-primary); font-size: 30px; line-height: 1; }.img-upload-text { margin-top: 8px; font-size: 14px; font-weight: 600; }.img-upload-hint { margin-top: 4px; color: var(--c-text-3); font-size: 12px; }.uploading { margin-top: 8px; }
 .state-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
 .stat { display: flex; flex-direction: column; gap: 5px; }
 .stat strong { font-size: 19px; }.stat span { font-size: 12px; color: var(--c-text-2); }
