@@ -109,11 +109,13 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [publishOpen, setPublishOpen] = useState(false);
   const [published, setPublished] = useState(false);
+  const [publicationMessage, setPublicationMessage] = useState("");
   const [notice, setNotice] = useState("");
   const [publishStep, setPublishStep] = useState(1);
   const [aiLoading, setAiLoading] = useState(false);
   const [photoName, setPhotoName] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoImageKey, setPhotoImageKey] = useState<string | null>(null);
   const [itemTitle, setItemTitle] = useState("");
   const [itemDescription, setItemDescription] = useState("");
   const [itemCategory, setItemCategory] = useState<ListingCategory>("其他");
@@ -209,9 +211,11 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
   const resetPublisher = () => {
     setPublishStep(1);
     setPublished(false);
+    setPublicationMessage("");
     setAiLoading(false);
     setPhotoName("");
     setPhotoFile(null);
+    setPhotoImageKey(null);
     setItemTitle("");
     setItemDescription("");
     setItemCategory("其他");
@@ -256,8 +260,8 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
     }
     setPublishing(true);
     try {
-      let imageKey: string | null = null;
-      if (photoFile) {
+      let imageKey = photoImageKey;
+      if (photoFile && !imageKey) {
         setNotice(photoFile.size > 1_200_000 ? "正在优化照片并上传…" : "正在上传照片…");
         const uploadFile = await compressListingPhoto(photoFile);
         const form = new FormData();
@@ -304,6 +308,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
         setItems((current) => [result.listing!, ...current]);
       }
       setPublished(true);
+      setPublicationMessage(result.message ?? "商品信息已提交。");
       setNotice(result.message ?? "已提交审核。");
     } catch (error) {
       showNotice(
@@ -383,6 +388,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
     }
     setPhotoName(file?.name ?? "IMG_2026_0723.jpg");
     setPhotoFile(file ?? null);
+    setPhotoImageKey(null);
     setPublishStep(2);
     setAiLoading(true);
     setAiMessage("");
@@ -404,8 +410,24 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
 
     try {
       const uploadFile = await compressListingPhoto(file);
+      const uploadForm = new FormData();
+      uploadForm.append("image", uploadFile);
+      const uploadResponse = await fetchWithTimeout(
+        "/api/uploads",
+        { method: "POST", body: uploadForm },
+      );
+      const uploadResult = await readJson<{ key?: string; error?: string }>(uploadResponse);
+      if (!uploadResponse.ok || !uploadResult?.key) {
+        setItemTitle("");
+        setItemDescription("");
+        updateItemIntelligence("", "");
+        setAiMessage(uploadResult?.error ?? "照片上传失败，请重新选择或稍后再试。");
+        return;
+      }
+      setPhotoImageKey(uploadResult.key);
       const form = new FormData();
       form.append("image", uploadFile);
+      form.append("imageKey", uploadResult.key);
       const response = await fetchWithTimeout(
         "/api/ai/listing",
         { method: "POST", body: form },
@@ -557,7 +579,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
       <footer id="about">
         <div className="footer-brand"><span className="brand-mark">东</span><div><b>东北集市</b><small>让闲置流动，让同学连接</small></div></div>
         <p>由东北地区中国学生学者友好联谊会发起</p>
-        <div><button>使用规范</button><button>举报与建议</button><button>隐私说明</button></div>
+        <div><button onClick={() => showNotice("使用规范文案正在审核，暂未正式发布。")}>使用规范</button><button onClick={() => showNotice("举报与建议渠道正在完善，请暂时联系管理员。")}>举报与建议</button><button onClick={() => showNotice("隐私说明文案正在审核，暂未正式发布。")}>隐私说明</button></div>
       </footer>
 
       <nav className="mobile-nav" aria-label="移动端导航">
@@ -604,7 +626,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
       {publishOpen && <div className="modal-backdrop publish-backdrop" role="presentation" onClick={closePublisher}>
         <section className="publish-modal" role="dialog" aria-modal="true" aria-label="发布闲置" onClick={(e) => e.stopPropagation()}>
           <button className="modal-close" aria-label="关闭发布窗口" onClick={closePublisher}>×</button>
-          {published ? <div className="publish-success"><span>✓</span><h2>发布成功</h2><p>你的闲置已提交审核。之后可以在“我的发布”中修改信息或标记为已出。</p><button onClick={closePublisher}>完成</button></div> : <>
+          {published ? <div className="publish-success"><span>✓</span><h2>提交成功</h2><p>{publicationMessage} 之后可以在“我的发布”中查看状态或标记为已出。</p><button onClick={closePublisher}>完成</button></div> : <>
             <div className="wizard-header">
               <div className="modal-title"><span className="kicker">AI QUICK LISTING</span><h2>发布闲置</h2></div>
               <ol className="wizard-steps" aria-label="发布进度">
@@ -614,7 +636,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
 
             {publishStep === 1 && <section className="wizard-pane photo-step">
               <label className="ai-upload">
-                <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(e) => { const file = e.target.files?.[0]; if (file) runAiScan(file); }} />
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => { const file = e.target.files?.[0]; if (file) runAiScan(file); }} />
                 <span className="camera-icon">▣</span>
                 <b>拍照或选择照片</b>
                 <small>尽量拍清物品全貌，光线明亮即可</small>
@@ -659,8 +681,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
               <div className="listing-summary"><div className="summary-photo">{itemIcon}</div><div><span>{itemCategory} · 即将发布</span><h3>{itemTitle}</h3><p>⌖ {pickup}交接</p></div></div>
               <div className="pricing-box">
                 <label><span>你的价格</span><div className="price-input"><b>¥</b><input aria-label="商品价格" type="number" min="0" required value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" /></div></label>
-                <div className="ai-price"><span>✦ AI 参考价</span><b>¥1,500–2,200</b><small>根据同类商品与使用状态估算</small></div>
-                <div className="price-chips"><span>快速选择</span>{[1500,1800,2200].map((value) => <button type="button" key={value} onClick={() => setPrice(String(value))}>¥{value.toLocaleString()}</button>)}<button type="button" onClick={() => setPrice("0")}>免费送</button></div>
+                <div className="price-chips"><span>请根据物品成色自行定价</span><button type="button" onClick={() => setPrice("0")}>设为免费赠送</button></div>
                 <div className="wizard-actions"><button type="button" className="back-button" onClick={() => setPublishStep(3)}>上一步</button><button type="submit" disabled={publishing}>{publishing ? "正在提交…" : viewer ? "确认并发布" : "登录后发布"}</button></div>
                 <small className="terms">发布即表示你确认信息真实，并同意遵守平台交易规范。</small>
               </div>

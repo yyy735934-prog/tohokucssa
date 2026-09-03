@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import ProfileSetup from "../ProfileSetup";
+import MyMarketNav from "../MyMarketNav";
 
 type Listing = {
   id: string;
@@ -114,16 +115,7 @@ export default function AccountClient({
 
   return (
     <section className="account-workspace">
-      <aside className="account-nav">
-        <b>我的集市</b>
-        <a className="active" href="#my-listings">我的发布</a>
-        {canPublish && <Link href="/batch/new">批量发布与海报</Link>}
-        <Link href="/favorites">我的收藏</Link>
-        <Link href="/map">附近闲置</Link>
-        <a href="#contacts">交易联系</a>
-        <a href="#profile-contact">联系方式</a>
-        <small>平台不会公开你的邮箱。具体联系方式仅在双方确认交易意向后提供。</small>
-      </aside>
+      <MyMarketNav active="account" canPublish={canPublish} variant="sidebar" />
 
       <div className="account-panel" id="my-listings">
         <div className="panel-heading">
@@ -131,7 +123,7 @@ export default function AccountClient({
             <span>MY LISTINGS</span>
             <h2>我的发布</h2>
           </div>
-          {canPublish ? <div className="account-publish-actions"><Link href="/?publish=1">＋ 单件发布</Link><Link href="/batch/new">▦ 批量发布</Link></div> : <button disabled>认证后可发布</button>}
+          {canPublish ? <div className="account-publish-actions"><Link href="/?publish=1">单件发布</Link><Link href="/batch/new">批量发布与海报</Link></div> : <button disabled>认证后可发布</button>}
         </div>
 
         {listings.length ? (

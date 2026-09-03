@@ -4,6 +4,7 @@ import { contactRequests, listings, users } from "../../../db/schema";
 import { getMemberAccess } from "../../../lib/auth";
 import { canUseMarketplace } from "../../../lib/member-status";
 import { sendMemberNotification } from "../../../lib/notification-email";
+import { acceptedContactEmailText, type SellerContact } from "../../../lib/contact-notification";
 
 type ContactStatus = "pending" | "accepted" | "declined";
 
@@ -138,9 +139,16 @@ export async function PATCH(request: Request) {
   }
 
   const db = await getDb();
+  let sellerContact: SellerContact | null = null;
   if (payload.status === "accepted") {
     const sellerProfiles = await db
-      .select({ profileCompleted: users.profileCompleted })
+      .select({
+        profileCompleted: users.profileCompleted,
+        phone: users.phone,
+        wechat: users.wechat,
+        qq: users.qq,
+        wechatQrKey: users.wechatQrKey,
+      })
       .from(users)
       .where(eq(users.email, member.email))
       .limit(1);
@@ -153,6 +161,12 @@ export async function PATCH(request: Request) {
         { status: 409 },
       );
     }
+    sellerContact = {
+      phone: sellerProfiles[0].phone,
+      wechat: sellerProfiles[0].wechat,
+      qq: sellerProfiles[0].qq,
+      hasWechatQr: Boolean(sellerProfiles[0].wechatQrKey),
+    };
   }
   const [updated] = await db
     .update(contactRequests)
@@ -170,7 +184,7 @@ export async function PATCH(request: Request) {
       updated.buyerEmail,
       payload.status === "accepted" ? "卖家已接受你的联系申请" : "卖家已处理你的联系申请",
       payload.status === "accepted"
-        ? `卖家已接受你对“${listing?.title ?? "商品"}”的联系申请，请进入个人中心查看联系方式。`
+        ? acceptedContactEmailText(listing?.title ?? "商品", sellerContact!)
         : `卖家未接受你对“${listing?.title ?? "商品"}”的联系申请。`,
     );
     return Response.json({

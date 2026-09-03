@@ -6,7 +6,7 @@ const manualReviewPattern =
 export function deterministicListingRisk(title: string, description: string): ListingRiskLevel {
   return manualReviewPattern.test(`${title} ${description}`) ? "review" : "low";
 }
-export function batchListingStatus(input: {
+export function listingPublicationStatus(input: {
   verifiedSeller: boolean;
   isAdmin: boolean;
   aiRisk: ListingRiskLevel | null;
@@ -20,3 +20,7 @@ export function batchListingStatus(input: {
     ? ("active" as const)
     : ("pending" as const);
 }
+
+// Kept as an alias for older callers and tests while both single and batch
+// publication use the same server-side policy.
+export const batchListingStatus = listingPublicationStatus;

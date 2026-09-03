@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LISTING_CATEGORIES } from "../../lib/listing-intelligence";
 import { matchesMarketSearch } from "../../lib/market-search";
 import OsmMap, { type MapItem, type UserLocation } from "./OsmMap";
+import MyMarketNav from "../MyMarketNav";
 
 const categories = ["全部", ...LISTING_CATEGORIES];
 const areas = ["全部区域", "川内", "青叶山", "片平", "北仙台", "八幡", "三条町"];
@@ -170,6 +171,7 @@ export default function MarketMap() {
         </nav>
         <Link className="back-market" href="/">返回集市 <span>→</span></Link>
       </header>
+      <MyMarketNav active="map" />
 
       <section className="map-intro">
         <div>
@@ -253,17 +255,11 @@ export default function MarketMap() {
               <p>{selected.note}</p>
               <small>⌖ {selected.place}附近交接 · {distanceLabel(userLocation, selected)}</small>
             </div>
-            <Link href={`/?item=${selected.id}`}>查看详情 →</Link>
+            <Link href={`/?listing=${selected.id}`}>查看详情 →</Link>
           </article>}
 
           <div className="map-legend" id="location-privacy-note"><span><i className="legend-dot"></i>闲置物品</span><small>定位仅在本机处理，不保存精确坐标</small></div>
         </div>
-      </section>
-
-      <section className="integration-note">
-        <span>⌘</span>
-        <div><b>服务地图组件 · OpenStreetMap</b><p>真实地图底图已接入，后续可将“二手物品”点位图层接入学友会官方首页的服务地图。</p></div>
-        <Link href="/">返回平台首页 →</Link>
       </section>
 
       <nav className="mobile-nav map-mobile-nav" aria-label="移动端导航">

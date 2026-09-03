@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { batchListingStatus, deterministicListingRisk } from "../lib/listing-moderation.ts";
+import { listingPublicationStatus, deterministicListingRisk } from "../lib/listing-moderation.ts";
 
 test("auto-publishes only verified low-risk batch items", () => {
-  assert.equal(batchListingStatus({
+  assert.equal(listingPublicationStatus({
     verifiedSeller: true,
     isAdmin: false,
     aiRisk: "low",
@@ -13,7 +13,7 @@ test("auto-publishes only verified low-risk batch items", () => {
 });
 test("routes uncertain AI results and missing analyses to manual review", () => {
   for (const aiRisk of ["review", null]) {
-    assert.equal(batchListingStatus({
+    assert.equal(listingPublicationStatus({
       verifiedSeller: true,
       isAdmin: false,
       aiRisk,
@@ -26,7 +26,7 @@ test("routes uncertain AI results and missing analyses to manual review", () => 
 test("server keywords override a low-risk AI answer", () => {
   for (const title of ["二手原付", "处方药转让", "品牌高仿包"]) {
     assert.equal(deterministicListingRisk(title, "状态请现场确认"), "review");
-    assert.equal(batchListingStatus({
+    assert.equal(listingPublicationStatus({
       verifiedSeller: true,
       isAdmin: false,
       aiRisk: "low",
@@ -37,11 +37,21 @@ test("server keywords override a low-risk AI answer", () => {
 });
 
 test("never gives unverified members automatic publication", () => {
-  assert.equal(batchListingStatus({
+  assert.equal(listingPublicationStatus({
     verifiedSeller: false,
     isAdmin: false,
     aiRisk: "low",
     title: "二手键盘",
     description: "功能正常，现场确认。",
   }), "pending");
+});
+
+test("uses the same publication policy for ordinary single and batch listings", () => {
+  assert.equal(listingPublicationStatus({
+    verifiedSeller: true,
+    isAdmin: false,
+    aiRisk: "low",
+    title: "家用剪刀",
+    description: "普通文具剪刀，状态请现场确认。",
+  }), "active");
 });

@@ -3,7 +3,7 @@ import { getDb } from "../../../db";
 import { listingAnalyses, listingBatches, listings } from "../../../db/schema";
 import { getMemberAccess } from "../../../lib/auth";
 import { inferListingIntelligence } from "../../../lib/listing-intelligence";
-import { batchListingStatus, type ListingRiskLevel } from "../../../lib/listing-moderation";
+import { listingPublicationStatus, type ListingRiskLevel } from "../../../lib/listing-moderation";
 import { isOwnedListingImageKey } from "../../../lib/upload-ownership";
 import { canUseMarketplace } from "../../../lib/member-status";
 
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       place,
       latitude,
       longitude,
-      status: batchListingStatus({
+      status: listingPublicationStatus({
         verifiedSeller: member.academicStatus === "verified",
         isAdmin: member.isAdmin,
         aiRisk,

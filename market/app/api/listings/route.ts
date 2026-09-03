@@ -1,11 +1,12 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { listings, users } from "../../../db/schema";
+import { listingAnalyses, listings, users } from "../../../db/schema";
 import { getMemberAccess } from "../../../lib/auth";
 import { inferListingIntelligence } from "../../../lib/listing-intelligence";
 import { listingToMarketItem } from "../../../lib/listings";
 import { publicMemberName } from "../../../lib/public-identity";
 import { canUseMarketplace } from "../../../lib/member-status";
+import { listingPublicationStatus, type ListingRiskLevel } from "../../../lib/listing-moderation";
 
 function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -98,9 +99,22 @@ export async function POST(request: Request) {
       return Response.json({ error: "请完整填写标题、描述，并在地图上标记交接地点。" }, { status: 400 });
     }
 
-    const visual = inferListingIntelligence(title, description);
-    const status = member.isAdmin ? "active" : "pending";
     const db = await getDb();
+    const [analysis] = imageKey
+      ? await db.select({ riskLevel: listingAnalyses.riskLevel })
+          .from(listingAnalyses)
+          .where(and(eq(listingAnalyses.imageKey, imageKey), eq(listingAnalyses.ownerEmail, member.email)))
+          .limit(1)
+      : [];
+    const visual = inferListingIntelligence(title, description);
+    const aiRisk: ListingRiskLevel | null = analysis?.riskLevel === "low" ? "low" : analysis ? "review" : null;
+    const status = listingPublicationStatus({
+      verifiedSeller: member.academicStatus === "verified",
+      isAdmin: member.isAdmin,
+      aiRisk,
+      title,
+      description,
+    });
     const [created] = await db
       .insert(listings)
       .values({
@@ -127,7 +141,9 @@ export async function POST(request: Request) {
           name: member.publicName,
           verified: member.academicStatus === "verified",
         }),
-        message: status === "active" ? "发布成功。" : "已提交审核，管理员通过后将公开展示。",
+        message: status === "active"
+          ? member.isAdmin ? "发布成功。" : "AI 低风险审核已通过，商品已公开展示。"
+          : "已提交人工审核，管理员通过后将公开展示。",
       },
       { status: 201 },
     );

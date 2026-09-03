@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireMemberAccess } from "../../../lib/auth";
 import BatchPublishClient from "./BatchPublishClient";
 import { canUseMarketplace } from "../../../lib/member-status";
+import MyMarketNav from "../../MyMarketNav";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function NewBatchPage() {
         </Link>
         <nav><Link href="/account">个人中心</Link><Link href="/">返回集市</Link></nav>
       </header>
+      <MyMarketNav active="batch" canPublish={canPublish} />
       {canPublish ? (
         <BatchPublishClient sellerName={member.publicName} sellerVerified={member.academicStatus === "verified"} />
       ) : (

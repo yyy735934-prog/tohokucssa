@@ -1,6 +1,7 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { sendDailyAdminReviewReminder } from "../lib/admin-reminder";
 
 interface Env {
   ASSETS: Fetcher;
@@ -13,6 +14,9 @@ interface Env {
       };
     };
   };
+  ADMIN_EMAILS?: string;
+  EMAIL_FROM?: string;
+  RESEND_API_KEY?: string;
 }
 
 interface ExecutionContext {
@@ -42,6 +46,18 @@ const worker = {
     }
 
     return handler.fetch(request, env, ctx);
+  },
+  async scheduled(
+    _controller: { scheduledTime: number; cron: string },
+    env: Env,
+    ctx: ExecutionContext,
+  ) {
+    ctx.waitUntil(sendDailyAdminReviewReminder(env).catch((error) => {
+      console.error(JSON.stringify({
+        event: "daily_admin_review_reminder_failed",
+        error: error instanceof Error ? error.message.slice(0, 180) : "unknown",
+      }));
+    }));
   },
 };
 
