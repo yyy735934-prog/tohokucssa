@@ -3,6 +3,31 @@ const CACHE_NAME = "tohoku-market-static-v1";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data?.json() ?? {}; } catch { data = { body: event.data?.text() ?? "" }; }
+  event.waitUntil(self.registration.showNotification(data.title || "东北集市", {
+    body: data.body || "你有一条新消息。",
+    icon: "/icons/pwa-192.png",
+    badge: "/icons/favicon-64.png",
+    tag: data.tag || "tohoku-market-message",
+    data: { url: data.url || "/account" },
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url || "/account", self.location.origin).href;
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    const existing = clients.find((client) => client.url.startsWith(self.location.origin));
+    if (existing) {
+      existing.navigate(targetUrl);
+      return existing.focus();
+    }
+    return self.clients.openWindow(targetUrl);
+  }));
+});
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;

@@ -15,3 +15,11 @@ test("service worker does not cache pages or API responses", async () => {
   assert.match(source, /pathname\.startsWith\("\/assets\/"\)/);
   assert.doesNotMatch(source, /caches\.match\(request\).*navigate/s);
 });
+
+test("service worker displays push messages and opens their account destination", async () => {
+  const source = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
+  assert.match(source, /addEventListener\("push"/);
+  assert.match(source, /showNotification/);
+  assert.match(source, /addEventListener\("notificationclick"/);
+  assert.match(source, /openWindow\(targetUrl\)/);
+});

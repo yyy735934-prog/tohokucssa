@@ -206,6 +206,8 @@ footer{max-width:1180px;margin:0 auto;padding:28px 0 42px;display:flex;align-ite
 @media(max-width:620px){.my-market-nav{margin:12px 14px 0}.my-market-nav>b{padding-left:7px}.account-publish-actions{align-items:stretch}.account-publish-actions a{text-align:center}}
 .batch-poster>.poster-seller{margin-top:3.5%;padding:2.5% 2.8%}.batch-poster>.poster-seller b{font-size:2.1cqw}
 .poster-logo{display:flex;align-items:center;gap:1.4cqw}.poster-logo img{width:4.5cqw;height:4.5cqw;border-radius:1.2cqw}
+.poster-logo .brand-mark{width:4.5cqw;height:4.5cqw;display:grid;place-items:center;border-radius:1.2cqw;font-size:2.2cqw}
+.push-settings{align-items:center}.push-settings>div{flex:1}.push-settings h2{margin:5px 0}.push-settings p{margin:0;color:#718078;font-size:10px;line-height:1.6}.push-settings .form-notice{width:100%;flex-basis:100%}
 .account-poster-builder{padding:18px 16px 22px;border-top:1px solid #e8ece6;background:#f7faf5}.account-poster-builder .existing-poster-builder{margin-top:0;background:#fff}
 
 /* Member identity, verified receiving email and private student appeals */

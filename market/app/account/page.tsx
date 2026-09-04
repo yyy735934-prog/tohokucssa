@@ -9,6 +9,7 @@ import { listingToMarketItem } from "../../lib/listings";
 import { publicMemberName } from "../../lib/public-identity";
 import AccountClient from "./AccountClient";
 import IdentitySettings from "./IdentitySettings";
+import PushNotificationSettings from "./PushNotificationSettings";
 import { canUseMarketplace } from "../../lib/member-status";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +113,8 @@ export default async function AccountPage() {
         academicEmail={profileRows[0]?.academicEmail ?? ""}
         initialAppeal={appealRows[0] ?? null}
       />
+
+      <PushNotificationSettings />
 
       <AccountClient
         initialListings={ownedListings.map(listingToMarketItem)}

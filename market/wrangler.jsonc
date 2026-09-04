@@ -44,7 +44,8 @@
   ],
   "vars": {
     "ADMIN_EMAILS": "ding.junzhong.p4@dc.tohoku.ac.jp,hpwang1933@gmail.com",
-    "EMAIL_FROM": "noreply@market-mail.tohokucssa.org"
+    "EMAIL_FROM": "noreply@market-mail.tohokucssa.org",
+    "VAPID_PUBLIC_KEY": "BJX8cwmpTFoZx6Uu8zkSMCUimfU-HWBW9P5rq-HkWlGf_Y9Q22SHybrEXpLl8-Q9qbQxJLTXDcYOxbskFHLXeaU"
   },
   "secrets": {
     "required": [
@@ -52,7 +53,8 @@
       "SESSION_SECRET",
       "RESEND_API_KEY",
       "GOOGLE_CLIENT_ID",
-      "GOOGLE_CLIENT_SECRET"
+      "GOOGLE_CLIENT_SECRET",
+      "VAPID_PRIVATE_KEY"
     ]
   },
   "observability": {

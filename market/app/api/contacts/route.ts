@@ -5,6 +5,7 @@ import { getMemberAccess } from "../../../lib/auth";
 import { canUseMarketplace } from "../../../lib/member-status";
 import { sendMemberNotification } from "../../../lib/notification-email";
 import { deliverAcceptedContactEmail, type ContactEmailEnv } from "../../../lib/contact-email-delivery";
+import { sendWebPushNotification } from "../../../lib/web-push";
 
 type ContactStatus = "pending" | "accepted" | "declined";
 
@@ -120,6 +121,12 @@ export async function POST(request: Request) {
       "你收到一条新的商品联系申请",
       `${member.publicName} 希望联系你购买“${listing.title}”。请进入个人中心处理。`,
     );
+    await sendWebPushNotification(listing.ownerEmail, {
+      title: "新的商品联系申请",
+      body: "有买家提交了联络申请，请进入个人中心处理。",
+      url: "/account",
+      tag: "contact-request",
+    });
   }
 
   return Response.json({
@@ -179,6 +186,12 @@ export async function PATCH(request: Request) {
         `卖家未接受你对“${listing?.title ?? "商品"}”的联系申请。`,
       );
     }
+    await sendWebPushNotification(updated.buyerEmail, {
+      title: "联络申请状态已更新",
+      body: payload.status === "accepted" ? "卖家已同意联络，请进入个人中心查看。" : "卖家已处理你的联络申请。",
+      url: "/account",
+      tag: "contact-result",
+    });
     return Response.json({
         contact: { id: updated.id, status: updated.status },
         message: payload.status === "accepted"

@@ -247,3 +247,17 @@ export const emailDeliveryLogs = sqliteTable(
     index("email_delivery_logs_status_created_idx").on(table.status, table.createdAt),
   ],
 );
+
+export const pushSubscriptions = sqliteTable(
+  "push_subscriptions",
+  {
+    endpoint: text("endpoint").primaryKey(),
+    userEmail: text("user_email").notNull().references(() => users.email),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("push_subscriptions_user_idx").on(table.userEmail)],
+);

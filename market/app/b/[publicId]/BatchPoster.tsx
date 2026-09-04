@@ -33,6 +33,7 @@ export default function BatchPoster({
   const posterRef = useRef<HTMLDivElement>(null);
   const shareFileRef = useRef<File | null>(null);
   const [qr, setQr] = useState("");
+  const [posterLogo, setPosterLogo] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [preparingShare, setPreparingShare] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -42,17 +43,43 @@ export default function BatchPoster({
 
   useEffect(() => {
     void QRCode.toDataURL(window.location.href, { width: 360, margin: 1, color: { dark: "#193d31", light: "#ffffff" } }).then(setQr);
+    void fetch("/icons/pwa-192.png")
+      .then((response) => {
+        if (!response.ok) throw new Error("Logo unavailable");
+        return response.blob();
+      })
+      .then((blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      }))
+      .then(setPosterLogo)
+      .catch(() => setPosterLogo(""));
   }, []);
+
+  const waitForPosterImages = async () => {
+    if (!posterRef.current) return;
+    const images = Array.from(posterRef.current.querySelectorAll("img"));
+    await Promise.all(images.map(async (image) => {
+      if (!image.complete) await new Promise<void>((resolve) => {
+        image.addEventListener("load", () => resolve(), { once: true });
+        image.addEventListener("error", () => resolve(), { once: true });
+      });
+      try { await image.decode(); } catch { /* a text fallback remains visible */ }
+    }));
+  };
 
   const createPosterFile = async () => {
     if (!posterRef.current) throw new Error("Poster is not ready");
+    await waitForPosterImages();
     const dataUrl = await toPng(posterRef.current, { pixelRatio: 2, cacheBust: true, backgroundColor: "#f3f0e5" });
     const blob = await fetch(dataUrl).then((response) => response.blob());
     return new File([blob], filename, { type: "image/png" });
   };
 
   useEffect(() => {
-    if (!qr) return;
+    if (!qr || !posterLogo) return;
     let cancelled = false;
     setPreparingShare(true);
     void createPosterFile()
@@ -66,7 +93,7 @@ export default function BatchPoster({
         if (!cancelled) setPreparingShare(false);
       });
     return () => { cancelled = true; };
-  }, [qr]);
+  }, [qr, posterLogo]);
 
   const download = async () => {
     if (!posterRef.current) return;
@@ -105,9 +132,10 @@ export default function BatchPoster({
     const shareText = `${title}，扫码查看商品实时状态与详情。`;
     try {
       if (file && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ title: shareTitle, text: shareText, files: [file] });
+        await navigator.share({ files: [file] });
       } else {
         await navigator.share({ title: shareTitle, text: shareText, url: window.location.href });
+        setShareNotice("此浏览器不支持直接分享 PNG，已改用微信可读取的网页卡片；也可先下载海报再发送图片。");
       }
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) await copyPosterLink();
@@ -120,7 +148,7 @@ export default function BatchPoster({
     <div className="poster-panel">
       <div className="batch-poster-scale">
         <div className={`batch-poster poster-count-${items.length}`} ref={posterRef}>
-          <div className="poster-topline"><div className="poster-logo"><Image src="/icons/pwa-192.png" alt="" width={40} height={40} /><b>东北集市</b></div><span>TOHOKU STUDENT MARKET</span></div>
+          <div className="poster-topline"><div className="poster-logo">{posterLogo ? <img src={posterLogo} alt="" width={40} height={40} /> : <span className="brand-mark">东</span>}<b>东北集市</b></div><span>TOHOKU STUDENT MARKET</span></div>
           <div className="poster-seller"><b>{sellerName}</b>{sellerVerified && <em>✓ 学友身份已认证</em>}<span>⌖ {place}</span></div>
           <div className="poster-item-grid">
             {items.map((item) => (

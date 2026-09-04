@@ -14,6 +14,8 @@ test("all public poster pages use the shared Web Share poster component", async 
   assert.match(poster, /navigator\.share/);
   assert.match(poster, /navigator\.canShare\?\.\(\{ files: \[file\] \}\)/);
   assert.match(poster, /files: \[file\]/);
+  assert.match(poster, /navigator\.share\(\{ files: \[file\] \}\)/);
+  assert.match(poster, /readAsDataURL\(blob\)/);
   assert.match(poster, /navigator\.clipboard\.writeText\(window\.location\.href\)/);
   assert.match(poster, /aria-label="分享或转发海报"/);
 });

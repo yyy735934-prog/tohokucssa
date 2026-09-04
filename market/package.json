@@ -19,6 +19,7 @@
     "cloudflare:migrate": "bash scripts/sites-env.sh -- wrangler d1 migrations apply tohoku-market-db --remote --config wrangler.jsonc"
   },
   "dependencies": {
+    "@block65/webcrypto-web-push": "^2.0.0",
     "drizzle-orm": "0.45.2",
     "html-to-image": "1.11.13",
     "leaflet": "^1.9.4",
