@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { ensureCometChatSession } from "../../../lib/cometchat-client";
+import { describeCometChatError, ensureCometChatSession } from "../../../lib/cometchat-client";
 
 type ChatInfo = { id: string; providerGroupId: string; counterpart: string; listing: { id: string; title: string; price: number; status: string; icon: string; imageUrl: string | null } };
 type UiMessage = { id: number | string; text: string; sentAt: number; mine: boolean };
@@ -37,17 +37,22 @@ export default function ChatClient({ conversationId }: { conversationId: string 
         if (disposed) return;
         cometRef.current = CometChat; sessionRef.current = session; setInfo(detail);
         setMessages(history.map((message: any) => toUiMessage(message, session.uid)).filter(Boolean) as UiMessage[]);
-        const listener = new CometChat.MessageListener();
-        listener.onTextMessageReceived = (message: any) => {
-          if (message.getReceiverId?.() !== detail.providerGroupId) return;
-          const ui = toUiMessage(message, session.uid);
-          if (ui) setMessages((current) => current.some((item) => item.id === ui.id) ? current : [...current, ui]);
-          CometChat.markAsRead(message);
-        };
+        const listener = new CometChat.MessageListener({
+          onTextMessageReceived: (message: any) => {
+            if (message.getReceiverId?.() !== detail.providerGroupId) return;
+            const ui = toUiMessage(message, session.uid);
+            if (ui) setMessages((current) => current.some((item) => item.id === ui.id) ? current : [...current, ui]);
+            CometChat.markAsRead(message);
+          },
+        });
         CometChat.addMessageListener(listenerId, listener);
         const last = history.at(-1); if (last) CometChat.markAsRead(last);
         setReady(true);
-      } catch (reason) { if (!disposed) setError(reason instanceof Error ? reason.message : "聊天服务暂时不可用。"); }
+      } catch (reason) {
+        const detail = describeCometChatError(reason);
+        console.error(`CometChat thread load failed [${detail.code}] ${detail.message}`);
+        if (!disposed) setError(reason instanceof Error ? reason.message : "聊天服务暂时不可用。");
+      }
     })();
     return () => { disposed = true; cometRef.current?.removeMessageListener(listenerId); };
   }, [conversationId]);

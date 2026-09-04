@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ensureCometChatSession } from "../../lib/cometchat-client";
+import { describeCometChatError, ensureCometChatSession } from "../../lib/cometchat-client";
 
 type ConversationItem = {
   id: string;
@@ -42,6 +42,8 @@ export default function MessagesClient() {
         }).sort((a, b) => (b.lastAt || new Date(b.createdAt).getTime() / 1000) - (a.lastAt || new Date(a.createdAt).getTime() / 1000));
         if (!cancelled) { setItems(merged); setState(""); }
       } catch (error) {
+        const detail = describeCometChatError(error);
+        console.error(`CometChat conversation load failed [${detail.code}] ${detail.message}`);
         if (!cancelled) setState(error instanceof Error ? error.message : "聊天服务暂时不可用。");
       }
     })();
