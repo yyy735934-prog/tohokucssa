@@ -11,6 +11,7 @@ import AccountClient from "./AccountClient";
 import IdentitySettings from "./IdentitySettings";
 import PushNotificationSettings from "./PushNotificationSettings";
 import { canUseMarketplace } from "../../lib/member-status";
+import MobileNav from "../MobileNav";
 
 export const dynamic = "force-dynamic";
 
@@ -145,6 +146,7 @@ export default async function AccountPage() {
           qrUrl: profileRows[0]?.wechatQrKey ? "/api/profile/qr" : null,
         }}
       />
+      <MobileNav active="account" />
     </main>
   );
 }

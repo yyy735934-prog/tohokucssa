@@ -6,6 +6,7 @@ import { LISTING_CATEGORIES } from "../../lib/listing-intelligence";
 import { matchesMarketSearch } from "../../lib/market-search";
 import OsmMap, { type MapItem, type UserLocation } from "./OsmMap";
 import MyMarketNav from "../MyMarketNav";
+import MobileNav from "../MobileNav";
 
 const categories = ["全部", ...LISTING_CATEGORIES];
 const areas = ["全部区域", "川内", "青叶山", "片平", "北仙台", "八幡", "三条町"];
@@ -262,13 +263,7 @@ export default function MarketMap() {
         </div>
       </section>
 
-      <nav className="mobile-nav map-mobile-nav" aria-label="移动端导航">
-        <Link href="/"><span>⌂</span>首页</Link>
-        <Link className="active" href="/map"><span>⌖</span>附近</Link>
-        <Link className="nav-publish" href="/?publish=1" aria-label="发布闲置">＋</Link>
-        <Link href="/favorites"><span>♡</span>收藏</Link>
-        <Link href="/account"><span>♙</span>我的</Link>
-      </nav>
+      <MobileNav active="map" />
     </main>
   );
 }

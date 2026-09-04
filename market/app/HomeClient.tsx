@@ -11,6 +11,7 @@ import { matchesMarketSearch } from "../lib/market-search";
 import ProfileSetup from "./ProfileSetup";
 import PublishLocationMap, { type PublishLocation } from "./PublishLocationMap";
 import PwaInstallPrompt from "./PwaInstallPrompt";
+import MobileNav from "./MobileNav";
 
 type Viewer = {
   displayName: string;
@@ -650,13 +651,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
         <div><a href="/policies/terms">使用规范</a><a href="/policies/report">举报与建议</a><a href="/policies/privacy">隐私说明</a></div>
       </footer>
 
-      <nav className="mobile-nav" aria-label="移动端导航">
-        <a href="#top"><span>⌂</span>首页</a>
-        <a href="/map"><span>⌖</span>附近</a>
-        <button className="nav-publish" onClick={openPublisher}>＋</button>
-        <a href={viewer ? (chatEnabled ? "/messages" : "/favorites") : "/signin-with-chatgpt?return_to=%2Fmessages"}><span>{chatEnabled ? "◇" : "♡"}</span>{chatEnabled ? "消息" : "收藏"}</a>
-        <a href={viewer ? "/account" : "/signin-with-chatgpt?return_to=%2Faccount"}><span>♙</span>我的</a>
-      </nav>
+      <MobileNav active="home" homeHref="#top" viewer={Boolean(viewer)} chatEnabled={chatEnabled} onPublish={openPublisher} />
       <button className="mobile-publish" onClick={openPublisher}>＋ 发布闲置</button>
 
       {selectedItem && <div className="modal-backdrop" role="presentation" onClick={() => setSelectedItem(null)}>

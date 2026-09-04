@@ -72,10 +72,14 @@ export default function ChatClient({ conversationId }: { conversationId: string 
   };
 
   return <main className="chat-page">
-    <header className="chat-topbar"><Link href="/messages" aria-label="返回消息">‹</Link><div><b>{info?.counterpart ?? "匿名交易聊天"}</b><small>不会显示双方真实身份</small></div></header>
+    <header className="chat-topbar"><Link href="/messages" aria-label="返回消息"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6" /></svg></Link><div><b>{info?.counterpart ?? "匿名交易聊天"}</b><small>不会显示双方真实身份</small></div></header>
     {info && <Link className="chat-listing" href={`/?listing=${encodeURIComponent(info.listing.id)}`}><div>{info.listing.imageUrl ? <img src={info.listing.imageUrl} alt="" /> : info.listing.icon}</div><span><b>{info.listing.title}</b><small>{info.listing.price === 0 ? "免费赠送" : `¥${info.listing.price.toLocaleString()}`} · {info.listing.status === "active" ? "在售" : info.listing.status === "sold" ? "已售出" : "已下架"}</small></span><i>查看商品 ›</i></Link>}
     <section className="chat-messages" aria-live="polite"><p className="chat-privacy">请勿在聊天中发送证件、银行卡等敏感信息。建议在公共场所交易。</p>{messages.map((message) => <article key={message.id} className={message.mine ? "mine" : "theirs"}><small>{message.mine ? "我" : info?.counterpart}</small><p>{message.text}</p><time>{new Date(message.sentAt * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</time></article>)}<div ref={bottomRef} /></section>
     {error && <p className="chat-error" role="alert">{error}</p>}
-    <form className="chat-composer" onSubmit={send}><textarea value={text} onChange={(event) => setText(event.target.value)} maxLength={1000} rows={1} placeholder={ready ? "输入消息…" : "正在连接…"} disabled={!ready || sending} /><button disabled={!ready || sending || !text.trim()}>{sending ? "…" : "发送"}</button></form>
+    <form className="chat-composer" onSubmit={send}><textarea value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
+      if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+      event.preventDefault();
+      if (ready && !sending && text.trim()) event.currentTarget.form?.requestSubmit();
+    }} maxLength={1000} rows={1} placeholder={ready ? "输入消息…" : "正在连接…"} disabled={!ready || sending} /><button disabled={!ready || sending || !text.trim()}>{sending ? "…" : "发送"}</button></form>
   </main>;
 }
