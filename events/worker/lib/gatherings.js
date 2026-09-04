@@ -131,8 +131,8 @@ export async function createGatheringFromTemplate(env, template, timestamp = Dat
       title, event_date, location, content, notes, capacity, status, activity_type,
       created_by, submitted_at, reviewed_at, event_mode, gathering_state,
       gathering_category, template_id, week_key, min_participants,
-      formation_deadline, requires_host, carpool_enabled
-    ) VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, 'gathering', 'recruiting', ?, ?, ?, ?, ?, ?, ?)`
+      formation_deadline, requires_host, carpool_enabled, image_key
+    ) VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, 'gathering', 'recruiting', ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     title,
     eventDate,
@@ -151,6 +151,7 @@ export async function createGatheringFromTemplate(env, template, timestamp = Dat
     schedule.decisionAt,
     template.requires_host ? 1 : 0,
     template.carpool_enabled ? 1 : 0,
+    template.image_key || null,
   ).run()
 
   if (!result.meta.changes) return null

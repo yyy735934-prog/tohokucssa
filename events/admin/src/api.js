@@ -112,6 +112,17 @@ export const api = {
     if (!res.ok || data.ok === false) throw new Error(data.message || '上传失败')
     return data
   },
+  uploadGatheringTemplateImage: async (templateId, file) => {
+    const form = new FormData()
+    form.append('file', file)
+    const headers = {}
+    if (auth.token) headers.authorization = `Bearer ${auth.token}`
+    const res = await fetch(`/api/images/template-upload/${templateId}`, { method: 'POST', headers, body: form })
+    const data = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }))
+    if (!res.ok || data.ok === false) throw new Error(data.message || '上传失败')
+    return data
+  },
+  deleteGatheringTemplateImage: (templateId) => request('DELETE', `/images/template/${templateId}`),
 
   listGatheringTemplates: () => request('GET', '/gathering-templates'),
   listGatheringJobs: (limit = 30) => request('GET', `/gathering-templates/jobs?limit=${limit}`),

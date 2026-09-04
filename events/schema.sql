@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS gathering_templates (
   category         TEXT    NOT NULL CHECK (category IN ('karaoke', 'sport', 'outdoor', 'salon', 'boardgame', 'movie', 'other')),
   sport_name       TEXT    NOT NULL DEFAULT '',
   title_template   TEXT    NOT NULL,
+  image_key        TEXT,
   description      TEXT    NOT NULL DEFAULT '',
   notes            TEXT    NOT NULL DEFAULT '',
   region           TEXT    NOT NULL DEFAULT '',

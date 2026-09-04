@@ -17,6 +17,12 @@
           <div class="field full"><label class="label">参加须知</label><textarea v-model="form.notes" rows="2"></textarea></div>
           <div class="field"><label class="label">区域</label><input v-model="form.region" placeholder="仙台市内" /></div>
           <div class="field"><label class="label">默认地点</label><input v-model="form.default_location" placeholder="可留空，成局后确认" /></div>
+          <div class="field full"><label class="label">模板活动图片</label>
+            <div v-if="imagePreview" class="template-image"><img :src="imagePreview" alt="模板活动图片" /><button type="button" class="btn btn-outline btn-sm" @click="removeImage">移除图片</button></div>
+            <button v-else type="button" class="btn btn-outline btn-sm" @click="$refs.templateImageInput.click()">选择图片</button>
+            <input ref="templateImageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" @change="selectImage" />
+            <p class="hint">新生成的每周组局会默认使用这张图片，主理人仍可为单次活动更换。</p>
+          </div>
         </div>
 
         <div class="section-title">每周时间</div>
@@ -42,6 +48,7 @@
     <div v-else-if="!templates.length" class="card empty">还没有组局模板</div>
     <div v-else class="template-list">
       <div v-for="t in templates" :key="t.id" class="card template-card">
+        <img v-if="t.image_key" class="template-cover" :src="`/api/images/template-serve/${t.id}`" alt="模板图片" />
         <div class="template-head">
           <div><span class="category">{{ categoryLabel(t.category) }}</span><h3>{{ t.name }}</h3></div>
           <span class="approval" :class="`approval-${t.approval_status}`">{{ approvalLabel(t.approval_status) }}</span>
@@ -92,6 +99,9 @@ const editing = ref(false)
 const busy = ref(false)
 const publishingId = ref(null)
 const error = ref('')
+const pendingImage = ref(null)
+const imagePreview = ref('')
+const removeExistingImage = ref(false)
 const categories = [
   { value: 'karaoke', label: '唱歌' }, { value: 'sport', label: '多人体育' },
   { value: 'outdoor', label: '徒步·户外' }, { value: 'salon', label: '沙龙' },
@@ -99,7 +109,7 @@ const categories = [
 ]
 const weekdays = [1,2,3,4,5,6,7].map((value, i) => ({ value, label: ['一','二','三','四','五','六','日'][i] }))
 
-const defaults = () => ({ id: null, name: '', category: 'karaoke', sport_name: '', title_template: '本周唱歌局 · {date}', description: '', notes: '', region: '仙台市内', default_location: '', event_weekday: 6, event_time: '14:00', publish_weekday: 1, publish_time: '08:00', decision_weekday: 5, decision_time: '18:00', min_participants: 4, max_participants: null, requires_host: false, host_user_ids: [], carpool_enabled: false })
+const defaults = () => ({ id: null, name: '', category: 'karaoke', sport_name: '', title_template: '本周唱歌局 · {date}', description: '', notes: '', region: '仙台市内', default_location: '', event_weekday: 6, event_time: '14:00', publish_weekday: 1, publish_time: '08:00', decision_weekday: 5, decision_time: '18:00', min_participants: 4, max_participants: null, requires_host: false, host_user_ids: [], carpool_enabled: false, image_key: null })
 const form = reactive(defaults())
 const hosts = computed(() => users.value.filter((u) => ['host', 'reviewer'].includes(u.role)))
 const hostRequired = computed(() => !['karaoke', 'sport'].includes(form.category))
@@ -117,8 +127,11 @@ async function load() {
   loading.value = false
 }
 
-function startNew() { Object.assign(form, defaults()); editing.value = true; error.value = '' }
-function editTemplate(t) { Object.assign(form, defaults(), t, { host_user_ids: [...(t.host_user_ids || [])], requires_host: !!t.requires_host, carpool_enabled: !!t.carpool_enabled }); editing.value = true; error.value = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
+function resetImageState() { pendingImage.value = null; imagePreview.value = ''; removeExistingImage.value = false }
+function startNew() { Object.assign(form, defaults()); resetImageState(); editing.value = true; error.value = '' }
+function editTemplate(t) { Object.assign(form, defaults(), t, { host_user_ids: [...(t.host_user_ids || [])], requires_host: !!t.requires_host, carpool_enabled: !!t.carpool_enabled }); resetImageState(); if (t.image_key) imagePreview.value = `/api/images/template-serve/${t.id}?v=${Date.now()}`; editing.value = true; error.value = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
+function selectImage(e) { const file = e.target.files?.[0]; if (!file) return; pendingImage.value = file; imagePreview.value = URL.createObjectURL(file); removeExistingImage.value = false; e.target.value = '' }
+function removeImage() { pendingImage.value = null; imagePreview.value = ''; removeExistingImage.value = !!form.id && !!form.image_key }
 function applyCategoryDefaults() {
   if (hostRequired.value) form.requires_host = true
   if (form.category === 'karaoke' || form.category === 'sport') form.min_participants = 4
@@ -129,8 +142,11 @@ async function save() {
   error.value = ''; busy.value = true
   try {
     const payload = { ...form, host_user_ids: [...form.host_user_ids], max_participants: form.max_participants || null }
-    if (form.id) await api.updateGatheringTemplate(form.id, payload)
-    else await api.createGatheringTemplate(payload)
+    let templateId = form.id
+    if (templateId) await api.updateGatheringTemplate(templateId, payload)
+    else templateId = (await api.createGatheringTemplate(payload)).id
+    if (removeExistingImage.value) await api.deleteGatheringTemplateImage(templateId)
+    if (pendingImage.value) await api.uploadGatheringTemplateImage(templateId, pendingImage.value)
     showToast('模板已保存为草稿')
     editing.value = false
     await load()
@@ -182,6 +198,7 @@ const formatTime = (value) => value ? new Date(Number(value)).toLocaleString('zh
 .approval-approved { color: var(--c-success); background: var(--c-success-bg); }
 .approval-paused { color: var(--c-warning); }
 .template-title { font-size: 14px; font-weight: 600; }
+.template-image { display:flex; align-items:flex-start; gap:10px; }.template-image img { width:180px; max-height:120px; object-fit:cover; border-radius:8px; }.template-cover { width:calc(100% + 32px); height:180px; object-fit:cover; margin:-16px -16px 14px; border-radius:12px 12px 0 0; }
 .facts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .facts span { font-size: 12px; color: var(--c-text-2); background: var(--c-bg); padding: 4px 8px; border-radius: 99px; }
 .actions { display: flex; gap: 8px; margin-top: 16px; }

@@ -9,6 +9,52 @@ async function requireAuth(c) {
   return session
 }
 
+async function imageFile(c) {
+  const formData = await c.req.formData()
+  const file = formData.get('file')
+  if (!file || !(file instanceof File)) return { error: '请选择图片' }
+  if (file.size > 5 * 1024 * 1024) return { error: '图片不能超过 5MB' }
+  const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+  if (!allowed.includes(file.type)) return { error: '仅支持 JPG/PNG/WebP/GIF 格式' }
+  return { file }
+}
+
+images.post('/template-upload/:templateId', async (c) => {
+  const session = await requireAuth(c)
+  if (session.role !== 'reviewer') return c.json({ ok: false, message: '仅管理员可操作' }, 403)
+  const templateId = Number(c.req.param('templateId'))
+  const template = await c.env.DB.prepare('SELECT id, image_key FROM gathering_templates WHERE id = ?').bind(templateId).first()
+  if (!template) return c.json({ ok: false, message: '模板不存在' }, 404)
+  const parsed = await imageFile(c)
+  if (parsed.error) return c.json({ ok: false, message: parsed.error }, 400)
+  const ext = parsed.file.name.split('.').pop() || 'jpg'
+  const key = `gathering-templates/${templateId}/${Date.now()}.${ext}`
+  await c.env.IMAGES.put(key, parsed.file.stream(), { httpMetadata: { contentType: parsed.file.type } })
+  await c.env.DB.prepare('UPDATE gathering_templates SET image_key = ?, updated_at = ? WHERE id = ?').bind(key, Date.now(), templateId).run()
+  if (template.image_key?.startsWith(`gathering-templates/${templateId}/`)) await c.env.IMAGES.delete(template.image_key)
+  return c.json({ ok: true, key })
+})
+
+images.delete('/template/:templateId', async (c) => {
+  const session = await requireAuth(c)
+  if (session.role !== 'reviewer') return c.json({ ok: false, message: '仅管理员可操作' }, 403)
+  const templateId = Number(c.req.param('templateId'))
+  const template = await c.env.DB.prepare('SELECT image_key FROM gathering_templates WHERE id = ?').bind(templateId).first()
+  if (!template) return c.json({ ok: false, message: '模板不存在' }, 404)
+  await c.env.DB.prepare('UPDATE gathering_templates SET image_key = NULL, updated_at = ? WHERE id = ?').bind(Date.now(), templateId).run()
+  if (template.image_key?.startsWith(`gathering-templates/${templateId}/`)) await c.env.IMAGES.delete(template.image_key)
+  return c.json({ ok: true })
+})
+
+images.get('/template-serve/:templateId', async (c) => {
+  const templateId = Number(c.req.param('templateId'))
+  const template = await c.env.DB.prepare('SELECT image_key FROM gathering_templates WHERE id = ?').bind(templateId).first()
+  if (!template?.image_key) return c.json({ ok: false, message: '无图片' }, 404)
+  const obj = await c.env.IMAGES.get(template.image_key)
+  if (!obj) return c.json({ ok: false, message: '图片不存在' }, 404)
+  return new Response(obj.body, { headers: { 'content-type': obj.httpMetadata?.contentType || 'image/jpeg', 'cache-control': 'public, max-age=86400' } })
+})
+
 images.post('/upload/:eventId', async (c) => {
   const session = await requireAuth(c)
   const eventId = Number(c.req.param('eventId'))
@@ -63,7 +109,9 @@ images.delete('/:eventId', async (c) => {
   }
 
   if (event.image_key) {
-    await c.env.IMAGES.delete(event.image_key)
+    // A generated gathering may still reference its template cover. Never delete
+    // that shared object when a host removes or replaces this week's cover.
+    if (event.image_key.startsWith(`events/${eventId}/`)) await c.env.IMAGES.delete(event.image_key)
     await c.env.DB.prepare('UPDATE events SET image_key = NULL WHERE id = ?').bind(eventId).run()
   }
 
