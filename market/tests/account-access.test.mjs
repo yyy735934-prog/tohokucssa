@@ -23,3 +23,17 @@ test("includes both configured administrator emails", async () => {
   const admins = config.vars.ADMIN_EMAILS.split(",").map((email) => email.trim().toLowerCase());
   assert.deepEqual(admins, ["ding.junzhong.p4@dc.tohoku.ac.jp", "hpwang1933@gmail.com"]);
 });
+
+test("keeps only logout in the account header and does not show it on the home page", async () => {
+  const [home, account, css] = await Promise.all([
+    readFile(new URL("../app/HomeClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/account/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.doesNotMatch(home, /退出 \/ 换账号/);
+  assert.match(account, />退出登录<\/a>/);
+  assert.doesNotMatch(account, />换账号<\/a>/);
+  assert.doesNotMatch(css, /portal-header nav a:nth-child\(2\)/);
+  assert.match(css, /portal-header \.portal-map-link/);
+});
