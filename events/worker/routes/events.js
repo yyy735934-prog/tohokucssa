@@ -450,7 +450,7 @@ events.post('/:id/notify', async (c) => {
   }
 
   const { message } = await c.req.json().catch(() => ({}))
-  const signups = await c.env.DB.prepare('SELECT name, email, phone, data FROM signups WHERE event_id = ?').bind(id).all()
+  const signups = await participantRecipients(c.env.DB, event)
   if (!signups.results.length) return c.json({ ok: false, message: '暂无报名者' }, 400)
 
   for (const s of signups.results) {
@@ -473,7 +473,7 @@ events.post('/:id/announce', async (c) => {
   const { subject, message, image_key } = await c.req.json().catch(() => ({}))
   if (!subject?.trim() || !message?.trim()) return c.json({ ok: false, message: '标题和内容必填' }, 400)
 
-  const signups = await c.env.DB.prepare('SELECT name, email FROM signups WHERE event_id = ?').bind(id).all()
+  const signups = await participantRecipients(c.env.DB, event)
   if (!signups.results.length) return c.json({ ok: false, message: '暂无报名者' }, 400)
 
   const origin = new URL(c.req.url).origin
@@ -498,16 +498,26 @@ events.post('/:id/remind', async (c) => {
   if (!['open', 'active'].includes(event.status)) {
     return c.json({ ok: false, message: '只有报名中或进行中的活动可以发提醒' }, 400)
   }
+  if (event.event_mode === 'gathering' && !['confirmed', 'in_progress'].includes(event.gathering_state)) {
+    return c.json({ ok: false, message: '组局确认成行后才能发送签到码' }, 400)
+  }
 
-  const signups = await c.env.DB.prepare('SELECT name, email, phone, data, token FROM signups WHERE event_id = ?').bind(id).all()
+  const signups = await participantRecipients(c.env.DB, event)
   if (!signups.results.length) return c.json({ ok: false, message: '暂无报名者' }, 400)
 
   for (const s of signups.results) {
-    const content = eventReminderEmail(event, s)
+    const content = eventReminderEmail(event, s, new URL(c.req.url).origin)
     c.executionCtx.waitUntil(sendEmail(c.env, { to: s.email, ...content }))
   }
   return c.json({ ok: true, count: signups.results.length })
 })
+
+function participantRecipients(db, event) {
+  const gatheringClause = event.event_mode === 'gathering'
+    ? " AND signup_status IN ('joined', 'ride_assigned')"
+    : ''
+  return db.prepare(`SELECT name, email, phone, data, token FROM signups WHERE event_id = ?${gatheringClause}`).bind(event.id).all()
+}
 
 // AI plan draft generation
 events.post('/:id/ai-draft', async (c) => {

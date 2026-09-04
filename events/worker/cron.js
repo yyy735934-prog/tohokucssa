@@ -51,7 +51,10 @@ async function sendEventReminders(env) {
 
   // event_date is stored as text like "2026-07-15 14:00" — match by date prefix
   const events = await env.DB.prepare(
-    "SELECT * FROM events WHERE status IN ('open', 'active') AND event_date LIKE ?"
+    `SELECT * FROM events
+     WHERE status IN ('open', 'active')
+       AND event_date LIKE ?
+       AND (COALESCE(event_mode, 'standard') != 'gathering' OR gathering_state IN ('confirmed', 'in_progress'))`
   ).bind(`${tomorrowStr}%`).all()
 
   if (!events.results.length) {

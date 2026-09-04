@@ -6,6 +6,7 @@
       <div><div class="eyebrow">组个局 · {{ categoryLabel }}</div><h1 class="page-title">{{ event.title }}</h1><p class="page-sub">{{ event.event_date }}<span v-if="event.location"> · {{ event.location }}</span></p></div>
       <div class="flex gap-8" style="flex-wrap:wrap">
         <a :href="`/g/${event.id}`" target="_blank" class="btn btn-outline btn-sm">公开页面 ↗</a>
+        <button class="btn btn-outline btn-sm" @click="showPoster = true">生成报名海报</button>
         <button v-if="event.status === 'open' && !isLocked" class="btn btn-outline btn-sm lock" :disabled="busy" @click="setSignupLock(true)">锁定报名</button>
         <button v-if="event.status === 'open' && isLocked" class="btn btn-outline btn-sm unlock" :disabled="busy" @click="setSignupLock(false)">恢复报名</button>
         <button v-if="event.gathering_state === 'confirmed'" class="btn btn-primary btn-sm" @click="startEvent">开始活动</button>
@@ -67,6 +68,11 @@
       </div>
     </div>
 
+    <div class="card mb-16">
+      <div class="section-head"><div><h2>成员通知</h2><p>仅发送给已确认参加、或已经分配乘车座位的成员</p></div></div>
+      <div class="flex gap-8" style="flex-wrap:wrap"><button class="btn btn-outline btn-sm" :disabled="busy" @click="sendReminder">发送签到码提醒</button><button class="btn btn-primary btn-sm" @click="showAnnounce = true">发送通知邮件</button></div>
+    </div>
+
     <div class="card">
       <div class="section-head"><div><h2>参加成员</h2><p>按候补和报名时间排序</p></div></div>
       <div v-if="!signups.length" class="empty">暂无成员</div>
@@ -82,6 +88,9 @@
         </table>
       </div>
     </div>
+
+    <EventPosterModal v-if="showPoster" :event="event" @close="showPoster = false" />
+    <div v-if="showAnnounce" class="modal-overlay" @click.self="showAnnounce = false"><div class="modal"><h3 class="modal-title">发送成员通知</h3><p class="modal-tip">可附一张图片，例如群聊二维码或集合地点示意图。</p><div class="field"><label class="label">标题 *</label><input v-model="announceSubject" placeholder="请输入邮件标题" /></div><div class="field"><label class="label">内容 *</label><textarea v-model="announceMessage" rows="5" placeholder="请输入通知内容"></textarea></div><div class="field"><label class="label">附图（可选）</label><img v-if="announcePreview" class="announce-preview" :src="announcePreview" alt="通知附图" /><button type="button" class="btn btn-outline btn-sm" @click="$refs.announceFile.click()">{{ announcePreview ? '更换图片' : '选择图片' }}</button><input ref="announceFile" type="file" accept="image/*" style="display:none" @change="selectAnnounceImage" /></div><p v-if="announceError" class="error">{{ announceError }}</p><div class="modal-actions"><button class="btn btn-outline" @click="showAnnounce = false">取消</button><button class="btn btn-primary" :disabled="busy" @click="sendAnnounce">{{ busy ? '发送中…' : '发送' }}</button></div></div></div>
   </div>
 </template>
 
@@ -90,6 +99,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../../api.js'
 import { showToast } from '../../lib/toast.js'
+import EventPosterModal from '../../components/EventPosterModal.vue'
 
 const route = useRoute()
 const event = ref(null)
@@ -100,6 +110,13 @@ const loading = ref(true)
 const error = ref('')
 const busy = ref(false)
 const imageUploading = ref(false)
+const showPoster = ref(false)
+const showAnnounce = ref(false)
+const announceSubject = ref('')
+const announceMessage = ref('')
+const announceImage = ref(null)
+const announcePreview = ref('')
+const announceError = ref('')
 const assignments = reactive({})
 const finalForm = reactive({ event_date: '', location: '', notes: '' })
 
@@ -153,6 +170,9 @@ async function setSignupLock(locked) {
   busy.value = false
 }
 async function updateAttendance(signup, status) { try { await api.updateGatheringAttendance(event.value.id, signup.id, status); signup.attendance_status = status; signup.checked_in = status === 'attended' ? 1 : 0; showToast('出席状态已更新') } catch (e) { showToast(e.message, 'error'); await load() } }
+async function sendReminder() { const count = signups.value.filter((s) => ['joined','ride_assigned'].includes(s.signup_status)).length; if (!confirm(`向 ${count} 位确认成员发送签到码提醒？`)) return; busy.value = true; try { const data = await api.remindParticipants(event.value.id); showToast(`已发送 ${data.count} 封签到提醒`) } catch (e) { showToast(e.message, 'error') } busy.value = false }
+function selectAnnounceImage(e) { const file = e.target.files?.[0]; if (!file) return; announceImage.value = file; announcePreview.value = URL.createObjectURL(file); e.target.value = '' }
+async function sendAnnounce() { announceError.value = ''; if (!announceSubject.value.trim() || !announceMessage.value.trim()) { announceError.value = '标题和内容必填'; return } busy.value = true; try { let image_key = null; if (announceImage.value) image_key = (await api.uploadAnnounceImage(event.value.id, announceImage.value)).key; const data = await api.announceEvent(event.value.id, { subject: announceSubject.value, message: announceMessage.value, image_key }); showToast(`已发送 ${data.count} 封通知邮件`); showAnnounce.value = false; announceSubject.value = ''; announceMessage.value = ''; announceImage.value = null; announcePreview.value = '' } catch (e) { announceError.value = e.message } busy.value = false }
 
 const signupLabel = (v) => ({ joined: '已确认参加', ride_pending: '乘车候补中', ride_assigned: '已安排乘车', general_waitlist: '人数候补中', cancelled: '已退出' }[v] || v)
 const transportLabel = (v) => ({ self: '自行前往', public_transport: '公共交通', driver: '提供车辆', passenger: '需要乘车' }[v] || v)
@@ -178,5 +198,6 @@ function formatTime(ts) { return new Date(ts).toLocaleString('zh-CN', { timeZone
 .host-list { display: flex; flex-wrap: wrap; gap: 8px; }.host-list span { font-size: 12px; color: var(--c-text-2); background: var(--c-bg); border-radius: 99px; padding: 7px 10px; }.host-list .host-accepted { color: var(--c-success); background: var(--c-success-bg); }
 .assignment-list, .assigned-list { display: flex; flex-direction: column; gap: 8px; }.assignment-row, .assigned-row { display: grid; grid-template-columns: 1fr 220px auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--c-border); border-radius: 8px; }.assignment-row div { display: flex; flex-direction: column; }.assignment-row span, .sub { font-size: 12px; color: var(--c-text-2); }.assigned-list { margin-top: 16px; }.assigned-list h3 { font-size: 14px; }.assigned-row { grid-template-columns: 1fr auto; }
 .muted { opacity: .5; }.sub { margin-top: 3px; }.attendance-select { min-width: 92px; padding: 6px 8px; font-size: 12px; }
+.modal-tip { font-size:13px; color:var(--c-text-2); margin-bottom:12px; }.announce-preview { display:block; width:180px; max-height:140px; object-fit:cover; border-radius:8px; margin-bottom:8px; }
 @media (max-width: 760px) { .state-grid { grid-template-columns: repeat(2,1fr); }.form-row { flex-direction: column; gap: 0; }.assignment-row { grid-template-columns: 1fr; } }
 </style>

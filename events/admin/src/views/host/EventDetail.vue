@@ -9,6 +9,7 @@
         </p>
       </div>
       <div class="flex gap-8" style="flex-wrap:wrap">
+        <button v-if="['open','active'].includes(event.status)" class="btn btn-outline btn-sm" @click="showPoster = true">生成报名海报</button>
         <router-link v-if="event.status === 'draft'" :to="`/admin/events/${event.id}/edit`" class="btn btn-outline btn-sm">编辑</router-link>
         <button v-if="event.status === 'draft'" class="btn btn-primary btn-sm" @click="submitEvent" :disabled="busy">提交审核</button>
         <button v-if="event.status === 'pending'" class="btn btn-outline btn-sm" @click="withdrawEvent" :disabled="busy">撤回</button>
@@ -490,6 +491,8 @@
       </div>
     </div>
 
+    <EventPosterModal v-if="showPoster" :event="event" @close="showPoster = false" />
+
     <!-- Announce modal -->
     <div v-if="showAnnounceModal" class="modal-overlay" @click.self="showAnnounceModal = false">
       <div class="modal">
@@ -570,6 +573,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../../api.js'
 import { auth } from '../../lib/auth.js'
 import { showToast } from '../../lib/toast.js'
+import EventPosterModal from '../../components/EventPosterModal.vue'
 import { STATUS_MAP, formatDateTime } from '../../lib/format.js'
 
 const route = useRoute()
@@ -689,6 +693,7 @@ const showAddSignup = ref(false)
 const addForm = ref({ name: '', email: '', phone: '' })
 const addError = ref('')
 const showNotifyModal = ref(false)
+const showPoster = ref(false)
 const notifyMessage = ref('')
 
 const showAnnounceModal = ref(false)
