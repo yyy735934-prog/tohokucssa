@@ -2,7 +2,7 @@ import { desc, eq, inArray, or } from "drizzle-orm";
 import Link from "next/link";
 import { getDb } from "../../db";
 import { contactRequests, listings, users, verificationAppeals } from "../../db/schema";
-import { chatGPTSignOutPath } from "../chatgpt-auth";
+import { chatGPTSignOutPath, switchAccountPath } from "../chatgpt-auth";
 import { requireMemberAccess } from "../../lib/auth";
 import { toContactView } from "../../lib/contact-view";
 import { listingToMarketItem } from "../../lib/listings";
@@ -72,6 +72,7 @@ export default async function AccountPage() {
           {member.isAdmin && <Link href="/admin">管理后台</Link>}
           <Link href="/map">二手地图</Link>
           <a href={chatGPTSignOutPath("/")}>退出登录</a>
+          <a href={switchAccountPath("/account")}>换账号</a>
         </nav>
       </header>
 

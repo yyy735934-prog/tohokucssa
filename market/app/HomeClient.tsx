@@ -505,6 +505,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
             <span>{viewer ? viewer.displayName.slice(0, 1).toUpperCase() : "登"}</span>
             <b>{viewer ? "我的" : "登录 / 注册"}</b>
           </a>
+          {viewer && <a className="switch-account-btn" href="/signout-with-chatgpt?switch=1&return_to=%2Faccount">退出 / 换账号</a>}
         </div>
       </header>
 

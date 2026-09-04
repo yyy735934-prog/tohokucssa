@@ -76,6 +76,11 @@ export function chatGPTSignOutPath(returnTo = "/"): string {
   return `${SIGN_OUT_PATH}?return_to=${encodeURIComponent(safeReturnTo)}`;
 }
 
+export function switchAccountPath(returnTo = "/account"): string {
+  const safeReturnTo = safeRelativeReturnPath(returnTo);
+  return `${SIGN_OUT_PATH}?switch=1&return_to=${encodeURIComponent(safeReturnTo)}`;
+}
+
 export function safeRelativeReturnPath(value: string): string {
   if (!value.startsWith("/") || value.startsWith("//")) return "/";
 
