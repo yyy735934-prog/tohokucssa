@@ -113,6 +113,13 @@
       "when": 1788541224965,
       "tag": "0015_thin_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1788545721421,
+      "tag": "0016_elite_tomorrow_man",
+      "breakpoints": true
     }
   ]
 }

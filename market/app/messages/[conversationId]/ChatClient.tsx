@@ -12,6 +12,14 @@ function toUiMessage(message: any, myUid: string): UiMessage | null {
   return { id: message.getId?.() ?? crypto.randomUUID(), text: message.getText(), sentAt: message.getSentAt?.() ?? Math.floor(Date.now() / 1000), mine: message.getSender?.()?.getUid?.() === myUid };
 }
 
+function acknowledgeConversation(conversationId: string, lastReadAt: number) {
+  void fetch(`/api/chat/conversations/${encodeURIComponent(conversationId)}/read`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ lastReadAt }),
+  }).catch(() => undefined);
+}
+
 export default function ChatClient({ conversationId }: { conversationId: string }) {
   const [info, setInfo] = useState<ChatInfo | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
@@ -43,10 +51,13 @@ export default function ChatClient({ conversationId }: { conversationId: string 
             const ui = toUiMessage(message, session.uid);
             if (ui) setMessages((current) => current.some((item) => item.id === ui.id) ? current : [...current, ui]);
             CometChat.markAsRead(message);
+            acknowledgeConversation(conversationId, message.getSentAt?.() ?? Math.floor(Date.now() / 1000));
           },
         });
         CometChat.addMessageListener(listenerId, listener);
-        const last = history.at(-1); if (last) CometChat.markAsRead(last);
+        const last = history.at(-1);
+        if (last) CometChat.markAsRead(last);
+        acknowledgeConversation(conversationId, last?.getSentAt?.() ?? Math.floor(Date.now() / 1000));
         setReady(true);
       } catch (reason) {
         const detail = describeCometChatError(reason);

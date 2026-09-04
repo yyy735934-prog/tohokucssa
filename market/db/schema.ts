@@ -305,3 +305,52 @@ export const chatPushEvents = sqliteTable(
   },
   (table) => [index("chat_push_events_created_idx").on(table.createdAt)],
 );
+
+export const chatMessageEvents = sqliteTable(
+  "chat_message_events",
+  {
+    providerMessageId: text("provider_message_id").primaryKey(),
+    conversationId: text("conversation_id").notNull().references(() => chatConversations.id),
+    recipientEmail: text("recipient_email").notNull().references(() => users.email),
+    sentAt: integer("sent_at").notNull(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("chat_message_events_recipient_sent_idx").on(table.recipientEmail, table.sentAt),
+    index("chat_message_events_conversation_sent_idx").on(table.conversationId, table.sentAt),
+  ],
+);
+
+export const chatConversationReads = sqliteTable(
+  "chat_conversation_reads",
+  {
+    id: text("id").primaryKey(),
+    conversationId: text("conversation_id").notNull().references(() => chatConversations.id),
+    userEmail: text("user_email").notNull().references(() => users.email),
+    lastReadAt: integer("last_read_at").notNull().default(0),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("chat_conversation_reads_conversation_user_idx").on(table.conversationId, table.userEmail),
+    index("chat_conversation_reads_user_idx").on(table.userEmail, table.lastReadAt),
+  ],
+);
+
+export const chatUnreadReminderRuns = sqliteTable(
+  "chat_unread_reminder_runs",
+  {
+    id: text("id").primaryKey(),
+    userEmail: text("user_email").notNull().references(() => users.email),
+    windowStart: integer("window_start").notNull(),
+    windowEnd: integer("window_end").notNull(),
+    messageCount: integer("message_count").notNull(),
+    status: text("status").notNull().default("sending"),
+    error: text("error"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("chat_unread_reminder_runs_user_window_idx").on(table.userEmail, table.windowEnd),
+    index("chat_unread_reminder_runs_created_idx").on(table.createdAt),
+  ],
+);

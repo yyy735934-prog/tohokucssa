@@ -1,13 +1,13 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../../../../db";
-import { chatConversations, chatIdentities, chatPushEvents } from "../../../../db/schema";
+import { chatConversations, chatIdentities, chatMessageEvents, chatPushEvents } from "../../../../db/schema";
 import { sendWebPushNotification } from "../../../../lib/web-push";
 
 type WebhookEnv = { COMETCHAT_APP_ID?: string; COMETCHAT_WEBHOOK_USERNAME?: string; COMETCHAT_WEBHOOK_PASSWORD?: string };
 type MessagePayload = {
   trigger?: string;
   appId?: string;
-  data?: { message?: { id?: string | number; sender?: string; receiver?: string; receiverType?: string; category?: string; type?: string } };
+  data?: { message?: { id?: string | number; sender?: string; receiver?: string; receiverType?: string; category?: string; type?: string; sentAt?: number } };
 };
 
 function safeEqual(left: string, right: string) {
@@ -41,6 +41,16 @@ export async function POST(request: Request) {
   const recipient = message.sender === buyer?.uid ? conversation.sellerEmail : message.sender === seller?.uid ? conversation.buyerEmail : null;
   if (!recipient) return Response.json({ ok: true, ignored: true });
 
+  const rawSentAt = Number(message.sentAt);
+  const sentAt = Number.isFinite(rawSentAt)
+    ? Math.trunc(rawSentAt > 10_000_000_000 ? rawSentAt / 1000 : rawSentAt)
+    : Math.floor(Date.now() / 1000);
+  await db.insert(chatMessageEvents).values({
+    providerMessageId: String(message.id),
+    conversationId: conversation.id,
+    recipientEmail: recipient,
+    sentAt,
+  }).onConflictDoNothing();
   const inserted = await db.insert(chatPushEvents).values({ providerMessageId: String(message.id) }).onConflictDoNothing().returning({ id: chatPushEvents.providerMessageId });
   if (!inserted[0]) return Response.json({ ok: true, duplicate: true });
   await sendWebPushNotification(recipient, {
