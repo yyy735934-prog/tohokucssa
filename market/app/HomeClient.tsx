@@ -669,7 +669,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
                   <label><span>商品名称</span><input aria-label="商品名称" required value={itemTitle} placeholder="例如：宜家书桌、山地自行车" onChange={(e) => { const value = e.target.value; setItemTitle(value); updateItemIntelligence(value, itemDescription); }} /></label>
                   <label><span>商品描述</span><textarea aria-label="商品描述" required value={itemDescription} placeholder="简要说明成色、功能和配件" onChange={(e) => { const value = e.target.value; setItemDescription(value); updateItemIntelligence(itemTitle, value); }} /></label>
                   <label><span>商品栏目</span><select aria-label="商品栏目" value={itemCategory} onChange={(event) => { const value = event.target.value as ListingCategory; setCategoryManuallySelected(true); setItemCategory(value); updateItemIntelligence(itemTitle, itemDescription, value); }}>{LISTING_CATEGORIES.map((listingCategory) => <option key={listingCategory} value={listingCategory}>{listingCategory}</option>)}</select></label>
-                  <div className="wizard-actions"><button type="button" className="back-button" onClick={() => setPublishStep(1)}>重拍</button><button type="button" onClick={() => setPublishStep(3)} disabled={!itemTitle || !itemDescription}>内容没问题，下一步 →</button></div>
+                  <div className="wizard-actions"><button type="button" className="back-button" onClick={() => setPublishStep(1)}>重拍</button><button type="button" onClick={() => setPublishStep(3)} disabled={!itemTitle.trim() || !itemDescription.trim()}>内容没问题，下一步 →</button></div>
                 </div>
               </>}
             </section>}

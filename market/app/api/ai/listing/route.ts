@@ -15,7 +15,7 @@ import { canUseMarketplace } from "../../../../lib/member-status";
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const maxImageBytes = 2 * 1024 * 1024;
-const geminiModel = "gemini-3.5-flash-lite";
+export const geminiModels = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"] as const;
 
 type RecognitionPayload = {
   title?: unknown;
@@ -143,46 +143,48 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "x-goog-api-key": geminiApiKey,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(
-          buildGeminiRequestBody(
-            image.type,
-            imageBase64(await image.arrayBuffer()),
-            LISTING_CATEGORIES,
-          ),
-        ),
-      },
-    );
-
-    const responseText = await response.text();
+    let response: Response | null = null;
+    let responseText = "";
     let payload: GeminiGenerateContentResponse = {};
-    try {
-      payload = responseText
-        ? (JSON.parse(responseText) as GeminiGenerateContentResponse)
-        : {};
-    } catch (error) {
-      console.error(
-        JSON.stringify({
+    for (const [modelIndex, geminiModel] of geminiModels.entries()) {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "x-goog-api-key": geminiApiKey,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(
+            buildGeminiRequestBody(
+              image.type,
+              imageBase64(await image.arrayBuffer()),
+              LISTING_CATEGORIES,
+            ),
+          ),
+        },
+      );
+      responseText = await response.text();
+      payload = {};
+      try {
+        payload = responseText
+          ? (JSON.parse(responseText) as GeminiGenerateContentResponse)
+          : {};
+      } catch (error) {
+        console.error(JSON.stringify({
           event: "gemini_listing_invalid_json",
+          model: geminiModel,
           httpStatus: response.status,
           responseContentType: response.headers.get("content-type"),
           responseBodyLength: responseText.length,
           error: safeErrorMessage(error),
-        }),
-      );
-    }
+        }));
+      }
 
-    if (!response.ok) {
-      console.error(
-        JSON.stringify({
+      if (response.ok) break;
+      console.error(JSON.stringify({
           event: "gemini_listing_request_failed",
+          model: geminiModel,
           httpStatus: response.status,
           responseStatusText: response.statusText,
           responseContentType: response.headers.get("content-type"),
@@ -196,15 +198,16 @@ export async function POST(request: Request) {
           apiKeyLength: geminiApiKey.length,
           apiKeyPrefixValid: geminiApiKey.startsWith("AIza"),
           apiKeyTrimmed: geminiApiKey !== runtimeEnv.GEMINI_API_KEY,
-        }),
-      );
-      return Response.json(publicGeminiError(response.status), {
-        status:
-          response.status >= 400 && response.status < 600
-            ? response.status
-            : 502,
-      });
+        }));
+      const retryable = response.status === 404 || response.status === 429 || response.status >= 500;
+      if (!retryable || modelIndex === geminiModels.length - 1) {
+        return Response.json(publicGeminiError(response.status), {
+          status: response.status >= 400 && response.status < 600 ? response.status : 502,
+        });
+      }
     }
+
+    if (!response?.ok) throw new Error("AI_PROVIDER_UNAVAILABLE");
 
     const outputText = extractOutputText(payload);
     if (!outputText) {

@@ -88,16 +88,13 @@ export async function POST(request: Request) {
         ? payload.imageKey.slice(0, 240)
         : null;
 
-    if (
-      title.length < 2 ||
-      title.length > 80 ||
-      description.length < 5 ||
-      description.length > 800 ||
-      !place ||
-      latitude === null ||
-      longitude === null
-    ) {
-      return Response.json({ error: "请完整填写标题、描述，并在地图上标记交接地点。" }, { status: 400 });
+    if (!title) return Response.json({ error: "请填写商品标题。" }, { status: 400 });
+    if (title.length > 80) return Response.json({ error: "商品标题不能超过 80 个字符。" }, { status: 400 });
+    if (!description) return Response.json({ error: "请填写商品描述。" }, { status: 400 });
+    if (description.length > 800) return Response.json({ error: "商品描述不能超过 800 个字符。" }, { status: 400 });
+    if (!place) return Response.json({ error: "请填写交接地点名称。" }, { status: 400 });
+    if (latitude === null || longitude === null) {
+      return Response.json({ error: "请在地图上点击并标记交接地点。" }, { status: 400 });
     }
 
     const db = await getDb();
