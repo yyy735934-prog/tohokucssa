@@ -44,8 +44,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function HomePage() {
   const user = await getMemberAccess();
+  const { env } = await import("cloudflare:workers");
+  const runtimeEnv = env as unknown as Record<string, unknown>;
+  const chatEnabled = Boolean(runtimeEnv.COMETCHAT_APP_ID && runtimeEnv.COMETCHAT_REGION && runtimeEnv.COMETCHAT_REST_API_KEY);
   return (
     <HomeClient
+      chatEnabled={chatEnabled}
       viewer={
         user
           ? {

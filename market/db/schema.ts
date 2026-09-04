@@ -261,3 +261,47 @@ export const pushSubscriptions = sqliteTable(
   },
   (table) => [index("push_subscriptions_user_idx").on(table.userEmail)],
 );
+
+export const chatIdentities = sqliteTable(
+  "chat_identities",
+  {
+    userEmail: text("user_email").primaryKey().references(() => users.email),
+    providerUid: text("provider_uid").notNull(),
+    publicAlias: text("public_alias").notNull(),
+    authToken: text("auth_token"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("chat_identities_provider_uid_idx").on(table.providerUid),
+    uniqueIndex("chat_identities_public_alias_idx").on(table.publicAlias),
+  ],
+);
+
+export const chatConversations = sqliteTable(
+  "chat_conversations",
+  {
+    id: text("id").primaryKey(),
+    providerGroupId: text("provider_group_id").notNull(),
+    listingId: text("listing_id").notNull().references(() => listings.id),
+    buyerEmail: text("buyer_email").notNull().references(() => users.email),
+    sellerEmail: text("seller_email").notNull().references(() => users.email),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    uniqueIndex("chat_conversations_provider_group_idx").on(table.providerGroupId),
+    uniqueIndex("chat_conversations_listing_buyer_seller_idx").on(table.listingId, table.buyerEmail, table.sellerEmail),
+    index("chat_conversations_buyer_idx").on(table.buyerEmail, table.updatedAt),
+    index("chat_conversations_seller_idx").on(table.sellerEmail, table.updatedAt),
+  ],
+);
+
+export const chatPushEvents = sqliteTable(
+  "chat_push_events",
+  {
+    providerMessageId: text("provider_message_id").primaryKey(),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("chat_push_events_created_idx").on(table.createdAt)],
+);

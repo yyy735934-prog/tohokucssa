@@ -6,13 +6,18 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data?.json() ?? {}; } catch { data = { body: event.data?.text() ?? "" }; }
-  event.waitUntil(self.registration.showNotification(data.title || "东北集市", {
-    body: data.body || "你有一条新消息。",
-    icon: "/icons/pwa-192.png",
-    badge: "/icons/favicon-64.png",
-    tag: data.tag || "tohoku-market-message",
-    data: { url: data.url || "/account" },
-  }));
+  event.waitUntil((async () => {
+    const targetUrl = new URL(data.url || "/account", self.location.origin);
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    if (windows.some((client) => client.visibilityState === "visible" && new URL(client.url).pathname === targetUrl.pathname)) return;
+    await self.registration.showNotification(data.title || "东北集市", {
+      body: data.body || "你有一条新消息。",
+      icon: "/icons/pwa-192.png",
+      badge: "/icons/favicon-64.png",
+      tag: data.tag || "tohoku-market-message",
+      data: { url: targetUrl.pathname },
+    });
+  })());
 });
 
 self.addEventListener("notificationclick", (event) => {

@@ -102,7 +102,7 @@ async function compressListingPhoto(file: File) {
   });
 }
 
-export default function HomeClient({ viewer }: { viewer: Viewer }) {
+export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Viewer; chatEnabled?: boolean }) {
   const [items, setItems] = useState<MarketItem[]>([]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部");
@@ -132,6 +132,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
   const [contactingId, setContactingId] = useState<string | null>(null);
   const [profileReady, setProfileReady] = useState(Boolean(viewer?.profileCompleted));
   const [showProfileSetup, setShowProfileSetup] = useState(Boolean(viewer && !viewer.profileCompleted));
+  const [pushPromptListingId, setPushPromptListingId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -375,6 +376,57 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
     }
   };
 
+  const openChat = async (listingId: string, skipPushPrompt = false) => {
+    if (!viewer) {
+      window.location.assign(`/signin-with-chatgpt?return_to=${encodeURIComponent(`/?listing=${listingId}`)}`);
+      return;
+    }
+    if (!chatEnabled) { await requestContact(listingId); return; }
+    if (!skipPushPrompt && "Notification" in window && Notification.permission === "default") {
+      const dismissedAt = Number(localStorage.getItem("chat-push-prompt-dismissed-at") || 0);
+      if (Date.now() - dismissedAt > 30 * 24 * 60 * 60 * 1000) { setPushPromptListingId(listingId); return; }
+    }
+    setContactingId(listingId);
+    try {
+      const response = await fetch("/api/chat/conversations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ listingId }) });
+      const result = await readJson<{ id?: string; error?: string }>(response);
+      if (response.status === 401) { window.location.assign("/signin-with-chatgpt?return_to=%2F"); return; }
+      if (!response.ok || !result?.id) throw new Error(result?.error || "暂时无法开始聊天。");
+      window.location.assign(`/messages/${result.id}`);
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "暂时无法开始聊天。");
+      setContactingId(null);
+    }
+  };
+
+  const decidePushPrompt = async (enable: boolean) => {
+    const listingId = pushPromptListingId;
+    setPushPromptListingId(null);
+    if (!listingId) return;
+    if (!enable) localStorage.setItem("chat-push-prompt-dismissed-at", String(Date.now()));
+    if (enable && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window) {
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission === "granted") {
+          const registration = await navigator.serviceWorker.register("/sw.js");
+          let subscription = await registration.pushManager.getSubscription();
+          if (!subscription) {
+            const configResponse = await fetch("/api/push");
+            const config = await configResponse.json() as { publicKey?: string };
+            if (config.publicKey) {
+              const padding = "=".repeat((4 - config.publicKey.length % 4) % 4);
+              const raw = (config.publicKey + padding).replace(/-/g, "+").replace(/_/g, "/");
+              const key = Uint8Array.from(atob(raw), (character) => character.charCodeAt(0));
+              subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+            }
+          }
+          if (subscription) await fetch("/api/push", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(subscription.toJSON()) });
+        }
+      } catch { /* 通知是可选项，失败不阻断聊天 */ }
+    }
+    await openChat(listingId, true);
+  };
+
   const updateItemIntelligence = (
     title: string,
     description: string,
@@ -496,7 +548,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
           <button
             className="circle-btn message-button"
             aria-label={pendingIncoming ? `${pendingIncoming} 条待处理联系申请` : "交易联系"}
-            onClick={() => window.location.assign(viewer ? "/account#contacts" : "/signin-with-chatgpt?return_to=%2Faccount%23contacts")}
+            onClick={() => window.location.assign(viewer ? (chatEnabled ? "/messages" : "/account#contacts") : "/signin-with-chatgpt?return_to=%2Fmessages")}
           >
             <Icon>♢</Icon>
             {pendingIncoming > 0 && <b className="message-badge">{Math.min(pendingIncoming, 9)}</b>}
@@ -602,7 +654,7 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
         <a href="#top"><span>⌂</span>首页</a>
         <a href="/map"><span>⌖</span>附近</a>
         <button className="nav-publish" onClick={openPublisher}>＋</button>
-        <a href={viewer ? "/favorites" : "/signin-with-chatgpt?return_to=%2Ffavorites"}><span>♡</span>收藏</a>
+        <a href={viewer ? (chatEnabled ? "/messages" : "/favorites") : "/signin-with-chatgpt?return_to=%2Fmessages"}><span>{chatEnabled ? "◇" : "♡"}</span>{chatEnabled ? "消息" : "收藏"}</a>
         <a href={viewer ? "/account" : "/signin-with-chatgpt?return_to=%2Faccount"}><span>♙</span>我的</a>
       </nav>
       <button className="mobile-publish" onClick={openPublisher}>＋ 发布闲置</button>
@@ -620,12 +672,14 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
             <div className="pickup">⌖ 建议交接地点 <b>{selectedItem.place}附近公共场所</b></div>
             <div className="detail-actions">
               <button className={favorites.includes(selectedItem.id) ? "favorited" : ""} onClick={() => toggleFavorite(selectedItem.id)}>{favorites.includes(selectedItem.id) ? "♥ 已收藏" : "♡ 收藏"}</button>
-              <button disabled={selectedItem.isOwner || contactingId === selectedItem.id} onClick={() => requestContact(selectedItem.id)}>
+              <button disabled={selectedItem.isOwner || contactingId === selectedItem.id} onClick={() => void openChat(selectedItem.id)}>
                 {selectedItem.isOwner
                   ? "这是你的商品"
                   : contactingId === selectedItem.id
-                  ? "正在发送…"
-                  : contactStatuses[selectedItem.id] === "accepted"
+                  ? chatEnabled ? "正在连接…" : "正在发送…"
+                  : chatEnabled
+                    ? "联系卖家"
+                    : contactStatuses[selectedItem.id] === "accepted"
                     ? "查看联系方式"
                     : contactStatuses[selectedItem.id] === "declined"
                       ? "查看申请结果"
@@ -636,6 +690,14 @@ export default function HomeClient({ viewer }: { viewer: Viewer }) {
             </div>
             <small className="safety-note">请勿提前转账；当面验货确认后再完成交易。</small>
           </div>
+        </section>
+      </div>}
+
+      {pushPromptListingId && <div className="push-soft-backdrop" role="presentation" onClick={() => void decidePushPrompt(false)}>
+        <section className="push-soft-dialog" role="dialog" aria-modal="true" aria-label="开启新消息通知" onClick={(event) => event.stopPropagation()}>
+          <span>◇</span><h2>及时收到卖家回复</h2>
+          <p>开启通知后，即使没有停留在聊天页面，也能收到匿名交易消息。你也可以稍后在个人中心开启。</p>
+          <div><button type="button" onClick={() => void decidePushPrompt(false)}>暂不开启</button><button type="button" onClick={() => void decidePushPrompt(true)}>开启通知并聊天</button></div>
         </section>
       </div>}
 

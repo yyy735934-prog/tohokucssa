@@ -45,6 +45,7 @@
   "vars": {
     "ADMIN_EMAILS": "ding.junzhong.p4@dc.tohoku.ac.jp,hpwang1933@gmail.com",
     "EMAIL_FROM": "noreply@market-mail.tohokucssa.org",
+    "COMETCHAT_WEBHOOK_USERNAME": "tohoku_market",
     "VAPID_PUBLIC_KEY": "BJX8cwmpTFoZx6Uu8zkSMCUimfU-HWBW9P5rq-HkWlGf_Y9Q22SHybrEXpLl8-Q9qbQxJLTXDcYOxbskFHLXeaU"
   },
   "secrets": {
@@ -54,7 +55,11 @@
       "RESEND_API_KEY",
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
-      "VAPID_PRIVATE_KEY"
+      "VAPID_PRIVATE_KEY",
+      "COMETCHAT_APP_ID",
+      "COMETCHAT_REGION",
+      "COMETCHAT_REST_API_KEY",
+      "COMETCHAT_WEBHOOK_PASSWORD"
     ]
   },
   "observability": {

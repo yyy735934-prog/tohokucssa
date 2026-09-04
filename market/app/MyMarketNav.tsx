@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-type MyMarketSection = "account" | "batch" | "favorites" | "map";
+type MyMarketSection = "account" | "batch" | "favorites" | "map" | "messages";
 
 export default function MyMarketNav({
   active,
@@ -19,6 +19,7 @@ export default function MyMarketNav({
       {canPublish && <Link className={active === "batch" ? "active" : ""} href="/batch/new">批量发布与海报</Link>}
       <Link className={active === "favorites" ? "active" : ""} href="/favorites">我的收藏</Link>
       <Link className={active === "map" ? "active" : ""} href="/map">附近闲置</Link>
+      <Link className={active === "messages" ? "active" : ""} href="/messages">交易消息</Link>
       {variant === "sidebar" && <>
         <Link href="/account#contacts">交易联系</Link>
         <Link href="/account#profile-contact">联系方式</Link>
