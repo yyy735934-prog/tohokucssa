@@ -83,8 +83,8 @@ export function PosterHistory({ history }: { history: PosterHistoryItem[] }) {
   if (!history.length) return null;
   return (
     <section className="batch-section-card poster-history">
-      <div className="batch-section-title"><b>↻</b><div><h2>重新生成与下载</h2><p>打开以前的批量发布或商品合集，按当前状态重新生成二维码海报</p></div></div>
-      <div>{history.map((item) => <a href={item.url} key={`${item.kind}-${item.id}`}><span>{item.kind === "batch" ? "批量发布" : "商品合集"}</span><b>{item.title}</b><small>{new Date(item.createdAt).toLocaleDateString("zh-CN")} · 打开并下载 →</small></a>)}</div>
+      <div className="batch-section-title"><b>↻</b><div><h2>重新生成、下载与分享</h2><p>打开以前的批量发布或商品合集，按当前状态重新生成二维码海报</p></div></div>
+      <div>{history.map((item) => <a href={item.url} key={`${item.kind}-${item.id}`}><span>{item.kind === "batch" ? "批量发布" : "商品合集"}</span><b>{item.title}</b><small>{new Date(item.createdAt).toLocaleDateString("zh-CN")} · 打开、下载或分享 →</small></a>)}</div>
     </section>
   );
 }
