@@ -64,14 +64,16 @@ export default function PushNotificationSettings() {
   };
 
   if (!supported) return (
-    <section className="identity-panel push-settings"><div><span className="portal-kicker">消息通知</span><h2>此浏览器暂不支持 Web Push</h2><p>仍可通过邮件和个人中心接收信息；也可改用新版 Chrome，iPhone 请先将网站添加到主屏幕。</p></div></section>
+    <section className="identity-settings push-settings"><div className="identity-heading"><div><span>消息通知</span><h2>此浏览器暂不支持 Web Push</h2><p>仍可通过邮件和个人中心接收信息；也可改用新版 Chrome，iPhone 请先将网站添加到主屏幕。</p></div></div></section>
   );
 
   return (
-    <section className="identity-panel push-settings">
-      <div><span className="portal-kicker">消息通知</span><h2>{enabled ? "本设备已开启通知" : "在本设备开启消息通知"}</h2><p>及时接收商品审核、联系申请和联络通过等必要信息。通知按设备单独设置。</p></div>
-      <button className="portal-primary" type="button" disabled={busy} onClick={() => void (enabled ? disable() : enable())}>{busy ? "处理中…" : enabled ? "关闭通知" : "开启通知"}</button>
-      {message && <p className="form-notice" role="status">{message}</p>}
+    <section className="identity-settings push-settings">
+      <div className="identity-heading">
+        <div><span>消息通知</span><h2>{enabled ? "本设备已开启通知" : "在本设备开启消息通知"}</h2><p>及时接收商品审核、联系申请和联络通过等必要信息。通知按设备单独设置。</p></div>
+        <button className="identity-submit" type="button" disabled={busy} onClick={() => void (enabled ? disable() : enable())}>{busy ? "处理中…" : enabled ? "关闭通知" : "开启通知"}</button>
+      </div>
+      {message && <p className="identity-message" role="status">{message}</p>}
     </section>
   );
 }
