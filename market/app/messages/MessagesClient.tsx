@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { describeCometChatError, ensureCometChatSession } from "../../lib/cometchat-client";
@@ -16,6 +18,9 @@ type ConversationItem = {
 };
 
 function messageText(message: any) {
+  const type = message?.getType?.();
+  if (type === "image") return "[图片]";
+  if (type === "audio") return "[语音]";
   return typeof message?.getText === "function" ? message.getText() : "新消息";
 }
 

@@ -10,6 +10,14 @@ type MessagePayload = {
   data?: { message?: { id?: string | number; sender?: string; receiver?: string; receiverType?: string; category?: string; type?: string; sentAt?: number } };
 };
 
+const supportedMessageTypes = new Set(["text", "image", "audio"]);
+
+function notificationBody(type: string, senderLabel: string) {
+  if (type === "image") return `${senderLabel} 发来了一张图片`;
+  if (type === "audio") return `${senderLabel} 发来了一条语音消息`;
+  return `${senderLabel} 发来了一条新消息`;
+}
+
 function safeEqual(left: string, right: string) {
   const a = new TextEncoder().encode(left);
   const b = new TextEncoder().encode(right);
@@ -30,16 +38,17 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null) as MessagePayload | null;
   const message = body?.data?.message;
-  if (body?.trigger !== "message_sent" || body.appId !== config.COMETCHAT_APP_ID || message?.receiverType !== "group" || message.category !== "message" || message.type !== "text" || !message.id || !message.receiver || !message.sender) return Response.json({ ok: true, ignored: true });
+  if (body?.trigger !== "message_sent" || body.appId !== config.COMETCHAT_APP_ID || message?.receiverType !== "group" || message.category !== "message" || !message.type || !supportedMessageTypes.has(message.type) || !message.id || !message.receiver || !message.sender) return Response.json({ ok: true, ignored: true });
 
   const db = await getDb();
   const [conversation] = await db.select().from(chatConversations).where(eq(chatConversations.providerGroupId, message.receiver)).limit(1);
   if (!conversation) return Response.json({ ok: true, ignored: true });
-  const identities = await db.select({ email: chatIdentities.userEmail, uid: chatIdentities.providerUid }).from(chatIdentities);
+  const identities = await db.select({ email: chatIdentities.userEmail, uid: chatIdentities.providerUid, alias: chatIdentities.publicAlias }).from(chatIdentities);
   const buyer = identities.find((identity) => identity.email === conversation.buyerEmail);
   const seller = identities.find((identity) => identity.email === conversation.sellerEmail);
   const recipient = message.sender === buyer?.uid ? conversation.sellerEmail : message.sender === seller?.uid ? conversation.buyerEmail : null;
   if (!recipient) return Response.json({ ok: true, ignored: true });
+  const senderLabel = message.sender === buyer?.uid ? `买家 ${buyer.alias}` : "卖家";
 
   const rawSentAt = Number(message.sentAt);
   const sentAt = Number.isFinite(rawSentAt)
@@ -55,7 +64,7 @@ export async function POST(request: Request) {
   if (!inserted[0]) return Response.json({ ok: true, duplicate: true });
   await sendWebPushNotification(recipient, {
     title: "东北集市 · 新消息",
-    body: "你收到一条新的匿名交易消息。",
+    body: notificationBody(message.type, senderLabel),
     url: `/messages/${conversation.id}`,
     tag: `chat-${conversation.id}`,
   });
