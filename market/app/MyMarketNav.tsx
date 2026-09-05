@@ -21,9 +21,8 @@ export default function MyMarketNav({
       <Link className={active === "map" ? "active" : ""} href="/map">附近闲置</Link>
       <Link className={active === "messages" ? "active" : ""} href="/messages">交易消息</Link>
       {variant === "sidebar" && <>
-        <Link href="/account#contacts">交易联系</Link>
-        <Link href="/account#profile-contact">联系方式</Link>
-        <small>平台不会公开你的邮箱。具体联系方式仅在双方确认交易意向后提供。</small>
+        <Link href="/account#public-identity">公开身份</Link>
+        <small>买卖双方通过站内匿名聊天沟通；登录邮箱和真实身份不会向对方公开。</small>
       </>}
     </nav>
   );

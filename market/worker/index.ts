@@ -2,7 +2,6 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { sendDailyAdminReviewReminder } from "../lib/admin-reminder";
-import { retryAcceptedContactEmails } from "../lib/contact-email-delivery";
 import { sendDailyUnreadChatReminders } from "../lib/chat-unread-reminder";
 
 interface Env {
@@ -55,7 +54,7 @@ const worker = {
     env: Env,
     ctx: ExecutionContext,
   ) {
-    const tasks: Promise<unknown>[] = [retryAcceptedContactEmails(env)];
+    const tasks: Promise<unknown>[] = [];
     if (_controller.cron === "0 9 * * *") tasks.push(sendDailyAdminReviewReminder(env));
     const scheduled = new Date(_controller.scheduledTime);
     if (_controller.cron === "*/15 * * * *" && scheduled.getUTCHours() === 23 && scheduled.getUTCMinutes() === 0) {

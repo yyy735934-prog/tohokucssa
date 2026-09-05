@@ -55,7 +55,6 @@ export default async function HomePage() {
           ? {
               displayName: user.displayName,
               email: user.email,
-              profileCompleted: user.profileCompleted,
             }
           : null
       }

@@ -8,7 +8,6 @@ import {
   type ListingCategory,
 } from "../lib/listing-intelligence";
 import { matchesMarketSearch } from "../lib/market-search";
-import ProfileSetup from "./ProfileSetup";
 import PublishLocationMap, { type PublishLocation } from "./PublishLocationMap";
 import PwaInstallPrompt from "./PwaInstallPrompt";
 import MobileNav from "./MobileNav";
@@ -16,7 +15,6 @@ import MobileNav from "./MobileNav";
 type Viewer = {
   displayName: string;
   email: string;
-  profileCompleted: boolean;
 } | null;
 
 type MarketItem = {
@@ -39,8 +37,6 @@ type MarketItem = {
   createdAt?: string;
   isOwner?: boolean;
 };
-
-type ContactStatus = "pending" | "accepted" | "declined";
 
 const categories = ["全部", ...LISTING_CATEGORIES];
 
@@ -128,11 +124,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
   const [publishLocation, setPublishLocation] = useState<PublishLocation | null>(null);
   const [price, setPrice] = useState("");
   const [publishing, setPublishing] = useState(false);
-  const [contactStatuses, setContactStatuses] = useState<Record<string, ContactStatus>>({});
-  const [pendingIncoming, setPendingIncoming] = useState(0);
   const [contactingId, setContactingId] = useState<string | null>(null);
-  const [profileReady, setProfileReady] = useState(Boolean(viewer?.profileCompleted));
-  const [showProfileSetup, setShowProfileSetup] = useState(Boolean(viewer && !viewer.profileCompleted));
   const [pushPromptListingId, setPushPromptListingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -161,23 +153,6 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
     fetch("/api/favorites")
       .then(async (response) => response.ok ? (await response.json()) as { listings?: MarketItem[] } : null)
       .then((result) => { if (result?.listings) setFavorites(result.listings.map((item) => item.id)); })
-      .catch(() => undefined);
-  }, [viewer]);
-
-  useEffect(() => {
-    if (!viewer) return;
-    fetch("/api/contacts")
-      .then(async (response) => response.ok ? (await response.json()) as {
-        requests?: Array<{ listingId: string; status: ContactStatus }>;
-        pendingIncoming?: number;
-      } : null)
-      .then((result) => {
-        if (!result) return;
-        setContactStatuses(Object.fromEntries(
-          (result.requests ?? []).map((contact) => [contact.listingId, contact.status]),
-        ));
-        setPendingIncoming(result.pendingIncoming ?? 0);
-      })
       .catch(() => undefined);
   }, [viewer]);
 
@@ -327,62 +302,12 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
     }
   };
 
-  const requestContact = async (listingId: string) => {
-    if (!viewer) {
-      window.location.assign("/signin-with-chatgpt?return_to=%2F");
-      return;
-    }
-    if (contactStatuses[listingId]) {
-      window.location.assign("/account#contacts");
-      return;
-    }
-    if (!profileReady) {
-      setShowProfileSetup(true);
-      showNotice("请先留下至少一种联系方式。");
-      return;
-    }
-
-    setContactingId(listingId);
-    try {
-      const response = await fetch("/api/contacts", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ listingId }),
-      });
-      const result = await readJson<{
-        code?: string;
-        error?: string;
-        message?: string;
-        contact?: { status?: ContactStatus };
-      }>(response);
-      if (response.status === 401) {
-        window.location.assign("/signin-with-chatgpt?return_to=%2F");
-        return;
-      }
-      if (result?.code === "CONTACT_PROFILE_REQUIRED") {
-        setProfileReady(false);
-        setShowProfileSetup(true);
-      }
-      if (response.ok && result?.contact?.status) {
-        setContactStatuses((current) => ({
-          ...current,
-          [listingId]: result.contact!.status!,
-        }));
-      }
-      showNotice(result?.message ?? result?.error ?? "暂时无法发送联系申请。");
-    } catch {
-      showNotice("联系申请发送失败，请检查网络后重试。");
-    } finally {
-      setContactingId(null);
-    }
-  };
-
   const openChat = async (listingId: string, skipPushPrompt = false) => {
     if (!viewer) {
       window.location.assign(`/signin-with-chatgpt?return_to=${encodeURIComponent(`/?listing=${listingId}`)}`);
       return;
     }
-    if (!chatEnabled) { await requestContact(listingId); return; }
+    if (!chatEnabled) { showNotice("聊天服务暂时不可用，请稍后再试。"); return; }
     if (!skipPushPrompt && "Notification" in window && Notification.permission === "default") {
       const dismissedAt = Number(localStorage.getItem("chat-push-prompt-dismissed-at") || 0);
       if (Date.now() - dismissedAt > 30 * 24 * 60 * 60 * 1000) { setPushPromptListingId(listingId); return; }
@@ -548,11 +473,10 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
           <PwaInstallPrompt />
           <button
             className="circle-btn message-button"
-            aria-label={pendingIncoming ? `${pendingIncoming} 条待处理联系申请` : "交易联系"}
-            onClick={() => window.location.assign(viewer ? (chatEnabled ? "/messages" : "/account#contacts") : "/signin-with-chatgpt?return_to=%2Fmessages")}
+            aria-label="交易消息"
+            onClick={() => window.location.assign(viewer ? "/messages" : "/signin-with-chatgpt?return_to=%2Fmessages")}
           >
             <Icon>♢</Icon>
-            {pendingIncoming > 0 && <b className="message-badge">{Math.min(pendingIncoming, 9)}</b>}
           </button>
           <a className="profile-btn" href={viewer ? "/account" : "/signin-with-chatgpt?return_to=%2Faccount"}>
             <span>{viewer ? viewer.displayName.slice(0, 1).toUpperCase() : "登"}</span>
@@ -651,7 +575,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
         <div><a href="/policies/terms">使用规范</a><a href="/policies/report">举报与建议</a><a href="/policies/privacy">隐私说明</a></div>
       </footer>
 
-      <MobileNav active="home" homeHref="#top" viewer={Boolean(viewer)} chatEnabled={chatEnabled} onPublish={openPublisher} />
+      <MobileNav active="home" homeHref="#top" viewer={Boolean(viewer)} onPublish={openPublisher} />
       <button className="mobile-publish" onClick={openPublisher}>＋ 发布闲置</button>
 
       {selectedItem && <div className="modal-backdrop" role="presentation" onClick={() => setSelectedItem(null)}>
@@ -671,16 +595,8 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
                 {selectedItem.isOwner
                   ? "这是你的商品"
                   : contactingId === selectedItem.id
-                  ? chatEnabled ? "正在连接…" : "正在发送…"
-                  : chatEnabled
-                    ? "联系卖家"
-                    : contactStatuses[selectedItem.id] === "accepted"
-                    ? "查看联系方式"
-                    : contactStatuses[selectedItem.id] === "declined"
-                      ? "查看申请结果"
-                      : contactStatuses[selectedItem.id] === "pending"
-                        ? "申请已发送"
-                        : "联系卖家"}
+                  ? "正在连接…"
+                  : "联系卖家"}
               </button>
             </div>
             <small className="safety-note">请勿提前转账；当面验货确认后再完成交易。</small>
@@ -763,15 +679,6 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
           </>}
         </section>
       </div>}
-
-      {showProfileSetup && viewer && (
-        <div className="modal-backdrop profile-onboarding-backdrop" role="presentation">
-          <section className="profile-onboarding-modal" role="dialog" aria-modal="true" aria-label="完善交易联系方式">
-            <ProfileSetup onboarding onComplete={() => { setProfileReady(true); setShowProfileSetup(false); }} />
-            <button className="profile-skip" onClick={() => setShowProfileSetup(false)}>稍后在个人中心填写</button>
-          </section>
-        </div>
-      )}
 
       {notice && <div className="toast" role="status">✓ {notice}</div>}
     </main>

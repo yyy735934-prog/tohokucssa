@@ -13,7 +13,10 @@ export async function POST(request: Request) {
   if (!member) return Response.json({ error: "请先登录。" }, { status: 401 });
   const form = await request.formData();
   const rawPurpose = form.get("purpose");
-  const purpose = rawPurpose === "profile" || rawPurpose === "verification" ? rawPurpose : "listing";
+  if (rawPurpose === "profile") {
+    return Response.json({ error: "交易联系方式二维码功能已停用。" }, { status: 410 });
+  }
+  const purpose = rawPurpose === "verification" ? rawPurpose : "listing";
   if (purpose === "listing" && !canUseMarketplace(member.academicStatus, member.isAdmin)) {
     return Response.json({ error: "账号获得发布权限后才能上传商品照片。" }, { status: 403 });
   }
@@ -32,7 +35,7 @@ export async function POST(request: Request) {
   }
 
   const ownerHash = await uploadOwnerHash(member.email);
-  const folder = purpose === "profile" ? "profiles" : purpose === "verification" ? "verification" : "listings";
+  const folder = purpose === "verification" ? "verification" : "listings";
   const key = `${folder}/${ownerHash}/${crypto.randomUUID()}.${extension}`;
   const { env } = await import("cloudflare:workers");
   const runtimeEnv = env as unknown as { BUCKET: R2Bucket };
