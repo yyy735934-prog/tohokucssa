@@ -26,3 +26,10 @@ test("media messages have list previews and privacy-preserving push notices", as
   assert.match(webhook, /发来了一条语音消息/);
   assert.doesNotMatch(webhook, /message\.(?:url|email|phone)/);
 });
+
+test("mobile chat keeps chrome fixed and only scrolls the message region", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.chat-page\{grid-template-rows:auto auto minmax\(0,1fr\)[^}]*overflow:hidden/);
+  assert.match(css, /\.chat-messages\{min-height:0;overscroll-behavior:contain\}/);
+  assert.match(css, /@media\(max-width:800px\)[\s\S]{0,180}\.chat-page\{position:fixed;inset:0/);
+});
