@@ -16,7 +16,13 @@ type UnreadRow = {
 };
 
 export function unreadReminderWindow(scheduledTime: number) {
-  const windowEnd = Math.floor(scheduledTime / 1000);
+  const scheduled = new Date(scheduledTime);
+  const windowEnd = Math.floor(Date.UTC(
+    scheduled.getUTCFullYear(),
+    scheduled.getUTCMonth(),
+    scheduled.getUTCDate(),
+    23,
+  ) / 1000);
   return { windowStart: windowEnd - 24 * 60 * 60, windowEnd };
 }
 
@@ -66,9 +72,15 @@ export async function sendDailyUnreadChatReminders(env: ReminderEnv, scheduledTi
 
     const runId = `${windowEnd}:${userEmail}`;
     const reserved = await env.DB.prepare(`
-      INSERT OR IGNORE INTO chat_unread_reminder_runs
+      INSERT INTO chat_unread_reminder_runs
         (id, user_email, window_start, window_end, message_count, status, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, 'sending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET
+        message_count = excluded.message_count,
+        status = 'sending',
+        error = NULL,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE chat_unread_reminder_runs.status = 'failed'
     `).bind(runId, userEmail, windowStart, windowEnd, messageCount).run();
     if (!reserved.meta.changes) continue;
 

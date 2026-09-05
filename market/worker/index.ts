@@ -57,7 +57,10 @@ const worker = {
     const tasks: Promise<unknown>[] = [];
     if (_controller.cron === "0 9 * * *") tasks.push(sendDailyAdminReviewReminder(env));
     const scheduled = new Date(_controller.scheduledTime);
-    if (_controller.cron === "*/15 * * * *" && scheduled.getUTCHours() === 23 && scheduled.getUTCMinutes() === 0) {
+    // Use the existing 15-minute trigger throughout the 23:00 UTC hour. The
+    // reminder window and run id are normalized to 23:00, so later invocations
+    // safely retry a failed 08:00 JST run without sending duplicates.
+    if (_controller.cron === "*/15 * * * *" && scheduled.getUTCHours() === 23) {
       tasks.push(sendDailyUnreadChatReminders(env, _controller.scheduledTime));
     }
     ctx.waitUntil(Promise.all(tasks).catch((error) => {

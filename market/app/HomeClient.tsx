@@ -367,33 +367,36 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
     setItemIcon(visual.icon);
   };
 
-  const runAiScan = async (file?: File) => {
-    if (file && !viewer) {
+  const continueWithoutPhoto = () => {
+    if (!viewer) {
       window.location.assign("/signin-with-chatgpt?return_to=%2F%3Fpublish%3D1");
       return;
     }
-    setPhotoName(file?.name ?? "IMG_2026_0723.jpg");
-    setPhotoFile(file ?? null);
+    setPhotoName("");
+    setPhotoFile(null);
+    setPhotoImageKey(null);
+    setItemTitle("");
+    setItemDescription("");
+    setItemCategory("其他");
+    setCategoryManuallySelected(false);
+    setItemIcon("📦");
+    setAiLoading(false);
+    setAiMessage("未上传照片，请手动填写商品信息");
+    setPublishStep(2);
+  };
+
+  const runAiScan = async (file: File) => {
+    if (!viewer) {
+      window.location.assign("/signin-with-chatgpt?return_to=%2F%3Fpublish%3D1");
+      return;
+    }
+    setPhotoName(file.name);
+    setPhotoFile(file);
     setPhotoImageKey(null);
     setCategoryManuallySelected(false);
     setPublishStep(2);
     setAiLoading(true);
     setAiMessage("");
-
-    if (!file) {
-      window.setTimeout(() => {
-        const title = "复古植物装饰画";
-        const description = "适合书房或客厅装饰，画框与画面状态请发布前再次核对。";
-        const visual = inferListingIntelligence(title, description);
-        setItemTitle(title);
-        setItemDescription(description);
-        setItemCategory(visual.category);
-        setItemIcon(visual.icon);
-        setAiMessage("✦ AI 已自动识别，可直接修改");
-        setAiLoading(false);
-      }, 850);
-      return;
-    }
 
     try {
       const uploadFile = await compressListingPhoto(file);
@@ -630,12 +633,12 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
                 <b>拍照或选择照片</b>
                 <small>尽量拍清物品全貌，光线明亮即可</small>
               </label>
-              <div className="step-copy"><span>第 1 步</span><h3>只需先拍一张照片</h3><p>上传后，AI 会自动识别物品、判断分类，并生成可以直接使用的标题和描述。</p><button type="button" className="demo-photo" onClick={() => runAiScan()}>使用示例照片体验 →</button></div>
+              <div className="step-copy"><span>第 1 步</span><h3>上传照片，或直接填写</h3><p>上传照片后，AI 会自动识别物品、判断分类并生成标题和描述；也可以不上传照片，手动完成发布。</p><button type="button" className="demo-photo" onClick={continueWithoutPhoto}>我不想上传图片</button></div>
             </section>}
 
             {publishStep === 2 && <section className="wizard-pane ai-step">
               {aiLoading ? <div className="ai-loading"><span></span><b>AI 正在识别物品…</b><small>正在分析品类、品牌与外观状态</small></div> : <>
-                <div className="ai-preview"><span>{itemIcon}</span><small>{photoName}</small><b>{itemCategory} · 自动匹配</b></div>
+                <div className="ai-preview"><span>{itemIcon}</span><small>{photoName || "未上传图片"}</small><b>{itemCategory} · {photoName ? "自动匹配" : "手动填写"}</b></div>
                 <div className="ai-fields">
                   <div className="ai-badge">{aiMessage || "填写商品名称后，将自动匹配栏目与地图图标"}</div>
                   <div className="ai-result-meta"><span>{itemIcon}</span><div><b>{itemCategory}</b><small>AI 已推荐栏目，你也可以自行更改</small></div></div>
