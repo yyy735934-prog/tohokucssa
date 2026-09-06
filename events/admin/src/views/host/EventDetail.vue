@@ -214,8 +214,11 @@
         <span style="font-size:12px;color:var(--c-text-3)">可选，上传后将在报名页展示</span>
       </div>
       <div v-if="event.image_key" class="img-preview">
-        <img :src="`/api/images/serve/${event.id}`" alt="活动图片" />
-        <button class="btn btn-outline btn-sm img-delete" @click="deleteImage" :disabled="busy">删除图片</button>
+        <img :src="`/api/images/serve/${event.id}?v=${encodeURIComponent(event.image_key)}`" alt="活动图片" />
+        <div class="img-actions">
+          <button class="btn btn-outline btn-sm" @click="$refs.imageInput.click()" :disabled="busy || imageUploading">更换图片</button>
+          <button class="btn btn-outline btn-sm" @click="deleteImage" :disabled="busy || imageUploading">删除图片</button>
+        </div>
       </div>
       <div v-else class="img-upload-area" @click="$refs.imageInput.click()" @dragover.prevent @drop.prevent="handleDrop">
         <div class="img-upload-icon">+</div>
@@ -1200,7 +1203,7 @@ function copyCheckinLink() {
   width: 100%; max-height: 400px; object-fit: contain;
   border-radius: 8px; border: 1px solid var(--c-border);
 }
-.img-delete { margin-top: 8px; }
+.img-actions { display: flex; gap: 8px; margin-top: 8px; }
 .img-upload-area {
   border: 2px dashed var(--c-border); border-radius: 10px;
   padding: 32px 20px; text-align: center; cursor: pointer;

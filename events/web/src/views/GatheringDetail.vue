@@ -15,7 +15,7 @@
       </div>
 
       <div v-if="gathering.image_key" class="card mb event-image-card">
-        <img :src="`/api/images/serve/${gathering.id}`" :alt="`${gathering.title}活动图片`" class="event-image" />
+        <img :src="`/api/images/serve/${gathering.id}?v=${encodeURIComponent(gathering.image_key)}`" :alt="`${gathering.title}活动图片`" class="event-image" />
       </div>
 
       <div v-if="gathering.event_subtype === 'date_choice'" class="card mb occurrence-card">

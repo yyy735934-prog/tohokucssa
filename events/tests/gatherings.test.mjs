@@ -12,7 +12,7 @@ import {
   templateSchedule,
 } from '../worker/lib/gatherings.js'
 import { isValidEventType, normalizeStandardRegistration } from '../worker/lib/event-types.js'
-import { canEditEventContent } from '../worker/lib/permissions.js'
+import { canEditEventContent, canOperateEvent } from '../worker/lib/permissions.js'
 
 const template = {
   publish_weekday: 1,
@@ -92,6 +92,13 @@ test('gathering content is editable by administrators and the current host only'
   assert.equal(canEditEventContent(gathering, { id: 12, role: 'host' }), true)
   assert.equal(canEditEventContent(gathering, { id: 13, role: 'host' }), false)
   assert.equal(canEditEventContent({ event_mode: 'standard', created_by: 12 }, { id: 12, role: 'host' }), false)
+})
+
+test('event operations include assigned formal-event hosts', async () => {
+  const assignedDb = { prepare: () => ({ bind: () => ({ first: async () => ({ allowed: 1 }) }) }) }
+  assert.equal(await canOperateEvent(assignedDb, { id: 8, event_mode: 'standard' }, { id: 12, role: 'host' }), true)
+  assert.equal(await canOperateEvent(assignedDb, { id: 9, event_mode: 'gathering', created_by: 12 }, { id: 12, role: 'host' }), true)
+  assert.equal(await canOperateEvent(assignedDb, { id: 9, event_mode: 'gathering', created_by: 12 }, { id: 13, role: 'host' }), false)
 })
 
 test('decision weekday at or after the event rolls back to the previous week', () => {

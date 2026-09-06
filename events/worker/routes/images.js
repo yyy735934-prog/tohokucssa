@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { getSession, extractToken } from '../lib/session.js'
-import { canEditEventContent, canOperateEvent } from '../lib/permissions.js'
+import { canOperateEvent } from '../lib/permissions.js'
 
 const images = new Hono()
 
@@ -61,9 +61,9 @@ images.post('/upload/:eventId', async (c) => {
   const eventId = Number(c.req.param('eventId'))
   if (!eventId) return c.json({ ok: false, message: '无效的活动ID' }, 400)
 
-  const event = await c.env.DB.prepare('SELECT id, created_by, event_mode FROM events WHERE id = ?').bind(eventId).first()
+  const event = await c.env.DB.prepare('SELECT id, created_by, event_mode, image_key FROM events WHERE id = ?').bind(eventId).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (!canEditEventContent(event, session)) {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
 
@@ -94,6 +94,9 @@ images.post('/upload/:eventId', async (c) => {
   }
 
   await c.env.DB.prepare('UPDATE events SET image_key = ? WHERE id = ?').bind(key, eventId).run()
+  if (event.image_key?.startsWith(`events/${eventId}/`) && event.image_key !== key) {
+    try { await c.env.IMAGES.delete(event.image_key) } catch {}
+  }
 
   return c.json({ ok: true, key })
 })
@@ -105,7 +108,7 @@ images.delete('/:eventId', async (c) => {
 
   const event = await c.env.DB.prepare('SELECT id, created_by, event_mode, image_key FROM events WHERE id = ?').bind(eventId).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (!canEditEventContent(event, session)) {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
 

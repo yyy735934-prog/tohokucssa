@@ -28,8 +28,11 @@
     <div class="card image-card mb-16">
       <div class="image-head"><h2>活动图片</h2><span>将在统一活动广场和组局详情中展示</span></div>
       <div v-if="event.image_key" class="img-preview">
-        <img :src="`/api/images/serve/${event.id}`" alt="活动图片" />
-        <button class="btn btn-outline btn-sm img-delete" :disabled="busy" @click="deleteImage">删除图片</button>
+        <img :src="`/api/images/serve/${event.id}?v=${encodeURIComponent(event.image_key)}`" alt="活动图片" />
+        <div class="img-actions">
+          <button class="btn btn-outline btn-sm" :disabled="busy || imageUploading" @click="$refs.imageInput.click()">更换图片</button>
+          <button class="btn btn-outline btn-sm" :disabled="busy || imageUploading" @click="deleteImage">删除图片</button>
+        </div>
       </div>
       <div v-else class="img-upload-area" @click="$refs.imageInput.click()" @dragover.prevent @drop.prevent="handleDrop">
         <div class="img-upload-icon">+</div><div class="img-upload-text">点击或拖拽上传图片</div><div class="img-upload-hint">支持 JPG/PNG/WebP/GIF，最大 5MB</div>
@@ -245,7 +248,7 @@ function formatTime(ts) { return new Date(ts).toLocaleString('zh-CN', { timeZone
 .danger { color: var(--c-danger); }
 .lock { color: var(--c-warning); }.unlock { color: var(--c-success); }
 .locked-banner { color: #92400e; background: #fffbeb; border-color: #f59e0b; font-size: 13px; }
-.image-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }.image-head h2 { font-size: 16px; }.image-head span, .uploading { color: var(--c-text-3); font-size: 12px; }.img-preview { position: relative; overflow: hidden; border-radius: 8px; }.img-preview img { display: block; width: 100%; max-height: 480px; object-fit: cover; }.img-delete { position: absolute; right: 10px; bottom: 10px; background: rgba(255,255,255,.94); }.img-upload-area { padding: 34px 20px; border: 2px dashed var(--c-border); border-radius: 8px; text-align: center; cursor: pointer; }.img-upload-icon { color: var(--c-primary); font-size: 30px; line-height: 1; }.img-upload-text { margin-top: 8px; font-size: 14px; font-weight: 600; }.img-upload-hint { margin-top: 4px; color: var(--c-text-3); font-size: 12px; }.uploading { margin-top: 8px; }
+.image-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }.image-head h2 { font-size: 16px; }.image-head span, .uploading { color: var(--c-text-3); font-size: 12px; }.img-preview { position: relative; overflow: hidden; border-radius: 8px; }.img-preview img { display: block; width: 100%; max-height: 480px; object-fit: cover; }.img-actions { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 8px; }.img-actions .btn { background: rgba(255,255,255,.94); }.img-upload-area { padding: 34px 20px; border: 2px dashed var(--c-border); border-radius: 8px; text-align: center; cursor: pointer; }.img-upload-icon { color: var(--c-primary); font-size: 30px; line-height: 1; }.img-upload-text { margin-top: 8px; font-size: 14px; font-weight: 600; }.img-upload-hint { margin-top: 4px; color: var(--c-text-3); font-size: 12px; }.uploading { margin-top: 8px; }
 .state-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
 .stat { display: flex; flex-direction: column; gap: 5px; }
 .stat strong { font-size: 19px; }.stat span { font-size: 12px; color: var(--c-text-2); }

@@ -16,7 +16,7 @@
         :to="item.kind === 'gathering' ? `/g/${item.id}` : `/e/${item.id}`"
         class="activity-card card"
       >
-        <img v-if="item.image_key" :src="`/api/images/serve/${item.id}`" :alt="`${item.title}活动图片`" class="activity-cover" />
+        <img v-if="item.image_key" :src="`/api/images/serve/${item.id}?v=${encodeURIComponent(item.image_key)}`" :alt="`${item.title}活动图片`" class="activity-cover" />
         <div class="activity-body">
           <h2><span class="type-label" :class="`type-${item.kind}`">{{ item.kind === 'gathering' ? '组个局' : '正式活动' }}</span><span class="subtype-label">{{ subtypeLabel(item) }}</span>{{ item.title }}</h2>
           <div class="activity-meta">{{ item.event_date }}<span v-if="item.location"> · {{ item.location }}</span></div>

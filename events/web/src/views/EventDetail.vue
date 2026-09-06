@@ -18,7 +18,7 @@
 
       <!-- Event Image -->
       <div v-if="event.image_key" class="card mb event-image-card">
-        <img :src="`/api/images/serve/${event.id}`" alt="活动图片" class="event-image" />
+        <img :src="`/api/images/serve/${event.id}?v=${encodeURIComponent(event.image_key)}`" alt="活动图片" class="event-image" />
       </div>
 
       <!-- Signup count roster -->

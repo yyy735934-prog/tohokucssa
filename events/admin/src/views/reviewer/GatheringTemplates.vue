@@ -19,7 +19,7 @@
           <div class="field"><label class="label">区域</label><input v-model="form.region" placeholder="仙台市内" /></div>
           <div class="field"><label class="label">默认地点</label><input v-model="form.default_location" placeholder="可留空，成局后确认" /></div>
           <div class="field full"><label class="label">模板活动图片</label>
-            <div v-if="imagePreview" class="template-image"><img :src="imagePreview" alt="模板活动图片" /><button type="button" class="btn btn-outline btn-sm" @click="removeImage">移除图片</button></div>
+            <div v-if="imagePreview" class="template-image"><img :src="imagePreview" alt="模板活动图片" /><div class="template-image-actions"><button type="button" class="btn btn-outline btn-sm" @click="$refs.templateImageInput.click()">更换图片</button><button type="button" class="btn btn-outline btn-sm" @click="removeImage">移除图片</button></div></div>
             <button v-else type="button" class="btn btn-outline btn-sm" @click="$refs.templateImageInput.click()">选择图片</button>
             <input ref="templateImageInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" @change="selectImage" />
             <p class="hint">新生成的组局会默认使用这张图片。</p>
@@ -64,7 +64,7 @@
     <div v-else-if="!templates.length" class="card empty">还没有组局模板</div>
     <div v-else class="template-list">
       <div v-for="t in templates" :key="t.id" class="card template-card">
-        <img v-if="t.image_key" class="template-cover" :src="`/api/images/template-serve/${t.id}`" alt="模板图片" />
+        <img v-if="t.image_key" class="template-cover" :src="`/api/images/template-serve/${t.id}?v=${encodeURIComponent(t.image_key)}`" alt="模板图片" />
         <div class="template-head">
           <div><span class="category">{{ t.gathering_subtype === 'date_choice' ? '选日期组局' : '定日期组局' }} · {{ categoryLabel(t.category) }}</span><h3>{{ t.name }}</h3></div>
           <span class="approval" :class="`approval-${t.approval_status}`">{{ approvalLabel(t.approval_status) }}</span>
@@ -220,7 +220,7 @@ const formatTime = (value) => value ? new Date(Number(value)).toLocaleString('zh
 .approval-approved { color: var(--c-success); background: var(--c-success-bg); }
 .approval-paused { color: var(--c-warning); }
 .template-title { font-size: 14px; font-weight: 600; }
-.template-image { display:flex; align-items:flex-start; gap:10px; }.template-image img { width:180px; max-height:120px; object-fit:cover; border-radius:8px; }.template-cover { width:calc(100% + 32px); height:180px; object-fit:cover; margin:-16px -16px 14px; border-radius:12px 12px 0 0; }
+.template-image { display:flex; align-items:flex-start; gap:10px; }.template-image img { width:180px; max-height:120px; object-fit:cover; border-radius:8px; }.template-image-actions { display:flex; flex-wrap:wrap; gap:8px; }.template-cover { width:calc(100% + 32px); height:180px; object-fit:cover; margin:-16px -16px 14px; border-radius:12px 12px 0 0; }
 .facts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
 .facts span { font-size: 12px; color: var(--c-text-2); background: var(--c-bg); padding: 4px 8px; border-radius: 99px; }
 .actions { display: flex; gap: 8px; margin-top: 16px; }
