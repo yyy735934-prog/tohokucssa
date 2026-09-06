@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { getSession, extractToken } from '../lib/session.js'
+import { canEditEventContent, canOperateEvent } from '../lib/permissions.js'
 
 const images = new Hono()
 
@@ -60,9 +61,9 @@ images.post('/upload/:eventId', async (c) => {
   const eventId = Number(c.req.param('eventId'))
   if (!eventId) return c.json({ ok: false, message: '无效的活动ID' }, 400)
 
-  const event = await c.env.DB.prepare('SELECT id, created_by FROM events WHERE id = ?').bind(eventId).first()
+  const event = await c.env.DB.prepare('SELECT id, created_by, event_mode FROM events WHERE id = ?').bind(eventId).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!canEditEventContent(event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
 
@@ -102,9 +103,9 @@ images.delete('/:eventId', async (c) => {
   const eventId = Number(c.req.param('eventId'))
   if (!eventId) return c.json({ ok: false, message: '无效的活动ID' }, 400)
 
-  const event = await c.env.DB.prepare('SELECT id, created_by, image_key FROM events WHERE id = ?').bind(eventId).first()
+  const event = await c.env.DB.prepare('SELECT id, created_by, event_mode, image_key FROM events WHERE id = ?').bind(eventId).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!canEditEventContent(event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
 
@@ -140,9 +141,9 @@ images.post('/announce-upload/:eventId', async (c) => {
   const eventId = Number(c.req.param('eventId'))
   if (!eventId) return c.json({ ok: false, message: '无效的活动ID' }, 400)
 
-  const event = await c.env.DB.prepare('SELECT id, created_by FROM events WHERE id = ?').bind(eventId).first()
+  const event = await c.env.DB.prepare('SELECT id, created_by, event_mode FROM events WHERE id = ?').bind(eventId).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
 

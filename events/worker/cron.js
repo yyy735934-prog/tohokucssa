@@ -22,7 +22,7 @@ async function closeExpiredEvents(env) {
   const todayStr = jstNow.toISOString().slice(0, 10)
 
   const expired = await env.DB.prepare(
-    "SELECT id, title, event_date, event_mode FROM events WHERE status IN ('open', 'active') AND event_date < ?"
+    "SELECT id, title, event_date, event_mode, event_subtype FROM events WHERE status IN ('open', 'active') AND event_date < ? AND NOT (event_mode = 'gathering' AND event_subtype = 'date_choice')"
   ).bind(todayStr).all()
 
   for (const e of expired.results) {

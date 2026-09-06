@@ -38,6 +38,16 @@ CREATE TABLE IF NOT EXISTS events (
   reviewed_at     INTEGER,
   reject_reason   TEXT,
   event_mode      TEXT    NOT NULL DEFAULT 'standard' CHECK (event_mode IN ('standard', 'gathering')),
+  event_subtype   TEXT    NOT NULL DEFAULT 'self_hosted',
+  registration_mode TEXT NOT NULL DEFAULT 'internal',
+  registration_target TEXT,
+  registration_email_subject TEXT,
+  registration_email_body TEXT,
+  schedule_revision INTEGER NOT NULL DEFAULT 0,
+  schedule_changed_at INTEGER,
+  schedule_changed_by INTEGER,
+  chat_group_guid TEXT,
+  chat_group_created_at INTEGER,
   gathering_state TEXT    CHECK (gathering_state IN ('recruiting', 'arrangement_pending', 'confirmed', 'in_progress', 'completed', 'cancelled')),
   gathering_category TEXT,
   template_id     INTEGER REFERENCES gathering_templates(id),
@@ -80,6 +90,10 @@ CREATE TABLE IF NOT EXISTS signups (
   cancel_type   TEXT,
   cancel_reason TEXT,
   attendance_status TEXT NOT NULL DEFAULT 'pending' CHECK (attendance_status IN ('pending', 'attended', 'excused', 'no_show')),
+  schedule_confirmed_revision INTEGER NOT NULL DEFAULT 0,
+  schedule_reconfirm_status TEXT NOT NULL DEFAULT 'confirmed',
+  schedule_reconfirm_token TEXT UNIQUE,
+  chat_access_token TEXT UNIQUE,
   created_at    INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
 );
 
@@ -88,6 +102,29 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_signups_event_email ON signups(event_id, e
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signups_token ON signups(token) WHERE token IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_signups_event_user ON signups(event_id, user_id) WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_signups_gathering_status ON signups(event_id, signup_status, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signups_schedule_reconfirm_token ON signups(schedule_reconfirm_token) WHERE schedule_reconfirm_token IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signups_chat_access_token ON signups(chat_access_token) WHERE chat_access_token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_events_subtype ON events(event_mode, event_subtype);
+
+CREATE TRIGGER IF NOT EXISTS trg_events_valid_type_insert
+BEFORE INSERT ON events
+WHEN NOT (
+  (NEW.event_mode = 'standard' AND NEW.event_subtype IN ('self_hosted', 'assisted')) OR
+  (NEW.event_mode = 'gathering' AND NEW.event_subtype IN ('scheduled', 'date_choice'))
+)
+BEGIN
+  SELECT RAISE(ABORT, 'invalid event_mode/event_subtype combination');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_events_valid_type_update
+BEFORE UPDATE OF event_mode, event_subtype ON events
+WHEN NOT (
+  (NEW.event_mode = 'standard' AND NEW.event_subtype IN ('self_hosted', 'assisted')) OR
+  (NEW.event_mode = 'gathering' AND NEW.event_subtype IN ('scheduled', 'date_choice'))
+)
+BEGIN
+  SELECT RAISE(ABORT, 'invalid event_mode/event_subtype combination');
+END;
 
 CREATE TABLE IF NOT EXISTS notifications (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,6 +154,8 @@ CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC);
 CREATE TABLE IF NOT EXISTS gathering_templates (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
   name             TEXT    NOT NULL,
+  gathering_subtype TEXT   NOT NULL DEFAULT 'scheduled',
+  recurrence_json  TEXT    NOT NULL DEFAULT '{}',
   category         TEXT    NOT NULL CHECK (category IN ('karaoke', 'sport', 'outdoor', 'salon', 'boardgame', 'movie', 'other')),
   sport_name       TEXT    NOT NULL DEFAULT '',
   title_template   TEXT    NOT NULL,
@@ -127,6 +166,10 @@ CREATE TABLE IF NOT EXISTS gathering_templates (
   default_location TEXT    NOT NULL DEFAULT '',
   event_weekday    INTEGER NOT NULL DEFAULT 6 CHECK (event_weekday BETWEEN 1 AND 7),
   event_time       TEXT    NOT NULL DEFAULT '14:00',
+  allowed_weekdays_json TEXT NOT NULL DEFAULT '[1,2,3,4,5,6,7]',
+  booking_horizon_days INTEGER NOT NULL DEFAULT 14,
+  publish_lead_minutes INTEGER,
+  formation_lead_minutes INTEGER,
   publish_weekday  INTEGER NOT NULL DEFAULT 1 CHECK (publish_weekday BETWEEN 1 AND 7),
   publish_time     TEXT    NOT NULL DEFAULT '08:00',
   decision_weekday INTEGER NOT NULL DEFAULT 5 CHECK (decision_weekday BETWEEN 1 AND 7),
@@ -154,6 +197,45 @@ CREATE TABLE IF NOT EXISTS gathering_template_hosts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_gathering_template_hosts_user ON gathering_template_hosts(user_id, template_id);
+
+CREATE TABLE IF NOT EXISTS event_host_assignments (
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'invited' CHECK (status IN ('invited', 'accepted', 'declined', 'removed')),
+  invite_token TEXT UNIQUE,
+  invited_by INTEGER REFERENCES admin_users(id),
+  invited_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+  responded_at INTEGER,
+  PRIMARY KEY (event_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS gathering_occurrences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  event_date TEXT NOT NULL,
+  formation_deadline INTEGER NOT NULL,
+  state TEXT NOT NULL DEFAULT 'recruiting' CHECK (state IN ('recruiting', 'confirmed', 'cancelled', 'in_progress', 'completed')),
+  min_participants INTEGER NOT NULL,
+  max_participants INTEGER,
+  confirmed_at INTEGER,
+  registration_locked_at INTEGER,
+  chat_group_guid TEXT,
+  chat_group_created_at INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+  UNIQUE(event_id, event_date)
+);
+
+CREATE TABLE IF NOT EXISTS gathering_occurrence_selections (
+  occurrence_id INTEGER NOT NULL REFERENCES gathering_occurrences(id) ON DELETE CASCADE,
+  signup_id INTEGER NOT NULL REFERENCES signups(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'selected' CHECK (status IN ('selected', 'cancelled')),
+  selected_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+  cancelled_at INTEGER,
+  PRIMARY KEY (occurrence_id, signup_id)
+);
+CREATE INDEX IF NOT EXISTS idx_occurrences_event_state ON gathering_occurrences(event_id, state, event_date);
+CREATE INDEX IF NOT EXISTS idx_occurrence_selections_signup ON gathering_occurrence_selections(signup_id, status);
 
 CREATE TABLE IF NOT EXISTS gathering_host_offers (
   event_id     INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,

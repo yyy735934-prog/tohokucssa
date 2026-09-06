@@ -55,13 +55,15 @@ gatheringTemplates.post('/', async (c) => {
 
   const result = await c.env.DB.prepare(
     `INSERT INTO gathering_templates (
-      name, category, sport_name, title_template, description, notes, region,
+      name, gathering_subtype, recurrence_json, allowed_weekdays_json, booking_horizon_days,
+      publish_lead_minutes, formation_lead_minutes, category, sport_name, title_template, description, notes, region,
       default_location, event_weekday, event_time, publish_weekday, publish_time,
       decision_weekday, decision_time, min_participants, max_participants,
       requires_host, host_user_id, carpool_enabled, approval_status, created_by, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)`
   ).bind(
-    data.name, data.category, data.sport_name, data.title_template, data.description,
+    data.name, data.gathering_subtype, data.recurrence_json, data.allowed_weekdays_json, data.booking_horizon_days,
+    data.publish_lead_minutes, data.formation_lead_minutes, data.category, data.sport_name, data.title_template, data.description,
     data.notes, data.region, data.default_location, data.event_weekday, data.event_time,
     data.publish_weekday, data.publish_time, data.decision_weekday, data.decision_time,
     data.min_participants, data.max_participants, data.requires_host, data.host_user_id,
@@ -87,13 +89,15 @@ gatheringTemplates.patch('/:id', async (c) => {
 
   await c.env.DB.prepare(
     `UPDATE gathering_templates SET
-      name = ?, category = ?, sport_name = ?, title_template = ?, description = ?, notes = ?,
+      name = ?, gathering_subtype = ?, recurrence_json = ?, allowed_weekdays_json = ?, booking_horizon_days = ?,
+      publish_lead_minutes = ?, formation_lead_minutes = ?, category = ?, sport_name = ?, title_template = ?, description = ?, notes = ?,
       region = ?, default_location = ?, event_weekday = ?, event_time = ?, publish_weekday = ?,
       publish_time = ?, decision_weekday = ?, decision_time = ?, min_participants = ?,
       max_participants = ?, requires_host = ?, host_user_id = ?, carpool_enabled = ?, updated_at = ?
      WHERE id = ?`
   ).bind(
-    data.name, data.category, data.sport_name, data.title_template, data.description,
+    data.name, data.gathering_subtype, data.recurrence_json, data.allowed_weekdays_json, data.booking_horizon_days,
+    data.publish_lead_minutes, data.formation_lead_minutes, data.category, data.sport_name, data.title_template, data.description,
     data.notes, data.region, data.default_location, data.event_weekday, data.event_time,
     data.publish_weekday, data.publish_time, data.decision_weekday, data.decision_time,
     data.min_participants, data.max_participants, data.requires_host, data.host_user_id,
@@ -159,7 +163,8 @@ gatheringTemplates.post('/:id/pause', async (c) => {
 
 async function validateTemplate(db, body) {
   const category = String(body.category || '').trim()
-  const requiresHost = ['karaoke', 'sport'].includes(category) ? !!body.requires_host : true
+  const subtype = body.gathering_subtype === 'date_choice' ? 'date_choice' : 'scheduled'
+  const requiresHost = subtype === 'date_choice' ? false : (['karaoke', 'sport'].includes(category) ? !!body.requires_host : true)
   const hostUserIds = [...new Set((Array.isArray(body.host_user_ids)
     ? body.host_user_ids
     : body.host_user_id ? [body.host_user_id] : [])
@@ -167,6 +172,12 @@ async function validateTemplate(db, body) {
     .filter((id) => Number.isInteger(id) && id > 0))]
   const data = {
     name: String(body.name || '').trim(),
+    gathering_subtype: subtype,
+    recurrence_json: typeof body.recurrence_json === 'string' ? body.recurrence_json : JSON.stringify(body.recurrence_json || {}),
+    allowed_weekdays_json: typeof body.allowed_weekdays_json === 'string' ? body.allowed_weekdays_json : JSON.stringify(body.allowed_weekdays || [1, 2, 3, 4, 5, 6, 7]),
+    booking_horizon_days: Math.max(1, Number(body.booking_horizon_days || 14)),
+    publish_lead_minutes: body.publish_lead_minutes == null ? null : Number(body.publish_lead_minutes),
+    formation_lead_minutes: body.formation_lead_minutes == null ? null : Number(body.formation_lead_minutes),
     category,
     sport_name: String(body.sport_name || '').trim(),
     title_template: String(body.title_template || '').trim(),
@@ -197,6 +208,23 @@ async function validateTemplate(db, body) {
   if (!Number.isInteger(data.min_participants) || data.min_participants < 1) return { error: '最低人数必须大于0' }
   if (data.max_participants !== null && (!Number.isInteger(data.max_participants) || data.max_participants < data.min_participants)) {
     return { error: '最多人数不能少于最低人数' }
+  }
+  if (!Number.isInteger(data.booking_horizon_days) || data.booking_horizon_days < 1 || data.booking_horizon_days > 90) return { error: '未来可报名天数必须在 1–90 之间' }
+  if (subtype === 'date_choice') {
+    let allowed
+    try { allowed = JSON.parse(data.allowed_weekdays_json) } catch { return { error: '允许星期格式无效' } }
+    if (!Array.isArray(allowed) || !allowed.length || allowed.some((day) => !Number.isInteger(Number(day)) || Number(day) < 1 || Number(day) > 7)) return { error: '请选择至少一个允许星期' }
+    data.formation_lead_minutes = 30
+  } else {
+    let recurrence
+    try { recurrence = JSON.parse(data.recurrence_json) } catch { return { error: 'recurrence 格式无效' } }
+    if (!['weekly', 'monthly'].includes(recurrence.frequency || 'weekly') || !Number.isInteger(Number(recurrence.interval || 1)) || Number(recurrence.interval || 1) < 1) return { error: 'recurrence 设置无效' }
+    if (data.publish_lead_minutes == null || data.formation_lead_minutes == null) {
+      const legacy = templateSchedule({ ...data, publish_lead_minutes: null, formation_lead_minutes: null })
+      data.publish_lead_minutes = Math.round((legacy.eventAt - legacy.publishAt) / 60000)
+      data.formation_lead_minutes = Math.round((legacy.eventAt - legacy.decisionAt) / 60000)
+    }
+    if (!Number.isFinite(data.publish_lead_minutes) || data.publish_lead_minutes <= 0 || !Number.isFinite(data.formation_lead_minutes) || data.formation_lead_minutes <= 0 || data.publish_lead_minutes <= data.formation_lead_minutes) return { error: '提前发布时间必须大于成局判定提前量' }
   }
   const schedule = templateSchedule(data)
   if (schedule.decisionAt <= schedule.publishAt) return { error: '成局判定时间必须晚于发布时间' }

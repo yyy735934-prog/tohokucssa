@@ -13,6 +13,8 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "@cometchat/chat-sdk-javascript": "^4.1.13",
+    "@cometchat/chat-uikit-vue": "^4.3.32",
     "qrcode": "^1.5.4",
     "vue": "^3.5.13",
     "vue-router": "^4.5.1"

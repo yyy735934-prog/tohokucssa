@@ -3,14 +3,17 @@ import {
   gatheringNeedsArrangementEmail,
   gatheringCancelledEmail,
   gatheringHostOfferEmail,
+  gatheringFinalizedEmail,
 } from './email.js'
 import { audit } from './audit.js'
+import { safelySyncChat, syncOccurrenceChatMembers } from './cometchat.js'
 
 export const GATHERING_CATEGORIES = ['karaoke', 'sport', 'outdoor', 'salon', 'boardgame', 'movie', 'other']
 export const GATHERING_STATES = ['recruiting', 'arrangement_pending', 'confirmed', 'in_progress', 'completed', 'cancelled']
 export const TRANSPORT_MODES = ['self', 'driver', 'passenger', 'public_transport']
 export const ACTIVE_SIGNUP_STATUSES = ['joined', 'ride_pending', 'ride_assigned', 'general_waitlist']
 export const EFFECTIVE_SIGNUP_STATUSES = ['joined', 'ride_assigned']
+export const EVENT_SUBTYPES = ['scheduled', 'date_choice']
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -50,6 +53,12 @@ export function scheduledTimestamp(weekStart, weekday, time) {
 }
 
 export function templateSchedule(template, timestamp = Date.now()) {
+  let recurrence = {}
+  try { recurrence = typeof template.recurrence_json === 'string' ? JSON.parse(template.recurrence_json || '{}') : (template.recurrence_json || {}) } catch {}
+  if (recurrence.frequency && template.publish_lead_minutes != null && template.formation_lead_minutes != null) {
+    const occurrence = nextScheduledOccurrence(template, timestamp)
+    if (occurrence) return occurrence
+  }
   const weekStart = jstWeekStart(timestamp)
   return {
     weekKey: isoWeekKey(timestamp),
@@ -68,9 +77,79 @@ export function isValidClock(value) {
   return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
 }
 
+export function nextScheduledOccurrence(template, timestamp = Date.now()) {
+  let recurrence = {}
+  try { recurrence = typeof template.recurrence_json === 'string' ? JSON.parse(template.recurrence_json || '{}') : (template.recurrence_json || {}) } catch {}
+  const frequency = recurrence.frequency || 'weekly'
+  const interval = Math.max(1, Number(recurrence.interval || 1))
+  const start = jstParts(timestamp)
+  const anchorText = recurrence.anchor_date || `${start.year}-${String(start.month).padStart(2, '0')}-${String(start.day).padStart(2, '0')}`
+  const [anchorYear, anchorMonth, anchorDay] = anchorText.split('-').map(Number)
+  const anchorLocalDay = Date.UTC(anchorYear, anchorMonth - 1, anchorDay)
+  const [hour, minute] = (isValidClock(template.event_time) ? template.event_time : '14:00').split(':').map(Number)
+  for (let offset = 0; offset <= 550; offset++) {
+    const localDay = Date.UTC(start.year, start.month - 1, start.day + offset)
+    const date = new Date(localDay); const weekday = date.getUTCDay() || 7; const dayOfMonth = date.getUTCDate()
+    let matches = false
+    if (frequency === 'weekly') {
+      const weeks = Math.floor((localDay - anchorLocalDay) / (7 * DAY_MS))
+      matches = localDay >= anchorLocalDay && weekday === Number(recurrence.weekday || template.event_weekday || 1) && weeks % interval === 0
+    } else if (frequency === 'monthly') {
+      const months = (date.getUTCFullYear() - anchorYear) * 12 + date.getUTCMonth() - (anchorMonth - 1)
+      if (months >= 0 && months % interval === 0) {
+        if (recurrence.day_of_month) matches = dayOfMonth === Number(recurrence.day_of_month)
+        else matches = weekday === Number(recurrence.weekday || 1) && Math.ceil(dayOfMonth / 7) === Number(recurrence.ordinal || 1)
+      }
+    }
+    if (!matches) continue
+    const eventAt = localDay - JST_OFFSET_MS + hour * 3600000 + minute * 60000
+    const publishAt = eventAt - Number(template.publish_lead_minutes) * 60000
+    const decisionAt = eventAt - Number(template.formation_lead_minutes) * 60000
+    if (timestamp >= decisionAt) continue
+    const eventDate = formatJstDateTime(eventAt)
+    return { weekKey: eventDate.replace(/[- :]/g, '').slice(0, 12), occurrenceKey: eventDate, publishAt, decisionAt, eventAt }
+  }
+  return null
+}
+
+export function dateChoiceOccurrenceDates(template, timestamp = Date.now()) {
+  const horizon = Math.max(1, Number(template.booking_horizon_days || 14))
+  let weekdays = [1, 2, 3, 4, 5, 6, 7]
+  try { weekdays = JSON.parse(template.allowed_weekdays_json || '[]').map(Number).filter((day) => day >= 1 && day <= 7) } catch {}
+  if (!weekdays.length) return []
+  const start = jstParts(timestamp)
+  const result = []
+  for (let offset = 0; offset <= horizon; offset++) {
+    const utcMidnight = Date.UTC(start.year, start.month - 1, start.day + offset)
+    const day = jstParts(utcMidnight - JST_OFFSET_MS)
+    if (!weekdays.includes(day.weekday)) continue
+    const time = isValidClock(template.event_time) ? template.event_time : '19:00'
+    const [hour, minute] = time.split(':').map(Number)
+    const eventAt = utcMidnight - JST_OFFSET_MS + hour * 60 * 60 * 1000 + minute * 60 * 1000
+    if (eventAt <= timestamp) continue
+    const deadline = eventAt - (Number(template.formation_lead_minutes) || 30) * 60 * 1000
+    result.push({ eventDate: formatJstDateTime(eventAt), eventAt, formationDeadline: deadline })
+  }
+  return result
+}
+
+export async function syncDateChoiceOccurrences(env, eventId, template, timestamp = Date.now()) {
+  const dates = dateChoiceOccurrenceDates(template, timestamp)
+  for (const occurrence of dates) {
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO gathering_occurrences (event_id, event_date, formation_deadline, min_participants, max_participants)
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind(eventId, occurrence.eventDate, occurrence.formationDeadline, template.min_participants, template.max_participants || null).run()
+  }
+  return dates
+}
+
 export async function effectiveSignupCount(db, eventId) {
   const row = await db.prepare(
-    "SELECT COUNT(*) AS c FROM signups WHERE event_id = ? AND signup_status IN ('joined', 'ride_assigned')"
+    `SELECT COUNT(*) AS c FROM signups s JOIN events e ON e.id = s.event_id
+     WHERE s.event_id = ? AND s.signup_status IN ('joined', 'ride_assigned')
+       AND s.schedule_reconfirm_status = 'confirmed'
+       AND s.schedule_confirmed_revision = e.schedule_revision`
   ).bind(eventId).first()
   return Number(row?.c || 0)
 }
@@ -80,7 +159,7 @@ export function formationRequirementsMet(event, effectiveCount) {
     && (!event.requires_host || !!event.created_by)
 }
 
-export async function refreshGatheringState(env, eventId) {
+export async function refreshGatheringState(env, eventId, timestamp = Date.now()) {
   const event = await env.DB.prepare(
     "SELECT * FROM events WHERE id = ? AND event_mode = 'gathering'"
   ).bind(eventId).first()
@@ -88,15 +167,22 @@ export async function refreshGatheringState(env, eventId) {
     return { event, transitioned: false, effectiveCount: event ? await effectiveSignupCount(env.DB, eventId) : 0 }
   }
 
+  if (event.event_subtype === 'date_choice') {
+    return { event, transitioned: false, effectiveCount: await effectiveSignupCount(env.DB, eventId) }
+  }
+
   const count = await effectiveSignupCount(env.DB, eventId)
   const minimum = Number(event.min_participants || 1)
   const hasArrangementOwner = !event.requires_host || !!event.created_by
 
-  if (event.gathering_state === 'recruiting' && formationRequirementsMet(event, count)) {
-    const dueAt = Date.now() + 12 * 60 * 60 * 1000
+  // Scheduled gatherings remain in coordination until their per-occurrence deadline.
+  // Reaching the minimum early is informative only; it is not confirmation.
+  if (event.gathering_state === 'recruiting' && formationRequirementsMet(event, count)
+      && event.formation_deadline && timestamp >= Number(event.formation_deadline)) {
+    const dueAt = timestamp + 12 * 60 * 60 * 1000
     const result = await env.DB.prepare(
-      "UPDATE events SET gathering_state = 'arrangement_pending', arrangement_due_at = ?, admin_takeover_at = NULL WHERE id = ? AND gathering_state = 'recruiting'"
-    ).bind(dueAt, eventId).run()
+      "UPDATE events SET gathering_state = 'arrangement_pending', arrangement_due_at = ?, admin_takeover_at = NULL WHERE id = ? AND gathering_state = 'recruiting' AND formation_deadline <= ?"
+    ).bind(dueAt, eventId, timestamp).run()
     if (result.meta.changes) {
       const updated = { ...event, gathering_state: 'arrangement_pending', arrangement_due_at: dueAt }
       await notifyArrangementOwner(env, updated, false)
@@ -118,8 +204,68 @@ export async function refreshGatheringState(env, eventId) {
   return { event, transitioned: false, effectiveCount: count }
 }
 
+// Date-choice occurrences have their own state machine. This helper is called by
+// the selection API, so reaching min never waits for cron.
+export async function refreshDateChoiceOccurrence(env, occurrenceId, timestamp = Date.now()) {
+  const occurrence = await env.DB.prepare(
+    `SELECT o.*, e.title, e.created_by, e.event_mode, e.event_subtype, e.status AS event_status
+     FROM gathering_occurrences o JOIN events e ON e.id = o.event_id WHERE o.id = ?`
+  ).bind(occurrenceId).first()
+  if (!occurrence || occurrence.event_mode !== 'gathering' || occurrence.event_subtype !== 'date_choice') {
+    return { occurrence, transitioned: false, selectedCount: 0 }
+  }
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS c FROM gathering_occurrence_selections WHERE occurrence_id = ? AND status = 'selected'"
+  ).bind(occurrenceId).first()
+  const selectedCount = Number(row?.c || 0)
+  if (occurrence.state === 'recruiting' && selectedCount >= Number(occurrence.min_participants || 1)
+      && timestamp < Number(occurrence.formation_deadline)) {
+    const result = await env.DB.prepare(
+      `UPDATE gathering_occurrences SET state = 'confirmed', confirmed_at = ?, updated_at = ?
+       WHERE id = ? AND state = 'recruiting' AND formation_deadline > ?`
+    ).bind(timestamp, timestamp, occurrenceId, timestamp).run()
+    if (result.meta.changes) {
+      const updated = { ...occurrence, state: 'confirmed', confirmed_at: timestamp }
+      const parent = { id: occurrence.event_id, title: occurrence.title, created_by: occurrence.created_by }
+      await safelySyncChat(env, { type: 'occurrence', id: occurrenceId }, () => syncOccurrenceChatMembers(env, parent, updated))
+      const signups = await env.DB.prepare(
+        `SELECT s.name, s.email FROM gathering_occurrence_selections os JOIN signups s ON s.id = os.signup_id
+         WHERE os.occurrence_id = ? AND os.status = 'selected'`
+      ).bind(occurrenceId).all()
+      for (const signup of signups.results) await sendEmail(env, { to: signup.email, ...gatheringFinalizedEmail({ ...occurrence, id: occurrence.event_id, event_date: occurrence.event_date }, signup) })
+    }
+    return { occurrence: { ...occurrence, state: result.meta.changes ? 'confirmed' : occurrence.state, confirmed_at: timestamp }, transitioned: !!result.meta.changes, selectedCount }
+  }
+  return { occurrence, transitioned: false, selectedCount }
+}
+
 export async function createGatheringFromTemplate(env, template, timestamp = Date.now(), options = {}) {
   const { force = false, jobType = 'weekly_publish', actor = 'system' } = options
+  if (template.gathering_subtype === 'date_choice') {
+    const existing = await env.DB.prepare(
+      "SELECT * FROM events WHERE template_id = ? AND event_subtype = 'date_choice' ORDER BY id LIMIT 1"
+    ).bind(template.id).first()
+    let event = existing
+    if (!event) {
+      const first = dateChoiceOccurrenceDates(template, timestamp)[0]
+      if (!first) return null
+      const result = await env.DB.prepare(
+        `INSERT INTO events (title, event_date, location, content, notes, capacity, status, activity_type,
+         submitted_at, reviewed_at, event_mode, event_subtype, gathering_state, gathering_category, template_id,
+         week_key, min_participants, requires_host, carpool_enabled, image_key)
+         VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, 'gathering', 'date_choice', 'recruiting', ?, ?, 'parent', ?, 0, ?, ?)`
+      ).bind(
+        renderTitle(template, first.eventAt), first.eventDate, (template.default_location || template.region || '').trim(),
+        template.description || '', template.notes || '', template.max_participants || null, `gathering-${template.category}`,
+        timestamp, timestamp, template.category, template.id, template.min_participants, template.carpool_enabled ? 1 : 0, template.image_key || null,
+      ).run()
+      event = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(result.meta.last_row_id).first()
+      await recordJob(env.DB, jobType, { templateId: template.id, eventId: event.id, detail: event.title })
+      await audit(env.DB, 'gathering_date_choice_create', 'event', event.id, `由模板「${template.name}」创建长期活动`, actor)
+    }
+    await syncDateChoiceOccurrences(env, event.id, template, timestamp)
+    return event
+  }
   const schedule = templateSchedule(template, timestamp)
   if (!force && (timestamp < schedule.publishAt || timestamp >= schedule.decisionAt)) return null
 
@@ -129,10 +275,10 @@ export async function createGatheringFromTemplate(env, template, timestamp = Dat
   const result = await env.DB.prepare(
     `INSERT OR IGNORE INTO events (
       title, event_date, location, content, notes, capacity, status, activity_type,
-      created_by, submitted_at, reviewed_at, event_mode, gathering_state,
+      created_by, submitted_at, reviewed_at, event_mode, event_subtype, gathering_state,
       gathering_category, template_id, week_key, min_participants,
       formation_deadline, requires_host, carpool_enabled, image_key
-    ) VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, 'gathering', 'recruiting', ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, 'gathering', 'scheduled', 'recruiting', ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     title,
     eventDate,
@@ -215,8 +361,49 @@ export async function runGatheringAutomation(env, timestamp = Date.now()) {
        AND gathering_state IN ('recruiting', 'arrangement_pending')`
   ).all()
 
+  // Date-choice parent events stay open. Only their occurrences are locked or cancelled.
+  const occurrences = await env.DB.prepare(
+    `SELECT o.*, e.title FROM gathering_occurrences o JOIN events e ON e.id = o.event_id
+     WHERE e.event_mode = 'gathering' AND e.event_subtype = 'date_choice'
+       AND o.state IN ('recruiting', 'confirmed', 'in_progress')`
+  ).all()
+  for (const occurrence of occurrences.results) {
+    if (!occurrence.registration_locked_at && timestamp >= Number(occurrence.formation_deadline)) {
+      await env.DB.prepare(
+        "UPDATE gathering_occurrences SET registration_locked_at = ?, updated_at = ? WHERE id = ? AND registration_locked_at IS NULL"
+      ).bind(timestamp, timestamp, occurrence.id).run()
+    }
+    if (occurrence.state === 'recruiting' && timestamp >= Number(occurrence.formation_deadline)) {
+      const count = await env.DB.prepare(
+        "SELECT COUNT(*) AS c FROM gathering_occurrence_selections WHERE occurrence_id = ? AND status = 'selected'"
+      ).bind(occurrence.id).first()
+      if (Number(count?.c || 0) < Number(occurrence.min_participants || 1)) {
+        const result = await env.DB.prepare(
+          "UPDATE gathering_occurrences SET state = 'cancelled', updated_at = ? WHERE id = ? AND state = 'recruiting'"
+        ).bind(timestamp, occurrence.id).run()
+        if (result.meta.changes) {
+          const signups = await env.DB.prepare(
+            `SELECT s.name, s.email FROM gathering_occurrence_selections os JOIN signups s ON s.id = os.signup_id
+             WHERE os.occurrence_id = ? AND os.status = 'selected'`
+          ).bind(occurrence.id).all()
+          const failed = { id: occurrence.event_id, title: occurrence.title, event_date: occurrence.event_date }
+          for (const signup of signups.results) await sendEmail(env, { to: signup.email, ...gatheringCancelledEmail(failed, signup, '截止报名时人数未达到最低成局人数') })
+          await audit(env.DB, 'gathering_occurrence_cancel', 'occurrence', occurrence.id, `${count?.c || 0}/${occurrence.min_participants}`, 'system')
+        }
+      }
+    }
+    const eventAt = Date.parse(String(occurrence.event_date).replace(' ', 'T') + '+09:00')
+    if (occurrence.state === 'confirmed' && timestamp >= eventAt) {
+      await env.DB.prepare("UPDATE gathering_occurrences SET state = 'in_progress', updated_at = ? WHERE id = ? AND state = 'confirmed'")
+        .bind(timestamp, occurrence.id).run()
+    } else if (occurrence.state === 'in_progress' && timestamp >= eventAt + DAY_MS) {
+      await env.DB.prepare("UPDATE gathering_occurrences SET state = 'completed', updated_at = ? WHERE id = ? AND state = 'in_progress'")
+        .bind(timestamp, occurrence.id).run()
+    }
+  }
+
   for (const event of events.results) {
-    const refreshed = await refreshGatheringState(env, event.id)
+    const refreshed = await refreshGatheringState(env, event.id, timestamp)
     const current = refreshed.event || event
     if (current.gathering_state === 'recruiting' && current.formation_deadline && timestamp >= current.formation_deadline) {
       const count = await effectiveSignupCount(env.DB, current.id)

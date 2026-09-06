@@ -47,7 +47,7 @@ h1{font-size:20px;margin:0 0 8px}
 }
 
 // 报名确认（不含签到码，签到码活动前一天单独发）
-export function signupConfirmEmail(event, signup) {
+export function signupConfirmEmail(event, signup, chatUrl = '') {
   return {
     subject: `报名成功 — ${event.title}`,
     html: baseHtml('报名成功', `
@@ -60,6 +60,7 @@ export function signupConfirmEmail(event, signup) {
       </dl>
       <p style="margin:20px 0 8px;font-size:15px;font-weight:600">你的报名信息：</p>
       <dl class="info">${signupInfoBlock(signup)}</dl>
+      ${chatUrl ? `<p style="margin-top:16px"><a href="${esc(chatUrl)}" class="btn">进入活动群聊</a></p>` : ''}
       <p style="margin-top:16px;font-size:14px;color:#8e8e93">签到码将在活动前一天通过邮件发送，届时请注意查收。</p>
       <p style="margin-top:8px;font-size:13px;color:#aeaeb2">如信息有误，可在「我的」页面修改报名信息</p>
     `),
@@ -318,6 +319,33 @@ export function gatheringHostOfferEmail(event, recipientName, acceptUrl) {
       </dl>
       <p style="font-size:14px">任意一位候选主理人接单即可。你也可以直接报名该组局，报名时将自动视为同意接单。</p>
       <p style="margin-top:16px"><a href="${acceptUrl}" class="btn">查看并同意接单</a></p>
+    `),
+  }
+}
+
+export function standardEventHostInviteEmail(event, host, acceptUrl) {
+  return {
+    subject: `活动担当邀请 — ${event.title}`,
+    html: baseHtml('正式活动担当邀请', `
+      <h1>邀请你担当活动运营</h1>
+      <p class="sub">${esc(host.display_name || host.email)}，你被邀请担当「${esc(event.title)}」</p>
+      <dl class="info"><dt>活动</dt><dd>${esc(event.title)}</dd><dt>时间</dt><dd>${esc(event.event_date)}</dd>
+      ${event.location ? `<dt>地点</dt><dd>${esc(event.location)}</dd>` : ''}</dl>
+      <p style="margin-top:16px"><a href="${acceptUrl}" class="btn">查看并回应邀请</a></p>
+    `),
+  }
+}
+
+export function gatheringScheduleChangedEmail(event, signup, oldDate, keepUrl, leaveUrl) {
+  return {
+    subject: `活动时间有变，请重新确认 — ${event.title}`,
+    html: baseHtml('活动时间变更', `
+      <h1>请重新确认是否参加</h1>
+      <p class="sub">${esc(signup.name)}，「${esc(event.title)}」的活动时间已经变更。</p>
+      <dl class="info"><dt>原时间</dt><dd>${esc(oldDate)}</dd><dt>新时间</dt><dd>${esc(event.event_date)}</dd></dl>
+      <p>由于活动时间发生变化，请重新确认你是否仍能参加。</p>
+      <p style="margin-top:16px"><a href="${keepUrl}" class="btn">我仍然参加</a></p>
+      <p><a href="${leaveUrl}">这个时间无法参加</a></p>
     `),
   }
 }

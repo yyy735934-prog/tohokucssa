@@ -1,6 +1,6 @@
 name = "event-platform"
 main = "worker/index.js"
-compatibility_date = "2025-01-01"
+compatibility_date = "2026-09-07"
 workers_dev = true
 
 [assets]
@@ -27,14 +27,16 @@ binding = "AI"
 pattern = "events.tohokucssa.org"
 custom_domain = true
 
-# Cron: every 15 minutes. Business rules use JST and template-specific times.
+# Cron: every 5 minutes. Business rules use JST and template-specific times.
 # The original reminder/close jobs still run once daily at 09:00 JST.
 [triggers]
-crons = ["*/15 * * * *"]
+crons = ["*/5 * * * *"]
 
 [[r2_buckets]]
 binding = "IMAGES"
 bucket_name = "event-images"
 
-# Email: set RESEND_API_KEY and EMAIL_FROM as secrets via wrangler secret put
+# Email secrets: RESEND_API_KEY, EMAIL_FROM
+# CometChat server-only secrets: COMETCHAT_APP_ID, COMETCHAT_REGION,
+# COMETCHAT_REST_API_KEY. Never expose the REST API key to either Vite bundle.
 

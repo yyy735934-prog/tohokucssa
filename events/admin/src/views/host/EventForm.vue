@@ -16,6 +16,13 @@
 
     <div class="card" style="max-width:680px">
       <form @submit.prevent="submit">
+        <div class="field"><label class="label">正式活动类型 *</label><select v-model="form.event_subtype"><option value="self_hosted">自主活动</option><option value="assisted">协助活动</option></select></div>
+        <template v-if="form.event_subtype === 'assisted'">
+          <div class="field"><label class="label">外部报名方式 *</label><select v-model="form.registration_mode"><option value="external_url">外部报名链接</option><option value="external_email">报名邮箱</option></select></div>
+          <div class="field"><label class="label">{{ form.registration_mode === 'external_email' ? '报名邮箱' : '外部报名链接' }} *</label><input v-model="form.registration_target" required /></div>
+          <div v-if="form.registration_mode === 'external_email'" class="field"><label class="label">邮件 Subject（可选）</label><input v-model="form.registration_email_subject" /></div>
+          <div v-if="form.registration_mode === 'external_email'" class="field"><label class="label">邮件 Body（可选）</label><textarea v-model="form.registration_email_body" rows="3"></textarea></div>
+        </template>
         <div class="field">
           <label class="label">活动名称 *</label>
           <input v-model="form.title" required placeholder="输入活动名称" />
@@ -144,7 +151,8 @@ const activityTypes = [
 ]
 
 const form = reactive({
-  title: '', event_date: '', location: '', content: '', notes: '', capacity: null, activity_type: ''
+  title: '', event_date: '', location: '', content: '', notes: '', capacity: null, activity_type: '',
+  event_subtype: 'self_hosted', registration_mode: 'internal', registration_target: '', registration_email_subject: '', registration_email_body: ''
 })
 const customTypeName = ref('')
 const customMode = ref(false)
@@ -177,6 +185,8 @@ onMounted(async () => {
       form.location = e.location || ''; form.content = e.content || ''
       form.notes = e.notes || ''; form.capacity = e.capacity || null
       form.activity_type = e.activity_type || ''
+      form.event_subtype = e.event_subtype || 'self_hosted'; form.registration_mode = e.registration_mode || 'internal'
+      form.registration_target = e.registration_target || ''; form.registration_email_subject = e.registration_email_subject || ''; form.registration_email_body = e.registration_email_body || ''
       if (form.activity_type && !knownValues.includes(form.activity_type)) {
         customTypeName.value = form.activity_type
       }
