@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useRef, useState } from "react";
 import PublishLocationMap, { type PublishLocation } from "../../PublishLocationMap";
+import { findBatchPublishValidationIssue } from "../../../lib/batch-publish-validation";
 
 type BatchDraft = {
   id: string;
@@ -15,8 +16,7 @@ type BatchDraft = {
   price: string;
   riskLevel: "low" | "review";
   riskReason: string;
-  state: "processing" | "ready" | "error";
-  error?: string;
+  state: "processing" | "ready";
 };
 
 async function readJson<T>(response: Response) {
@@ -46,9 +46,25 @@ export default function BatchPublishClient({ sellerName, sellerVerified, childre
   const [drafts, setDrafts] = useState<BatchDraft[]>([]);
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
+  const uploadSectionRef = useRef<HTMLDivElement>(null);
+  const batchTitleRef = useRef<HTMLInputElement>(null);
+  const mapSectionRef = useRef<HTMLDivElement>(null);
+  const placeRef = useRef<HTMLInputElement>(null);
+  const draftCardRefs = useRef<Record<string, HTMLElement | null>>({});
+  const draftInputRefs = useRef<Record<string, Partial<Record<"title" | "description" | "price", HTMLInputElement | HTMLTextAreaElement | null>>>>({});
 
   const update = (id: string, changes: Partial<BatchDraft>) => {
     setDrafts((current) => current.map((draft) => draft.id === id ? { ...draft, ...changes } : draft));
+  };
+
+  const clearInvalidField = (key: string) => {
+    setInvalidFields((current) => {
+      if (!current.has(key)) return current;
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
   };
 
   const processDraft = async (draft: BatchDraft) => {
@@ -78,7 +94,7 @@ export default function BatchPublishClient({ sellerName, sellerVerified, childre
         riskReason: ai.riskReason || "需要人工确认",
         state: "ready",
       });
-    } catch (error) {
+    } catch {
       if (uploadedKey) {
         const fallbackTitle = draft.file.name.replace(/\.[^.]+$/, "").trim().slice(0, 80);
         update(draft.id, {
@@ -90,7 +106,14 @@ export default function BatchPublishClient({ sellerName, sellerVerified, childre
           state: "ready",
         });
       } else {
-        update(draft.id, { state: "error", error: error instanceof Error ? error.message : "照片上传失败" });
+        const fallbackTitle = draft.file.name.replace(/\.[^.]+$/, "").trim().slice(0, 80);
+        update(draft.id, {
+          title: fallbackTitle.length >= 2 ? fallbackTitle : "待补充商品名称",
+          description: "照片上传失败，请卖家手动补充商品的成色、功能与配件情况。",
+          riskLevel: "review",
+          riskReason: "未上传商品照片，将进入人工审核",
+          state: "ready",
+        });
       }
     }
   };
@@ -111,6 +134,8 @@ export default function BatchPublishClient({ sellerName, sellerVerified, childre
   };
 
   const remove = (id: string) => {
+    delete draftCardRefs.current[id];
+    delete draftInputRefs.current[id];
     setDrafts((current) => {
       const target = current.find((draft) => draft.id === id);
       if (target) URL.revokeObjectURL(target.preview);
@@ -118,15 +143,26 @@ export default function BatchPublishClient({ sellerName, sellerVerified, childre
     });
   };
 
-  const ready = useMemo(() => drafts.length > 0 && drafts.every((draft) =>
-    draft.state === "ready" && draft.title.trim().length >= 2 && draft.description.trim().length >= 5 && draft.price !== "",
-  ), [drafts]);
+  const focusValidationIssue = (issue: NonNullable<ReturnType<typeof findBatchPublishValidationIssue>>) => {
+    const issueKey = issue.draftId ? `${issue.key}:${issue.draftId}` : issue.key;
+    setInvalidFields(new Set([issueKey]));
+    setNotice(issue.message);
+    let target: HTMLElement | null = null;
+    if (issue.key === "uploads") target = uploadSectionRef.current;
+    else if (issue.key === "batch-title") target = batchTitleRef.current;
+    else if (issue.key === "map") target = mapSectionRef.current;
+    else if (issue.key === "place") target = placeRef.current;
+    else if (issue.draftId && issue.key === "draft-state") target = draftCardRefs.current[issue.draftId] ?? null;
+    else if (issue.draftId) target = draftInputRefs.current[issue.draftId]?.[issue.key.replace("draft-", "") as "title" | "description" | "price"] ?? null;
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => target?.focus({ preventScroll: true }), 350);
+  };
 
   const submit = async () => {
-    if (!ready || !location || !place.trim()) {
-      setNotice("请核对全部商品，并填写统一交接地点与地图位置。");
-      return;
-    }
+    if (submitting) return;
+    const issue = findBatchPublishValidationIssue({ drafts, title, place, location });
+    if (issue) return focusValidationIssue(issue);
+    if (!location) return;
     setSubmitting(true);
     const response = await fetch("/api/batches", {
       method: "POST",
@@ -159,7 +195,7 @@ export default function BatchPublishClient({ sellerName, sellerVerified, childre
         <small>海报与批次网页只展示这里的公开身份，可在个人中心修改。</small>
       </div>
 
-      <div className="batch-section-card">
+      <div className="batch-section-card" ref={uploadSectionRef} tabIndex={-1}>
         <div className="batch-section-title"><b>01</b><div><h2>添加商品照片</h2><p>每件商品一张主图，最多 9 张</p></div></div>
         <label className={`batch-photo-picker ${drafts.length >= 9 ? "disabled" : ""}`}>
           <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={drafts.length >= 9} onChange={(event) => { void selectFiles(event.target.files); event.currentTarget.value = ""; }} />
@@ -168,18 +204,16 @@ export default function BatchPublishClient({ sellerName, sellerVerified, childre
         {notice && <p className="batch-notice">{notice}</p>}
         <div className="batch-draft-grid">
           {drafts.map((draft, index) => (
-            <article className={`batch-draft ${draft.state}`} key={draft.id}>
+            <article className={`batch-draft ${draft.state} ${invalidFields.has(`draft-state:${draft.id}`) ? "validation-error" : ""}`} key={draft.id} ref={(element) => { draftCardRefs.current[draft.id] = element; }} tabIndex={-1}>
               <div className="batch-draft-photo">
                 <Image src={draft.preview} alt="商品预览" fill sizes="220px" unoptimized />
                 <span>{index + 1}</span><button type="button" onClick={() => remove(draft.id)}>×</button>
               </div>
-              {draft.state === "processing" ? <div className="batch-processing"><i />AI 正在识别…</div> : draft.state === "error" ? (
-                <div className="batch-error">{draft.error}<small>请删除后重新选择这张照片</small></div>
-              ) : (
+              {draft.state === "processing" ? <div className="batch-processing"><i />AI 正在识别…</div> : (
                 <div className="batch-draft-fields">
-                  <label><span>商品名称</span><input value={draft.title} maxLength={80} onChange={(event) => update(draft.id, { title: event.target.value })} /></label>
-                  <label><span>价格（日元）</span><input type="number" min="0" value={draft.price} placeholder="0 表示免费" onChange={(event) => update(draft.id, { price: event.target.value })} /></label>
-                  <label className="wide"><span>商品描述</span><textarea value={draft.description} maxLength={800} onChange={(event) => update(draft.id, { description: event.target.value })} /></label>
+                  <label className={invalidFields.has(`draft-title:${draft.id}`) ? "validation-error" : ""}><span>商品名称</span><input ref={(element) => { (draftInputRefs.current[draft.id] ??= {}).title = element; }} value={draft.title} maxLength={80} onChange={(event) => { update(draft.id, { title: event.target.value }); clearInvalidField(`draft-title:${draft.id}`); }} /></label>
+                  <label className={invalidFields.has(`draft-price:${draft.id}`) ? "validation-error" : ""}><span>价格（日元）</span><input ref={(element) => { (draftInputRefs.current[draft.id] ??= {}).price = element; }} type="number" min="0" value={draft.price} placeholder="0 表示免费" onChange={(event) => { update(draft.id, { price: event.target.value }); clearInvalidField(`draft-price:${draft.id}`); }} /></label>
+                  <label className={`wide ${invalidFields.has(`draft-description:${draft.id}`) ? "validation-error" : ""}`}><span>商品描述</span><textarea ref={(element) => { (draftInputRefs.current[draft.id] ??= {}).description = element; }} value={draft.description} maxLength={800} onChange={(event) => { update(draft.id, { description: event.target.value }); clearInvalidField(`draft-description:${draft.id}`); }} /></label>
                   <div className={`batch-risk ${draft.riskLevel}`}><b>{draft.riskLevel === "low" ? "可快速发布" : "需人工审核"}</b><span>{draft.riskReason}</span></div>
                 </div>
               )}
@@ -190,14 +224,14 @@ export default function BatchPublishClient({ sellerName, sellerVerified, childre
 
       <div className="batch-section-card">
         <div className="batch-section-title"><b>02</b><div><h2>批次信息与统一地点</h2><p>二维码会打开这一批商品的专属页面</p></div></div>
-        <label className="batch-field"><span>批次名称</span><input value={title} maxLength={60} onChange={(event) => setTitle(event.target.value)} /></label>
-        <PublishLocationMap value={location} onChange={setLocation} />
-        <label className="batch-field"><span>地点名称</span><input value={place} maxLength={80} placeholder="例如：仙台站东口／川内校园" onChange={(event) => setPlace(event.target.value)} /></label>
+        <label className={`batch-field ${invalidFields.has("batch-title") ? "validation-error" : ""}`}><span>批次名称</span><input ref={batchTitleRef} value={title} maxLength={60} onChange={(event) => { setTitle(event.target.value); clearInvalidField("batch-title"); }} /></label>
+        <div ref={mapSectionRef} className={invalidFields.has("map") ? "validation-error batch-map-validation-target" : "batch-map-validation-target"} tabIndex={-1}><PublishLocationMap value={location} onChange={(nextLocation) => { setLocation(nextLocation); clearInvalidField("map"); }} /></div>
+        <label className={`batch-field ${invalidFields.has("place") ? "validation-error" : ""}`}><span>地点名称</span><input ref={placeRef} value={place} maxLength={80} placeholder="例如：仙台站东口／川内校园" onChange={(event) => { setPlace(event.target.value); clearInvalidField("place"); }} /></label>
       </div>
 
       <div className="batch-submit-bar">
         <div><b>发布后立即生成专属网页和竖版海报</b><span>审核中的商品也能预览和转发，联系按钮暂不可用。</span></div>
-        <button type="button" disabled={!ready || submitting} onClick={() => void submit()}>{submitting ? "正在生成…" : "生成批次与海报"}</button>
+        <button type="button" disabled={submitting} onClick={() => void submit()}>{submitting ? "正在生成…" : "生成批次与海报"}</button>
       </div>
       {children}
     </section>

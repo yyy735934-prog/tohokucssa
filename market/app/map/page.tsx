@@ -141,7 +141,7 @@ export default function MarketMap() {
         };
         setUserLocation(approximateLocation);
         setLocationStatus("ready");
-        setLocationMessage("已定位到大致区域，附近闲置已按距离排序。");
+        setLocationMessage("已显示我的当前位置，附近闲置已按距离排序。");
       },
       (error) => {
         setLocationStatus("error");

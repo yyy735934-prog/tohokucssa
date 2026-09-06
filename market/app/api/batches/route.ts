@@ -59,22 +59,24 @@ export async function POST(request: Request) {
         : -1,
     imageKey: cleanText(item.imageKey, 240),
   }));
-  if (normalized.some((item) => item.title.length < 2 || item.description.length < 5 || item.price < 0 || !item.imageKey)) {
+  if (normalized.some((item) => item.title.length < 2 || item.description.length < 5 || item.price < 0)) {
     return Response.json({ error: "请完整填写每件商品的名称、描述和价格。" }, { status: 400 });
   }
   const ownershipChecks = await Promise.all(
-    normalized.map((item) => isOwnedListingImageKey(member.email, item.imageKey)),
+    normalized.filter((item) => item.imageKey).map((item) => isOwnedListingImageKey(member.email, item.imageKey)),
   );
   if (ownershipChecks.some((owned) => !owned)) {
     return Response.json({ error: "商品照片无效，请重新上传。" }, { status: 400 });
   }
 
   const db = await getDb();
-  const imageKeys = normalized.map((item) => item.imageKey);
-  const analyses = await db
-    .select()
-    .from(listingAnalyses)
-    .where(and(eq(listingAnalyses.ownerEmail, member.email), inArray(listingAnalyses.imageKey, imageKeys)));
+  const imageKeys = normalized.map((item) => item.imageKey).filter(Boolean);
+  const analyses = imageKeys.length
+    ? await db
+      .select()
+      .from(listingAnalyses)
+      .where(and(eq(listingAnalyses.ownerEmail, member.email), inArray(listingAnalyses.imageKey, imageKeys)))
+    : [];
   const analysisByKey = new Map(analyses.map((analysis) => [analysis.imageKey, analysis]));
 
   const batchId = crypto.randomUUID();
@@ -103,7 +105,7 @@ export async function POST(request: Request) {
       }),
       icon: visual.icon,
       tone: visual.tone,
-      imageKey: item.imageKey,
+      imageKey: item.imageKey || null,
       batchId,
       batchPosition: index,
     };

@@ -120,7 +120,7 @@ export default function OsmMap({ items, selectedId, onSelect, userLocation }: Os
           fillOpacity: 1,
           weight: 4,
         })
-          .bindTooltip("你的大致位置", {
+          .bindTooltip("我的当前位置", {
             permanent: true,
             direction: "top",
             offset: [0, -10],
