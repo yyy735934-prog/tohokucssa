@@ -40,6 +40,15 @@ type MarketItem = {
 
 const categories = ["全部", ...LISTING_CATEGORIES];
 
+function shuffleMarketItems(items: MarketItem[]) {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const targetIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[targetIndex]] = [shuffled[targetIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
 function Icon({ children }: { children: React.ReactNode }) {
   return <span className="icon" aria-hidden="true">{children}</span>;
 }
@@ -136,7 +145,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
       })
       .then((result) => {
         if (active && result?.listings) {
-          setItems(result.listings);
+          setItems(shuffleMarketItems(result.listings));
           const listingId = new URLSearchParams(window.location.search).get("listing");
           const matched = listingId ? result.listings.find((item) => item.id === listingId) : null;
           if (matched) setSelectedItem(matched);
@@ -286,7 +295,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
         return;
       }
       if (result.listing?.status === "active") {
-        setItems((current) => [result.listing!, ...current]);
+        setItems((current) => shuffleMarketItems([...current, result.listing!]));
       }
       setPublished(true);
       setPublicationMessage(result.message ?? "商品信息已提交。");
