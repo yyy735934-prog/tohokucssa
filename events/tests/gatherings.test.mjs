@@ -12,6 +12,7 @@ import {
   templateSchedule,
 } from '../worker/lib/gatherings.js'
 import { isValidEventType, normalizeStandardRegistration } from '../worker/lib/event-types.js'
+import { canEditEventContent } from '../worker/lib/permissions.js'
 
 const template = {
   publish_weekday: 1,
@@ -83,6 +84,14 @@ test('weekly intervals and monthly recurrence use lead time for publishing and w
   assert.equal(monthlyDate.occurrenceKey, '2026-09-15 19:00')
   const firstSaturday = nextScheduledOccurrence({ ...base, recurrence_json: JSON.stringify({ frequency: 'monthly', interval: 1, anchor_date: '2026-09-01', weekday: 6, ordinal: 1 }) }, now)
   assert.equal(firstSaturday.occurrenceKey, '2026-09-05 19:00')
+})
+
+test('gathering content is editable by administrators and the current host only', () => {
+  const gathering = { event_mode: 'gathering', created_by: 12 }
+  assert.equal(canEditEventContent(gathering, { id: 99, role: 'reviewer' }), true)
+  assert.equal(canEditEventContent(gathering, { id: 12, role: 'host' }), true)
+  assert.equal(canEditEventContent(gathering, { id: 13, role: 'host' }), false)
+  assert.equal(canEditEventContent({ event_mode: 'standard', created_by: 12 }, { id: 12, role: 'host' }), false)
 })
 
 test('decision weekday at or after the event rolls back to the previous week', () => {

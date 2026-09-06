@@ -268,9 +268,23 @@ events.patch('/:id', async (c) => {
   if (!canEditEventContent(event, session)) {
     return c.json({ ok: false, message: '无权编辑' }, 403)
   }
+  if (event.event_mode === 'gathering' && ['completed', 'cancelled'].includes(event.gathering_state)) {
+    return c.json({ ok: false, message: '已结束或已取消的组局不能修改' }, 400)
+  }
 
   const body = await c.req.json()
-  const fields = ['title', 'event_date', 'location', 'content', 'notes', 'capacity', 'lock_at', 'custom_fields', 'activity_type']
+  if (body.title !== undefined && !String(body.title).trim()) return c.json({ ok: false, message: '活动名称必填' }, 400)
+  if (body.capacity !== undefined && body.capacity !== null && body.capacity !== ''
+    && (!Number.isInteger(Number(body.capacity)) || Number(body.capacity) < 1)) {
+    return c.json({ ok: false, message: '人数上限必须是大于 0 的整数' }, 400)
+  }
+  if (event.event_mode === 'gathering' && body.capacity
+    && Number(body.capacity) < Number(event.min_participants || 1)) {
+    return c.json({ ok: false, message: '人数上限不能少于最低成局人数' }, 400)
+  }
+  const fields = event.event_mode === 'gathering'
+    ? ['title', 'location', 'content', 'notes', 'capacity']
+    : ['title', 'event_date', 'location', 'content', 'notes', 'capacity', 'lock_at', 'custom_fields', 'activity_type']
   const sets = []
   const vals = []
   if (event.event_mode === 'standard' && ['event_subtype', 'registration_mode', 'registration_target', 'registration_email_subject', 'registration_email_body'].some((field) => body[field] !== undefined)) {
@@ -292,6 +306,9 @@ events.patch('/:id', async (c) => {
 
   vals.push(id)
   await c.env.DB.prepare(`UPDATE events SET ${sets.join(', ')} WHERE id = ?`).bind(...vals).run()
+  if (event.event_mode === 'gathering') {
+    await audit(c.env.DB, 'gathering_content_update', 'event', id, JSON.stringify({ fields: fields.filter((field) => body[field] !== undefined) }), session.email)
+  }
   return c.json({ ok: true })
 })
 

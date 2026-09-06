@@ -6,6 +6,7 @@
       <div><div class="eyebrow">组个局 · {{ categoryLabel }}</div><h1 class="page-title">{{ event.title }}</h1><p class="page-sub">{{ event.event_date }}<span v-if="event.location"> · {{ event.location }}</span></p></div>
       <div class="flex gap-8" style="flex-wrap:wrap">
         <a :href="`/g/${event.id}`" target="_blank" class="btn btn-outline btn-sm">公开页面 ↗</a>
+        <button v-if="!['completed','cancelled'].includes(event.gathering_state)" class="btn btn-outline btn-sm" @click="openEdit">编辑活动信息</button>
         <button class="btn btn-outline btn-sm" @click="showPoster = true">生成报名海报</button>
         <button v-if="event.status === 'open' && !isLocked" class="btn btn-outline btn-sm lock" :disabled="busy" @click="setSignupLock(true)">锁定报名</button>
         <button v-if="event.status === 'open' && isLocked" class="btn btn-outline btn-sm unlock" :disabled="busy" @click="setSignupLock(false)">恢复报名</button>
@@ -97,6 +98,22 @@
     </div>
 
     <EventPosterModal v-if="showPoster" :event="event" @close="showPoster = false" />
+    <div v-if="showEdit" class="modal-overlay" @click.self="showEdit = false">
+      <div class="modal">
+        <h3 class="modal-title">编辑组局活动信息</h3>
+        <p v-if="event.event_subtype === 'scheduled'" class="modal-tip">日期和时间请使用页面上的“时间协调”，以便通知已报名成员重新确认。</p>
+        <p v-else class="modal-tip">候选日期及最终时间由选日期组局流程统一维护。</p>
+        <form @submit.prevent="saveEdit">
+          <div class="field"><label class="label">活动名称 *</label><input v-model="editForm.title" required /></div>
+          <div class="field"><label class="label">活动地点</label><input v-model="editForm.location" /></div>
+          <div class="field"><label class="label">活动介绍</label><textarea v-model="editForm.content" rows="4"></textarea></div>
+          <div class="field"><label class="label">参加须知</label><textarea v-model="editForm.notes" rows="3"></textarea></div>
+          <div class="field"><label class="label">人数上限</label><input v-model.number="editForm.capacity" type="number" :min="event.min_participants || 1" placeholder="不限" /></div>
+          <p v-if="editError" class="error">{{ editError }}</p>
+          <div class="modal-actions"><button type="button" class="btn btn-outline" @click="showEdit = false">取消</button><button type="submit" class="btn btn-primary" :disabled="busy">{{ busy ? '保存中…' : '保存修改' }}</button></div>
+        </form>
+      </div>
+    </div>
     <div v-if="showAnnounce" class="modal-overlay" @click.self="showAnnounce = false"><div class="modal"><h3 class="modal-title">发送成员通知</h3><p class="modal-tip">可附一张图片，例如群聊二维码或集合地点示意图。</p><div class="field"><label class="label">标题 *</label><input v-model="announceSubject" placeholder="请输入邮件标题" /></div><div class="field"><label class="label">内容 *</label><textarea v-model="announceMessage" rows="5" placeholder="请输入通知内容"></textarea></div><div class="field"><label class="label">附图（可选）</label><img v-if="announcePreview" class="announce-preview" :src="announcePreview" alt="通知附图" /><button type="button" class="btn btn-outline btn-sm" @click="$refs.announceFile.click()">{{ announcePreview ? '更换图片' : '选择图片' }}</button><input ref="announceFile" type="file" accept="image/*" style="display:none" @change="selectAnnounceImage" /></div><p v-if="announceError" class="error">{{ announceError }}</p><div class="modal-actions"><button class="btn btn-outline" @click="showAnnounce = false">取消</button><button class="btn btn-primary" :disabled="busy" @click="sendAnnounce">{{ busy ? '发送中…' : '发送' }}</button></div></div></div>
   </div>
 </template>
@@ -122,6 +139,8 @@ const error = ref('')
 const busy = ref(false)
 const imageUploading = ref(false)
 const showPoster = ref(false)
+const showEdit = ref(false)
+const editError = ref('')
 const showAnnounce = ref(false)
 const announceSubject = ref('')
 const announceMessage = ref('')
@@ -130,6 +149,7 @@ const announcePreview = ref('')
 const announceError = ref('')
 const assignments = reactive({})
 const finalForm = reactive({ event_date: '', location: '', notes: '' })
+const editForm = reactive({ title: '', location: '', content: '', notes: '', capacity: null })
 
 const activeSignups = computed(() => signups.value.filter((s) => s.signup_status !== 'cancelled'))
 const drivers = computed(() => signups.value.filter((s) => s.transport_mode === 'driver' && s.signup_status === 'joined'))
@@ -151,6 +171,27 @@ async function load() {
     finalForm.event_date = data.event.event_date || ''; finalForm.location = data.event.location || ''; finalForm.notes = data.event.notes || ''
   } catch (e) { error.value = e.message }
   loading.value = false
+}
+
+function openEdit() {
+  Object.assign(editForm, {
+    title: event.value.title || '', location: event.value.location || '', content: event.value.content || '',
+    notes: event.value.notes || '', capacity: event.value.capacity || null,
+  })
+  editError.value = ''
+  showEdit.value = true
+}
+async function saveEdit() {
+  editError.value = ''
+  if (!editForm.title.trim()) { editError.value = '活动名称必填'; return }
+  busy.value = true
+  try {
+    await api.updateEvent(event.value.id, { ...editForm, capacity: editForm.capacity || null })
+    showToast('活动信息已更新')
+    showEdit.value = false
+    await load()
+  } catch (e) { editError.value = e.message }
+  busy.value = false
 }
 
 function driverRemaining(driver) { return Math.max(0, Number(driver.seats_offered || 0) - rideAssigned.value.filter((p) => p.assigned_driver_signup_id === driver.id).length) }
