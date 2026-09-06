@@ -71,7 +71,7 @@
         </div>
         <div class="template-title">{{ t.title_template }}</div>
         <div class="facts">
-          <span v-if="t.gathering_subtype !== 'date_choice'">提前 {{ publishLeadLabel(t.publish_lead_minutes) }} 发布</span>
+          <span v-if="t.gathering_subtype !== 'date_choice'">提前 {{ publishLeadLabel(publishLeadMinutes(t)) }} 发布</span>
           <span v-if="t.gathering_subtype !== 'date_choice'">周{{ weekdayLabel(t.decision_weekday) }} {{ t.decision_time }} 判定</span>
           <span v-else>未来 {{ t.booking_horizon_days }} 天 · {{ t.event_time }} · T-30 锁定</span>
           <span>{{ t.min_participants }} 人成局{{ t.max_participants ? `，最多 ${t.max_participants} 人` : '' }}</span>
@@ -146,7 +146,7 @@ async function load() {
 
 function resetImageState() { pendingImage.value = null; imagePreview.value = ''; removeExistingImage.value = false }
 function startNew() { Object.assign(form, defaults()); resetImageState(); editing.value = true; error.value = '' }
-function editTemplate(t) { let recurrence = {}; try { recurrence = JSON.parse(t.recurrence_json || '{}') } catch {}; let allowed = [1,3,5]; try { allowed = JSON.parse(t.allowed_weekdays_json || '[1,3,5]') } catch {}; const leadMinutes = Number(t.publish_lead_minutes || 10080); Object.assign(form, defaults(), t, { recurrence_frequency: recurrence.frequency || 'weekly', recurrence_interval: recurrence.interval || 1, recurrence_anchor_date: recurrence.anchor_date || '', recurrence_day_of_month: recurrence.day_of_month || null, recurrence_ordinal: recurrence.ordinal || 1, publish_lead_days: Math.floor(leadMinutes / 1440), publish_lead_hours: Math.floor((leadMinutes % 1440) / 60), allowed_weekdays: allowed, host_user_ids: [...(t.host_user_ids || [])], requires_host: !!t.requires_host, carpool_enabled: !!t.carpool_enabled }); resetImageState(); if (t.image_key) imagePreview.value = `/api/images/template-serve/${t.id}?v=${Date.now()}`; editing.value = true; error.value = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
+function editTemplate(t) { let recurrence = {}; try { recurrence = JSON.parse(t.recurrence_json || '{}') } catch {}; let allowed = [1,3,5]; try { allowed = JSON.parse(t.allowed_weekdays_json || '[1,3,5]') } catch {}; const leadMinutes = publishLeadMinutes(t); Object.assign(form, defaults(), t, { recurrence_frequency: recurrence.frequency || 'weekly', recurrence_interval: recurrence.interval || 1, recurrence_anchor_date: recurrence.anchor_date || '', recurrence_day_of_month: recurrence.day_of_month || null, recurrence_ordinal: recurrence.ordinal || 1, publish_lead_days: Math.floor(leadMinutes / 1440), publish_lead_hours: Math.floor((leadMinutes % 1440) / 60), allowed_weekdays: allowed, host_user_ids: [...(t.host_user_ids || [])], requires_host: !!t.requires_host, carpool_enabled: !!t.carpool_enabled }); resetImageState(); if (t.image_key) imagePreview.value = `/api/images/template-serve/${t.id}?v=${Date.now()}`; editing.value = true; error.value = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
 function selectImage(e) { const file = e.target.files?.[0]; if (!file) return; pendingImage.value = file; imagePreview.value = URL.createObjectURL(file); removeExistingImage.value = false; e.target.value = '' }
 function removeImage() { pendingImage.value = null; imagePreview.value = ''; removeExistingImage.value = !!form.id && !!form.image_key }
 function applyCategoryDefaults() {
@@ -186,6 +186,8 @@ async function publishNow(t) {
 async function pause(t) { try { await api.pauseGatheringTemplate(t.id); showToast('模板已暂停'); await load() } catch (e) { showToast(e.message, 'error') } }
 const categoryLabel = (value) => categories.find((c) => c.value === value)?.label || value
 const weekdayLabel = (value) => weekdays.find((d) => d.value === Number(value))?.label || value
+const clockMinutes = (value) => { const [hour, minute] = String(value || '00:00').split(':').map(Number); return hour * 60 + minute }
+const publishLeadMinutes = (template) => { const stored = Number(template.publish_lead_minutes); if (stored > 0) return stored; let legacy = ((Number(template.event_weekday) - Number(template.publish_weekday) + 7) % 7) * 1440 + clockMinutes(template.event_time) - clockMinutes(template.publish_time); if (legacy <= 0) legacy += 10080; return legacy }
 const publishLeadLabel = (minutes) => { const total = Number(minutes || 0); const days = Math.floor(total / 1440); const hours = Math.floor((total % 1440) / 60); return [days ? `${days} 天` : '', hours ? `${hours} 小时` : ''].filter(Boolean).join(' ') || '0 小时' }
 const approvalLabel = (value) => ({ draft: '草稿', approved: '自动发布中', paused: '已暂停' }[value] || value)
 const jobTypeLabel = (value) => ({ weekly_publish: '每周自动发布', manual_publish: '管理员立即生成', formation_deadline: '成局判定', arrangement_timeout: '主理人确认超时', admin_takeover: '转交管理员' }[value] || value)

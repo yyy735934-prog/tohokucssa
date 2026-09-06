@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS gathering_templates (
   event_time       TEXT    NOT NULL DEFAULT '14:00',
   allowed_weekdays_json TEXT NOT NULL DEFAULT '[1,2,3,4,5,6,7]',
   booking_horizon_days INTEGER NOT NULL DEFAULT 14,
-  publish_lead_minutes INTEGER,
+  publish_lead_minutes INTEGER NOT NULL DEFAULT 10080,
   formation_lead_minutes INTEGER,
   publish_weekday  INTEGER NOT NULL DEFAULT 1 CHECK (publish_weekday BETWEEN 1 AND 7),
   publish_time     TEXT    NOT NULL DEFAULT '08:00',
