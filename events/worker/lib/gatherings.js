@@ -55,7 +55,7 @@ export function scheduledTimestamp(weekStart, weekday, time) {
 export function templateSchedule(template, timestamp = Date.now()) {
   let recurrence = {}
   try { recurrence = typeof template.recurrence_json === 'string' ? JSON.parse(template.recurrence_json || '{}') : (template.recurrence_json || {}) } catch {}
-  if (recurrence.frequency && template.publish_lead_minutes != null && template.formation_lead_minutes != null) {
+  if (recurrence.frequency && template.publish_lead_minutes != null) {
     const occurrence = nextScheduledOccurrence(template, timestamp)
     if (occurrence) return occurrence
   }
@@ -75,6 +75,18 @@ export function formatJstDateTime(timestamp) {
 
 export function isValidClock(value) {
   return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
+}
+
+export function precedingWeekdayTimestamp(eventAt, weekday, time) {
+  const eventLocal = new Date(eventAt + JST_OFFSET_MS)
+  const eventLocalDay = Date.UTC(eventLocal.getUTCFullYear(), eventLocal.getUTCMonth(), eventLocal.getUTCDate())
+  const eventWeekday = eventLocal.getUTCDay() || 7
+  const weekStartLocal = eventLocalDay - (eventWeekday - 1) * DAY_MS
+  const [hour, minute] = parseTime(time)
+  let result = weekStartLocal + (Number(weekday) - 1) * DAY_MS - JST_OFFSET_MS
+    + hour * 60 * 60 * 1000 + minute * 60 * 1000
+  if (result >= eventAt) result -= 7 * DAY_MS
+  return result
 }
 
 export function nextScheduledOccurrence(template, timestamp = Date.now()) {
@@ -104,7 +116,7 @@ export function nextScheduledOccurrence(template, timestamp = Date.now()) {
     if (!matches) continue
     const eventAt = localDay - JST_OFFSET_MS + hour * 3600000 + minute * 60000
     const publishAt = eventAt - Number(template.publish_lead_minutes) * 60000
-    const decisionAt = eventAt - Number(template.formation_lead_minutes) * 60000
+    const decisionAt = precedingWeekdayTimestamp(eventAt, template.decision_weekday, template.decision_time)
     if (timestamp >= decisionAt) continue
     const eventDate = formatJstDateTime(eventAt)
     return { weekKey: eventDate.replace(/[- :]/g, '').slice(0, 12), occurrenceKey: eventDate, publishAt, decisionAt, eventAt }

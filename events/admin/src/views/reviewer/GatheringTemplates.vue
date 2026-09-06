@@ -34,11 +34,9 @@
           <div class="field"><label class="label">起算日</label><input v-model="form.recurrence_anchor_date" type="date" /></div>
           <div v-if="form.recurrence_frequency === 'monthly'" class="field"><label class="label">每月固定日（留空则按第 N 个星期）</label><input v-model.number="form.recurrence_day_of_month" type="number" min="1" max="31" /></div>
           <div v-if="form.recurrence_frequency === 'monthly' && !form.recurrence_day_of_month" class="field"><label class="label">第 N 个星期</label><input v-model.number="form.recurrence_ordinal" type="number" min="1" max="5" /></div>
-          <div class="field"><label class="label">自动发布</label><div class="inline"><select v-model.number="form.publish_weekday"><option v-for="d in weekdays" :key="d.value" :value="d.value">{{ d.label }}</option></select><input v-model="form.publish_time" type="time" required /></div></div>
-          <div class="field"><label class="label">成局判定</label><div class="inline"><select v-model.number="form.decision_weekday"><option v-for="d in weekdays" :key="d.value" :value="d.value">{{ d.label }}</option></select><input v-model="form.decision_time" type="time" required /></div></div>
+          <div class="field"><label class="label">提前发布</label><div class="inline"><input v-model.number="form.publish_lead_days" type="number" min="0" /><span>天</span><input v-model.number="form.publish_lead_hours" type="number" min="0" max="23" /><span>小时</span></div><p class="hint">相对活动开始时间自动发布。</p></div>
+          <div class="field"><label class="label">成局判定</label><div class="inline"><select v-model.number="form.decision_weekday"><option v-for="d in weekdays" :key="d.value" :value="d.value">{{ d.label }}</option></select><input v-model="form.decision_time" type="time" required /></div><p class="hint">每次活动前最近的该星期和时间进行判定。</p></div>
           <div class="field"><label class="label">活动时间</label><div class="inline"><select v-model.number="form.event_weekday"><option v-for="d in weekdays" :key="d.value" :value="d.value">{{ d.label }}</option></select><input v-model="form.event_time" type="time" required /></div></div>
-          <div class="field"><label class="label">提前发布（分钟）</label><input v-model.number="form.publish_lead_minutes" type="number" min="1" /></div>
-          <div class="field"><label class="label">提前成局判定（分钟）</label><input v-model.number="form.formation_lead_minutes" type="number" min="1" /></div>
         </div>
         </template>
         <template v-else>
@@ -73,7 +71,7 @@
         </div>
         <div class="template-title">{{ t.title_template }}</div>
         <div class="facts">
-          <span v-if="t.gathering_subtype !== 'date_choice'">周{{ weekdayLabel(t.publish_weekday) }} {{ t.publish_time }} 发布</span>
+          <span v-if="t.gathering_subtype !== 'date_choice'">提前 {{ publishLeadLabel(t.publish_lead_minutes) }} 发布</span>
           <span v-if="t.gathering_subtype !== 'date_choice'">周{{ weekdayLabel(t.decision_weekday) }} {{ t.decision_time }} 判定</span>
           <span v-else>未来 {{ t.booking_horizon_days }} 天 · {{ t.event_time }} · T-30 锁定</span>
           <span>{{ t.min_participants }} 人成局{{ t.max_participants ? `，最多 ${t.max_participants} 人` : '' }}</span>
@@ -128,7 +126,7 @@ const categories = [
 ]
 const weekdays = [1,2,3,4,5,6,7].map((value, i) => ({ value, label: ['一','二','三','四','五','六','日'][i] }))
 
-const defaults = () => ({ id: null, name: '', gathering_subtype: 'scheduled', category: 'karaoke', sport_name: '', title_template: '唱歌局 · {date}', description: '', notes: '', region: '仙台市内', default_location: '', event_weekday: 6, event_time: '14:00', publish_weekday: 1, publish_time: '08:00', decision_weekday: 5, decision_time: '18:00', recurrence_frequency: 'weekly', recurrence_interval: 1, recurrence_anchor_date: '', recurrence_day_of_month: null, recurrence_ordinal: 1, publish_lead_minutes: 10080, formation_lead_minutes: 1440, allowed_weekdays: [1,3,5], booking_horizon_days: 14, min_participants: 4, max_participants: null, requires_host: false, host_user_ids: [], carpool_enabled: false, image_key: null })
+const defaults = () => ({ id: null, name: '', gathering_subtype: 'scheduled', category: 'karaoke', sport_name: '', title_template: '唱歌局 · {date}', description: '', notes: '', region: '仙台市内', default_location: '', event_weekday: 6, event_time: '14:00', publish_weekday: 1, publish_time: '08:00', decision_weekday: 5, decision_time: '18:00', recurrence_frequency: 'weekly', recurrence_interval: 1, recurrence_anchor_date: '', recurrence_day_of_month: null, recurrence_ordinal: 1, publish_lead_days: 7, publish_lead_hours: 0, allowed_weekdays: [1,3,5], booking_horizon_days: 14, min_participants: 4, max_participants: null, requires_host: false, host_user_ids: [], carpool_enabled: false, image_key: null })
 const form = reactive(defaults())
 const hosts = computed(() => users.value.filter((u) => ['host', 'reviewer'].includes(u.role)))
 const hostRequired = computed(() => form.gathering_subtype === 'scheduled' && !['karaoke', 'sport'].includes(form.category))
@@ -148,7 +146,7 @@ async function load() {
 
 function resetImageState() { pendingImage.value = null; imagePreview.value = ''; removeExistingImage.value = false }
 function startNew() { Object.assign(form, defaults()); resetImageState(); editing.value = true; error.value = '' }
-function editTemplate(t) { let recurrence = {}; try { recurrence = JSON.parse(t.recurrence_json || '{}') } catch {}; let allowed = [1,3,5]; try { allowed = JSON.parse(t.allowed_weekdays_json || '[1,3,5]') } catch {}; Object.assign(form, defaults(), t, { recurrence_frequency: recurrence.frequency || 'weekly', recurrence_interval: recurrence.interval || 1, recurrence_anchor_date: recurrence.anchor_date || '', recurrence_day_of_month: recurrence.day_of_month || null, recurrence_ordinal: recurrence.ordinal || 1, allowed_weekdays: allowed, host_user_ids: [...(t.host_user_ids || [])], requires_host: !!t.requires_host, carpool_enabled: !!t.carpool_enabled }); resetImageState(); if (t.image_key) imagePreview.value = `/api/images/template-serve/${t.id}?v=${Date.now()}`; editing.value = true; error.value = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
+function editTemplate(t) { let recurrence = {}; try { recurrence = JSON.parse(t.recurrence_json || '{}') } catch {}; let allowed = [1,3,5]; try { allowed = JSON.parse(t.allowed_weekdays_json || '[1,3,5]') } catch {}; const leadMinutes = Number(t.publish_lead_minutes || 10080); Object.assign(form, defaults(), t, { recurrence_frequency: recurrence.frequency || 'weekly', recurrence_interval: recurrence.interval || 1, recurrence_anchor_date: recurrence.anchor_date || '', recurrence_day_of_month: recurrence.day_of_month || null, recurrence_ordinal: recurrence.ordinal || 1, publish_lead_days: Math.floor(leadMinutes / 1440), publish_lead_hours: Math.floor((leadMinutes % 1440) / 60), allowed_weekdays: allowed, host_user_ids: [...(t.host_user_ids || [])], requires_host: !!t.requires_host, carpool_enabled: !!t.carpool_enabled }); resetImageState(); if (t.image_key) imagePreview.value = `/api/images/template-serve/${t.id}?v=${Date.now()}`; editing.value = true; error.value = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
 function selectImage(e) { const file = e.target.files?.[0]; if (!file) return; pendingImage.value = file; imagePreview.value = URL.createObjectURL(file); removeExistingImage.value = false; e.target.value = '' }
 function removeImage() { pendingImage.value = null; imagePreview.value = ''; removeExistingImage.value = !!form.id && !!form.image_key }
 function applyCategoryDefaults() {
@@ -161,7 +159,7 @@ async function save() {
   error.value = ''; busy.value = true
   try {
     const recurrence = form.gathering_subtype === 'scheduled' ? { frequency: form.recurrence_frequency, interval: Number(form.recurrence_interval || 1), anchor_date: form.recurrence_anchor_date || undefined, weekday: Number(form.event_weekday), day_of_month: form.recurrence_frequency === 'monthly' ? (form.recurrence_day_of_month || null) : null, ordinal: form.recurrence_frequency === 'monthly' && !form.recurrence_day_of_month ? Number(form.recurrence_ordinal || 1) : null } : {}
-    const payload = { ...form, recurrence_json: recurrence, allowed_weekdays_json: JSON.stringify(form.allowed_weekdays), formation_lead_minutes: form.gathering_subtype === 'date_choice' ? 30 : form.formation_lead_minutes, requires_host: form.gathering_subtype === 'date_choice' ? false : form.requires_host, host_user_ids: form.gathering_subtype === 'date_choice' ? [] : [...form.host_user_ids], max_participants: form.max_participants || null }
+    const payload = { ...form, recurrence_json: recurrence, allowed_weekdays_json: JSON.stringify(form.allowed_weekdays), publish_lead_days: Number(form.publish_lead_days || 0), publish_lead_hours: Number(form.publish_lead_hours || 0), requires_host: form.gathering_subtype === 'date_choice' ? false : form.requires_host, host_user_ids: form.gathering_subtype === 'date_choice' ? [] : [...form.host_user_ids], max_participants: form.max_participants || null }
     let templateId = form.id
     if (templateId) await api.updateGatheringTemplate(templateId, payload)
     else templateId = (await api.createGatheringTemplate(payload)).id
@@ -188,6 +186,7 @@ async function publishNow(t) {
 async function pause(t) { try { await api.pauseGatheringTemplate(t.id); showToast('模板已暂停'); await load() } catch (e) { showToast(e.message, 'error') } }
 const categoryLabel = (value) => categories.find((c) => c.value === value)?.label || value
 const weekdayLabel = (value) => weekdays.find((d) => d.value === Number(value))?.label || value
+const publishLeadLabel = (minutes) => { const total = Number(minutes || 0); const days = Math.floor(total / 1440); const hours = Math.floor((total % 1440) / 60); return [days ? `${days} 天` : '', hours ? `${hours} 小时` : ''].filter(Boolean).join(' ') || '0 小时' }
 const approvalLabel = (value) => ({ draft: '草稿', approved: '自动发布中', paused: '已暂停' }[value] || value)
 const jobTypeLabel = (value) => ({ weekly_publish: '每周自动发布', manual_publish: '管理员立即生成', formation_deadline: '成局判定', arrangement_timeout: '主理人确认超时', admin_takeover: '转交管理员' }[value] || value)
 const formatTime = (value) => value ? new Date(Number(value)).toLocaleString('zh-CN', { timeZone: 'Asia/Tokyo', hour12: false }) : '—'

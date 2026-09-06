@@ -27,8 +27,8 @@
 - `title_template`、`description`、`notes`：每周活动默认内容。
 - `region`、`default_location`：区域和可选默认地点。
 - `event_weekday`、`event_time`：本周活动的目标时间。
-- `publish_weekday`、`publish_time`：默认周一 08:00，可单独调整。
-- `decision_weekday`、`decision_time`：默认周五 18:00，可单独调整。
+- `publish_lead_minutes`：持久化自动发布提前量；管理界面以“天 + 小时”录入。
+- `decision_weekday`、`decision_time`：每次活动前最近的该星期和时间进行成局判定。
 - `min_participants`、`max_participants`：最低和最多人数。
 - `requires_host`：是否必须有主理人接单；`host_user_id` 仅保留首位候选人以兼容旧数据。
 - `gathering_template_hosts`：模板与候选主理人的多对多关系，可为同一模板配置多人。

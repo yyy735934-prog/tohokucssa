@@ -170,13 +170,17 @@ async function validateTemplate(db, body) {
     : body.host_user_id ? [body.host_user_id] : [])
     .map(Number)
     .filter((id) => Number.isInteger(id) && id > 0))]
+  const hasPublishLeadParts = body.publish_lead_days != null || body.publish_lead_hours != null
+  const publishLeadMinutes = hasPublishLeadParts
+    ? Number(body.publish_lead_days || 0) * 1440 + Number(body.publish_lead_hours || 0) * 60
+    : (body.publish_lead_minutes == null ? null : Number(body.publish_lead_minutes))
   const data = {
     name: String(body.name || '').trim(),
     gathering_subtype: subtype,
     recurrence_json: typeof body.recurrence_json === 'string' ? body.recurrence_json : JSON.stringify(body.recurrence_json || {}),
     allowed_weekdays_json: typeof body.allowed_weekdays_json === 'string' ? body.allowed_weekdays_json : JSON.stringify(body.allowed_weekdays || [1, 2, 3, 4, 5, 6, 7]),
     booking_horizon_days: Math.max(1, Number(body.booking_horizon_days || 14)),
-    publish_lead_minutes: body.publish_lead_minutes == null ? null : Number(body.publish_lead_minutes),
+    publish_lead_minutes: publishLeadMinutes,
     formation_lead_minutes: body.formation_lead_minutes == null ? null : Number(body.formation_lead_minutes),
     category,
     sport_name: String(body.sport_name || '').trim(),
@@ -219,15 +223,15 @@ async function validateTemplate(db, body) {
     let recurrence
     try { recurrence = JSON.parse(data.recurrence_json) } catch { return { error: 'recurrence 格式无效' } }
     if (!['weekly', 'monthly'].includes(recurrence.frequency || 'weekly') || !Number.isInteger(Number(recurrence.interval || 1)) || Number(recurrence.interval || 1) < 1) return { error: 'recurrence 设置无效' }
-    if (data.publish_lead_minutes == null || data.formation_lead_minutes == null) {
+    if (data.publish_lead_minutes == null) {
       const legacy = templateSchedule({ ...data, publish_lead_minutes: null, formation_lead_minutes: null })
       data.publish_lead_minutes = Math.round((legacy.eventAt - legacy.publishAt) / 60000)
-      data.formation_lead_minutes = Math.round((legacy.eventAt - legacy.decisionAt) / 60000)
     }
-    if (!Number.isFinite(data.publish_lead_minutes) || data.publish_lead_minutes <= 0 || !Number.isFinite(data.formation_lead_minutes) || data.formation_lead_minutes <= 0 || data.publish_lead_minutes <= data.formation_lead_minutes) return { error: '提前发布时间必须大于成局判定提前量' }
+    data.formation_lead_minutes = null
+    if (!Number.isInteger(data.publish_lead_minutes) || data.publish_lead_minutes <= 0 || data.publish_lead_minutes % 60 !== 0) return { error: '提前发布时间必须是大于 0 的整小时数' }
   }
   const schedule = templateSchedule(data)
-  if (schedule.decisionAt <= schedule.publishAt) return { error: '成局判定时间必须晚于发布时间' }
+  if (subtype === 'scheduled' && schedule.decisionAt <= schedule.publishAt) return { error: '成局判定时间必须晚于发布时间，请减少提前发布时间' }
   if (data.requires_host && !data.host_user_ids.length) return { error: '此类活动必须选择至少一名候选主理人' }
   if (data.host_user_ids.length) {
     const placeholders = data.host_user_ids.map(() => '?').join(',')

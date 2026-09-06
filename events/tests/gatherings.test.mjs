@@ -7,6 +7,7 @@ import {
   isValidClock,
   jstParts,
   nextScheduledOccurrence,
+  precedingWeekdayTimestamp,
   dateChoiceOccurrenceDates,
   templateSchedule,
 } from '../worker/lib/gatherings.js'
@@ -71,15 +72,22 @@ test('assisted registration validates URL and email without inventing mail conte
   assert.equal(email.registration_email_body, null)
 })
 
-test('weekly intervals and monthly recurrence produce deterministic next occurrences', () => {
+test('weekly intervals and monthly recurrence use lead time for publishing and weekday time for decisions', () => {
   const now = Date.parse('2026-09-01T00:00:00Z')
-  const base = { event_time: '19:00', publish_lead_minutes: 10080, formation_lead_minutes: 60 }
+  const base = { event_time: '19:00', publish_lead_minutes: 10080, decision_weekday: 5, decision_time: '18:00' }
   const biweekly = nextScheduledOccurrence({ ...base, recurrence_json: JSON.stringify({ frequency: 'weekly', interval: 2, anchor_date: '2026-09-05', weekday: 6 }) }, now)
   assert.equal(biweekly.occurrenceKey, '2026-09-05 19:00')
+  assert.equal(new Date(biweekly.publishAt).toISOString(), '2026-08-29T10:00:00.000Z')
+  assert.equal(new Date(biweekly.decisionAt).toISOString(), '2026-09-04T09:00:00.000Z')
   const monthlyDate = nextScheduledOccurrence({ ...base, recurrence_json: JSON.stringify({ frequency: 'monthly', interval: 1, anchor_date: '2026-09-01', day_of_month: 15 }) }, now)
   assert.equal(monthlyDate.occurrenceKey, '2026-09-15 19:00')
   const firstSaturday = nextScheduledOccurrence({ ...base, recurrence_json: JSON.stringify({ frequency: 'monthly', interval: 1, anchor_date: '2026-09-01', weekday: 6, ordinal: 1 }) }, now)
   assert.equal(firstSaturday.occurrenceKey, '2026-09-05 19:00')
+})
+
+test('decision weekday at or after the event rolls back to the previous week', () => {
+  const eventAt = Date.parse('2026-09-05T10:00:00Z') // Saturday 19:00 JST
+  assert.equal(new Date(precedingWeekdayTimestamp(eventAt, 6, '20:00')).toISOString(), '2026-08-29T11:00:00.000Z')
 })
 
 test('date-choice occurrence generation honors JST weekdays and T-30 deadline', () => {

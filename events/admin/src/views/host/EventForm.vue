@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">{{ isEdit ? '编辑活动' : '创建活动' }}</h1>
+      <h1 class="page-title">{{ isEdit ? '编辑活动' : '创建正式活动' }}</h1>
     </div>
 
     <!-- AI guidance banner -->
@@ -119,7 +119,7 @@
         <p v-if="error" class="error" style="margin-top:16px">{{ error }}</p>
         <div class="flex gap-8 mt-24">
           <button type="submit" class="btn btn-primary" :disabled="busy">
-            {{ busy ? '保存中…' : isEdit ? '保存修改' : '创建活动' }}
+            {{ busy ? '保存中…' : isEdit ? '保存修改' : '创建正式活动' }}
           </button>
           <router-link to="/admin/events" class="btn btn-outline">取消</router-link>
         </div>

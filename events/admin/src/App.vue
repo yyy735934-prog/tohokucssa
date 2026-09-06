@@ -31,13 +31,13 @@
         <div class="sidebar-section">
           <div class="sidebar-label">活动</div>
           <router-link to="/admin/events" class="sidebar-link">{{ auth.role === 'user' ? '活动列表' : '我的活动' }}</router-link>
-          <router-link to="/admin/events/new" class="sidebar-link">创建活动</router-link>
           <router-link v-if="auth.role !== 'user'" to="/admin/scan" class="sidebar-link">扫码签到</router-link>
         </div>
         <div v-if="auth.isReviewer" class="sidebar-section">
           <div class="sidebar-label">管理</div>
           <router-link to="/admin/overview" class="sidebar-link">数据总览</router-link>
-          <router-link to="/admin/gathering-templates" class="sidebar-link">每周组局模板</router-link>
+          <router-link to="/admin/events/new" class="sidebar-link">创建正式活动</router-link>
+          <router-link to="/admin/gathering-templates" class="sidebar-link">创建组局</router-link>
           <router-link to="/admin/review" class="sidebar-link">
             审核队列
             <span v-if="pendingCount" class="count-badge">{{ pendingCount }}</span>
