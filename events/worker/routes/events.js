@@ -1,8 +1,11 @@
 import { Hono } from 'hono'
 import { getSession, extractToken } from '../lib/session.js'
-import { sendEmail, eventApprovedEmail, eventRejectedEmail, eventApprovedInviteEmail, eventChangedEmail, eventReminderEmail, eventSubmittedEmail, eventAnnounceEmail, inviteSignupEmail } from '../lib/email.js'
+import { sendEmail, eventApprovedEmail, eventRejectedEmail, eventApprovedInviteEmail, eventChangedEmail, eventReminderEmail, eventSubmittedEmail, eventAnnounceEmail, inviteSignupEmail, standardEventHostInviteEmail } from '../lib/email.js'
 import { createNotification, notifyReviewers } from './notifications.js'
 import { audit } from '../lib/audit.js'
+import { safelySyncChat, syncEventChatMembers } from '../lib/cometchat.js'
+import { canEditEventContent, canOperateEvent, isAssignedStandardHost } from '../lib/permissions.js'
+import { normalizeStandardRegistration } from '../lib/event-types.js'
 
 const events = new Hono()
 
@@ -14,7 +17,8 @@ async function requireAuth(c) {
 
 // POST /api/events/apply — public event submission (no auth)
 events.post('/propose', async (c) => {
-  const body = await c.req.json()
+  return c.json({ ok: false, message: '正式活动仅由管理员创建。' }, 403)
+  /* const body = await c.req.json()
   const { title, event_date, location, content, notes, capacity, custom_fields,
           submitter_name, submitter_email, submitter_phone, submitter_note } = body
 
@@ -45,7 +49,7 @@ events.post('/propose', async (c) => {
     c.executionCtx.waitUntil(sendEmail(c.env, { to: r.email, ...content }))
   }
 
-  return c.json({ ok: true, id: newId })
+  return c.json({ ok: true, id: newId }) */
 })
 
 // GET /api/events/dashboard-stats — reviewer overview
@@ -99,6 +103,7 @@ events.get('/', async (c) => {
   if (scope === 'public') {
     const rows = await c.env.DB.prepare(
       `SELECT e.id, e.title, e.event_date, e.location, e.content, e.capacity, e.lock_at, e.status, e.created_at, e.image_key, e.pinned,
+              e.event_mode, e.event_subtype, e.registration_mode,
               COUNT(s.id) as signupCount
        FROM events e LEFT JOIN signups s ON s.event_id = e.id
        WHERE e.status IN ('open', 'active') AND COALESCE(e.event_mode, 'standard') = 'standard'
@@ -120,11 +125,93 @@ events.get('/', async (c) => {
     rows = await c.env.DB.prepare(
       `SELECT e.*, SUM(CASE WHEN s.id IS NOT NULL AND NOT (e.event_mode = 'gathering' AND s.signup_status = 'cancelled') THEN 1 ELSE 0 END) as signupCount
        FROM events e LEFT JOIN signups s ON s.event_id = e.id
-       WHERE e.created_by = ?
+       WHERE e.created_by = ? OR EXISTS (
+         SELECT 1 FROM event_host_assignments a WHERE a.event_id = e.id AND a.user_id = ? AND a.status = 'accepted'
+       )
        GROUP BY e.id ORDER BY e.created_at DESC`
-    ).bind(session.id).all()
+    ).bind(session.id, session.id).all()
   }
   return c.json({ ok: true, events: rows.results })
+})
+
+async function requireReviewer(c) {
+  const session = await requireAuth(c)
+  if (session.role !== 'reviewer') return { error: c.json({ ok: false, message: '仅管理员可操作' }, 403) }
+  return { session }
+}
+
+events.post('/:id/host-invites', async (c) => {
+  const access = await requireReviewer(c); if (access.error) return access.error
+  const eventId = Number(c.req.param('id')); const body = await c.req.json().catch(() => ({}))
+  const userIds = [...new Set((Array.isArray(body.user_ids) ? body.user_ids : [body.user_id]).map(Number).filter(Number.isInteger))]
+  const event = await c.env.DB.prepare("SELECT * FROM events WHERE id = ? AND event_mode = 'standard'").bind(eventId).first()
+  if (!event) return c.json({ ok: false, message: '正式活动不存在' }, 404)
+  if (!userIds.length) return c.json({ ok: false, message: '请选择主理人' }, 400)
+  const placeholders = userIds.map(() => '?').join(',')
+  const users = await c.env.DB.prepare(`SELECT id, email, display_name FROM admin_users WHERE id IN (${placeholders}) AND role = 'host'`).bind(...userIds).all()
+  if (users.results.length !== userIds.length) return c.json({ ok: false, message: '只能邀请主理人角色' }, 400)
+  for (const user of users.results) {
+    const token = crypto.randomUUID()
+    await c.env.DB.prepare(
+      `INSERT INTO event_host_assignments (event_id, user_id, status, invite_token, invited_by, invited_at)
+       VALUES (?, ?, 'invited', ?, ?, ?)
+       ON CONFLICT(event_id, user_id) DO UPDATE SET status = 'invited', invite_token = excluded.invite_token, invited_by = excluded.invited_by, invited_at = excluded.invited_at, responded_at = NULL`
+    ).bind(eventId, user.id, token, access.session.id, Date.now()).run()
+    const acceptUrl = `${new URL(c.req.url).origin}/host-invites/${encodeURIComponent(token)}`
+    c.executionCtx.waitUntil(sendEmail(c.env, { to: user.email, ...standardEventHostInviteEmail(event, user, acceptUrl) }))
+    await audit(c.env.DB, 'standard_event_host_invite', 'event', eventId, `邀请 ${user.email}`, access.session.email)
+  }
+  return c.json({ ok: true, invited: users.results.map((user) => user.id) })
+})
+
+events.get('/:id/host-invites', async (c) => {
+  const access = await requireReviewer(c); if (access.error) return access.error
+  const rows = await c.env.DB.prepare(
+    `SELECT a.event_id, a.user_id, a.status, a.invited_at, a.responded_at, u.email, u.display_name
+     FROM event_host_assignments a JOIN admin_users u ON u.id = a.user_id WHERE a.event_id = ? ORDER BY a.invited_at DESC`
+  ).bind(Number(c.req.param('id'))).all()
+  return c.json({ ok: true, assignments: rows.results })
+})
+
+events.get('/host-invites/:token', async (c) => {
+  const row = await c.env.DB.prepare(
+    `SELECT a.event_id, a.user_id, a.status, e.title, e.event_date, e.location, u.email, u.display_name
+     FROM event_host_assignments a JOIN events e ON e.id = a.event_id JOIN admin_users u ON u.id = a.user_id
+     WHERE a.invite_token = ?`
+  ).bind(c.req.param('token')).first()
+  if (!row) return c.json({ ok: false, message: '担当邀请无效或已失效' }, 404)
+  return c.json({ ok: true, invite: row })
+})
+
+for (const [path, status] of [['accept', 'accepted'], ['decline', 'declined']]) {
+  events.post(`/host-invites/:token/${path}`, async (c) => {
+    const session = await requireAuth(c)
+    const token = c.req.param('token')
+    const row = await c.env.DB.prepare('SELECT event_id, user_id, status FROM event_host_assignments WHERE invite_token = ?').bind(token).first()
+    if (!row || Number(row.user_id) !== Number(session.id)) return c.json({ ok: false, message: '无效的担当邀请' }, 404)
+    const result = await c.env.DB.prepare(
+      `UPDATE event_host_assignments SET status = ?, responded_at = ? WHERE invite_token = ? AND user_id = ? AND status = 'invited'`
+    ).bind(status, Date.now(), token, session.id).run()
+    if (!result.meta.changes) return c.json({ ok: false, message: '邀请已处理' }, 409)
+    await audit(c.env.DB, `standard_event_host_${path}`, 'event', row.event_id, session.email, session.email)
+    if (status === 'accepted') {
+      const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(row.event_id).first()
+      c.executionCtx.waitUntil(safelySyncChat(c.env, { type: 'event', id: row.event_id }, () => syncEventChatMembers(c.env, event)))
+    }
+    return c.json({ ok: true, status })
+  })
+}
+
+events.delete('/:id/host-invites/:userId', async (c) => {
+  const access = await requireReviewer(c); if (access.error) return access.error
+  const result = await c.env.DB.prepare(
+    "UPDATE event_host_assignments SET status = 'removed', responded_at = ? WHERE event_id = ? AND user_id = ?"
+  ).bind(Date.now(), Number(c.req.param('id')), Number(c.req.param('userId'))).run()
+  if (!result.meta.changes) return c.json({ ok: false, message: '担当不存在' }, 404)
+  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(Number(c.req.param('id'))).first()
+  c.executionCtx.waitUntil(safelySyncChat(c.env, { type: 'event', id: event.id }, () => syncEventChatMembers(c.env, event)))
+  await audit(c.env.DB, 'standard_event_host_remove', 'event', Number(c.req.param('id')), c.req.param('userId'), access.session.email)
+  return c.json({ ok: true })
 })
 
 // GET /api/events/:id
@@ -137,11 +224,11 @@ events.get('/:id', async (c) => {
 
   const token = extractToken(c.req)
   const session = token ? await getSession(c.env.SESSIONS, token, c.env.DB) : null
-  const isAdmin = session && (session.role === 'reviewer' || session.id === event.created_by)
+  const isAdmin = session && (session.role === 'reviewer' || session.id === event.created_by || await isAssignedStandardHost(c.env.DB, id, session.id))
 
   if (!isAdmin) {
-    const { id, title, event_date, location, content, notes, capacity, lock_at, status, custom_fields, activity_type, image_key } = event
-    return c.json({ ok: true, event: { id, title, event_date, location, content, notes, capacity, lock_at, status, custom_fields, activity_type, image_key, signupCount: count.c } })
+    const { id, title, event_date, location, content, notes, capacity, lock_at, status, custom_fields, activity_type, image_key, event_mode, event_subtype, registration_mode } = event
+    return c.json({ ok: true, event: { id, title, event_date, location, content, notes, capacity, lock_at, status, custom_fields, activity_type, image_key, event_mode, event_subtype, registration_mode, signupCount: count.c } })
   }
 
   const creator = await c.env.DB.prepare('SELECT email, display_name FROM admin_users WHERE id = ?').bind(event.created_by).first()
@@ -152,20 +239,24 @@ events.get('/:id', async (c) => {
 events.post('/', async (c) => {
   const session = await requireAuth(c)
   const body = await c.req.json()
-  const { title, event_date, location, content, notes, capacity, lock_at, custom_fields, activity_type } = body
+  const { title, event_date, location, content, notes, capacity, lock_at, custom_fields, activity_type,
+    event_subtype = 'self_hosted', registration_mode = 'internal', registration_target,
+    registration_email_subject, registration_email_body } = body
   if (!title || !event_date) return c.json({ ok: false, message: '标题和时间必填' }, 400)
+  if (session.role !== 'reviewer') return c.json({ ok: false, message: '只有管理员可以创建正式活动' }, 403)
+  const registration = normalizeStandardRegistration({ event_subtype, registration_mode, registration_target, registration_email_subject, registration_email_body })
+  if (registration.error) return c.json({ ok: false, message: registration.error }, 400)
 
   const cf = custom_fields ? JSON.stringify(custom_fields) : '[]'
 
-  if (session.role === 'user') {
-    await c.env.DB.prepare("UPDATE admin_users SET role = 'host' WHERE id = ? AND role = 'user'").bind(session.id).run()
-  }
-
   const result = await c.env.DB.prepare(
-    'INSERT INTO events (title, event_date, location, content, notes, capacity, lock_at, custom_fields, activity_type, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(title.trim(), event_date.trim(), (location || '').trim(), (content || '').trim(), (notes || '').trim(), capacity || null, lock_at || null, cf, (activity_type || '').trim() || null, session.id).run()
+    `INSERT INTO events (title, event_date, location, content, notes, capacity, lock_at, custom_fields, activity_type,
+      created_by, event_mode, event_subtype, registration_mode, registration_target, registration_email_subject, registration_email_body)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'standard', ?, ?, ?, ?, ?)`
+  ).bind(title.trim(), event_date.trim(), (location || '').trim(), (content || '').trim(), (notes || '').trim(), capacity || null, lock_at || null, cf, (activity_type || '').trim() || null, session.id,
+    registration.event_subtype, registration.registration_mode, registration.registration_target, registration.registration_email_subject, registration.registration_email_body).run()
 
-  return c.json({ ok: true, id: result.meta.last_row_id, role_upgraded: session.role === 'user' })
+  return c.json({ ok: true, id: result.meta.last_row_id })
 })
 
 // PATCH /api/events/:id — edit event
@@ -174,7 +265,7 @@ events.patch('/:id', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!canEditEventContent(event, session)) {
     return c.json({ ok: false, message: '无权编辑' }, 403)
   }
 
@@ -182,6 +273,13 @@ events.patch('/:id', async (c) => {
   const fields = ['title', 'event_date', 'location', 'content', 'notes', 'capacity', 'lock_at', 'custom_fields', 'activity_type']
   const sets = []
   const vals = []
+  if (event.event_mode === 'standard' && ['event_subtype', 'registration_mode', 'registration_target', 'registration_email_subject', 'registration_email_body'].some((field) => body[field] !== undefined)) {
+    const registration = normalizeStandardRegistration({ ...event, ...body })
+    if (registration.error) return c.json({ ok: false, message: registration.error }, 400)
+    for (const field of ['event_subtype', 'registration_mode', 'registration_target', 'registration_email_subject', 'registration_email_body']) {
+      sets.push(`${field} = ?`); vals.push(registration[field])
+    }
+  }
   for (const f of fields) {
     if (body[f] !== undefined) {
       sets.push(`${f} = ?`)
@@ -203,7 +301,7 @@ events.post('/:id/signup-lock', async (c) => {
   const event = await c.env.DB.prepare('SELECT id, title, status, created_by, event_mode, gathering_state FROM events WHERE id = ?')
     .bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '仅活动创建者或管理员可以操作' }, 403)
   }
   if (event.status !== 'open' || ['completed', 'cancelled'].includes(event.gathering_state)) {
@@ -231,12 +329,14 @@ events.post('/:id/submit', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
+  if (event.event_mode === 'standard' && session.role !== 'reviewer') return c.json({ ok: false, message: '只有管理员可以提交正式活动' }, 403)
   if (event.created_by !== session.id) return c.json({ ok: false, message: '只能提交自己的活动' }, 403)
   if (event.status !== 'draft') return c.json({ ok: false, message: '只有草稿可以提交审核' }, 400)
 
   if (session.role === 'reviewer') {
     await c.env.DB.prepare('UPDATE events SET status = ?, submitted_at = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?')
       .bind('open', Date.now(), session.id, Date.now(), id).run()
+    c.executionCtx.waitUntil(safelySyncChat(c.env, { type: 'event', id }, () => syncEventChatMembers(c.env, { ...event, status: 'open' })))
     return c.json({ ok: true, autoApproved: true })
   }
 
@@ -267,6 +367,7 @@ events.post('/:id/approve', async (c) => {
 
   await c.env.DB.prepare('UPDATE events SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?')
     .bind('open', session.id, Date.now(), id).run()
+  c.executionCtx.waitUntil(safelySyncChat(c.env, { type: 'event', id }, () => syncEventChatMembers(c.env, { ...event, status: 'open' })))
 
   if (event.created_by) {
     const host = await c.env.DB.prepare('SELECT email, display_name FROM admin_users WHERE id = ?').bind(event.created_by).first()
@@ -333,6 +434,7 @@ events.post('/:id/withdraw', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
+  if (event.event_mode === 'standard' && session.role !== 'reviewer') return c.json({ ok: false, message: '只有管理员可撤回正式活动' }, 403)
   if (event.created_by !== session.id) return c.json({ ok: false, message: '只能撤回自己的活动' }, 403)
   if (event.status !== 'pending') return c.json({ ok: false, message: '只有待审核状态可以撤回' }, 400)
 
@@ -346,7 +448,7 @@ events.post('/:id/activate', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
   if (event.status !== 'open') return c.json({ ok: false, message: '只有报名中的活动可以开始' }, 400)
@@ -362,7 +464,7 @@ events.post('/:id/deactivate', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
   if (event.status !== 'active') return c.json({ ok: false, message: '只有进行中的活动可以撤回' }, 400)
@@ -380,7 +482,7 @@ events.post('/:id/close', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
   if (event.status !== 'active') return c.json({ ok: false, message: '只有进行中的活动可以结束' }, 400)
@@ -396,7 +498,7 @@ events.post('/:id/duplicate', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!canEditEventContent(event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
 
@@ -427,7 +529,7 @@ events.delete('/:id', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!canEditEventContent(event, session)) {
     return c.json({ ok: false, message: '无权删除' }, 403)
   }
   if (event.status !== 'draft') return c.json({ ok: false, message: '只能删除草稿' }, 400)
@@ -445,7 +547,7 @@ events.post('/:id/notify', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
 
@@ -466,7 +568,7 @@ events.post('/:id/announce', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
 
@@ -492,7 +594,7 @@ events.post('/:id/remind', async (c) => {
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
   if (!['open', 'active'].includes(event.status)) {
@@ -568,13 +670,12 @@ function parseEmails(raw) {
 // POST /api/events/:id/invite-signup — batch invite people to sign up
 events.post('/:id/invite-signup', async (c) => {
   const session = await requireAuth(c)
-  if (!['host', 'reviewer'].includes(session.role)) return c.json({ ok: false, message: '无权限' }, 403)
 
   const id = Number(c.req.param('id'))
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
   if (event.status !== 'open') return c.json({ ok: false, message: '活动未在报名中' }, 400)
-  if (event.created_by && event.created_by !== session.id && session.role !== 'reviewer') {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权限' }, 403)
   }
 

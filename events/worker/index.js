@@ -9,6 +9,7 @@ import { notifications } from './routes/notifications.js'
 import { images } from './routes/images.js'
 import { gatherings } from './routes/gatherings.js'
 import { gatheringTemplates } from './routes/gathering-templates.js'
+import { chat } from './routes/chat.js'
 
 const app = new Hono()
 
@@ -30,6 +31,7 @@ app.route('/api/notifications', notifications)
 app.route('/api/images', images)
 app.route('/api/gatherings', gatherings)
 app.route('/api/gathering-templates', gatheringTemplates)
+app.route('/api/chat', chat)
 
 app.all('/api/*', (c) => c.json({ ok: false, message: 'Not Found' }, 404))
 

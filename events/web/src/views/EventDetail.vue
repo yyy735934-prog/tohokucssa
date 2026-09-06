@@ -6,6 +6,7 @@
       <div class="card mb">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
           <h1 class="title">{{ event.title }}</h1>
+          <span class="badge">{{ event.event_subtype === 'assisted' ? '协助活动' : '自主活动' }}</span>
           <span class="badge" :class="`badge-${event.status}`">
             {{ { open:'报名中', active:'进行中', closed:'已结束' }[event.status] || event.status }}
           </span>
@@ -40,9 +41,11 @@
       <div v-if="done" class="card result-card">
         <div class="check-icon">✓</div>
         <p class="result-title">报名成功!</p>
+        <p v-if="externalRedirect" class="result-sub">本站实名登记已完成。你仍需前往外部主办方完成正式报名。</p>
         <p v-if="showQrLink" class="result-sub">活动当天出示签到码即可签到</p>
         <p v-else class="result-sub">签到码将在活动前一天通过邮件发送，届时也可在「我的」页面查看</p>
-        <router-link v-if="showQrLink" :to="`/signup-ok/${event.id}?token=${signupToken}`" class="btn btn-primary" style="margin-top:20px">
+        <a v-if="externalRedirect" :href="externalRedirect.target" class="btn btn-primary" style="margin-top:20px">继续完成外部报名</a>
+        <router-link v-else-if="showQrLink" :to="`/signup-ok/${event.id}?token=${signupToken}`" class="btn btn-primary" style="margin-top:20px">
           查看签到码
         </router-link>
         <router-link v-else to="/my" class="btn btn-outline" style="margin-top:20px">
@@ -164,6 +167,7 @@ const formError = ref('')
 const submitting = ref(false)
 const done = ref(false)
 const signupToken = ref('')
+const externalRedirect = ref(null)
 const agreed = ref(false)
 
 const customFields = computed(() => {
@@ -236,6 +240,7 @@ async function doSignup() {
       }
     })
     signupToken.value = data.token
+    externalRedirect.value = data.redirect || null
     done.value = true
     event.value.signupCount++
     localStorage.setItem('user_email', form.value.email)

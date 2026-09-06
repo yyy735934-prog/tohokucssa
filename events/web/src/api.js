@@ -37,4 +37,12 @@ export const api = {
   joinGathering: (id, data) => request('POST', `/gatherings/${id}/join`, data),
   cancelGatheringSignup: (id, reason = '') => request('POST', `/gatherings/${id}/cancel`, { reason }),
   myGatherings: () => request('GET', '/gatherings/mine'),
+  getOccurrences: (id) => request('GET', `/gatherings/${id}/occurrences`),
+  selectOccurrence: (id, occurrenceId) => request('POST', `/gatherings/${id}/occurrences/${occurrenceId}/select`),
+  cancelOccurrence: (id, occurrenceId) => request('DELETE', `/gatherings/${id}/occurrences/${occurrenceId}/select`),
+  getReconfirm: (token) => request('GET', `/gatherings/reconfirm/${encodeURIComponent(token || '')}`),
+  submitReconfirm: (token, action) => request('POST', `/gatherings/reconfirm/${encodeURIComponent(token || '')}`, { action }),
+  getEventHostInvite: (token) => request('GET', `/events/host-invites/${encodeURIComponent(token || '')}`),
+  respondEventHostInvite: (token, action) => request('POST', `/events/host-invites/${encodeURIComponent(token || '')}/${action}`),
+  chatSession: (data) => request('POST', '/chat/session', data),
 }

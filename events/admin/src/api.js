@@ -89,6 +89,10 @@ export const api = {
   revokeRole: (email, role) => request('POST', '/users/revoke-role', { email, role }),
   inviteUsers: (emails, role) => request('POST', '/users/invite', { emails, role }),
   inviteSignup: (eventId, emails) => request('POST', `/events/${eventId}/invite-signup`, { emails }),
+  listEventHostAssignments: (eventId) => request('GET', `/events/${eventId}/host-invites`),
+  inviteEventHosts: (eventId, user_ids) => request('POST', `/events/${eventId}/host-invites`, { user_ids }),
+  removeEventHost: (eventId, userId) => request('DELETE', `/events/${eventId}/host-invites/${userId}`),
+  syncEventChat: (eventId) => request('POST', `/chat/events/${eventId}/sync`),
   getAuditLogs: (limit = 50) => request('GET', `/events/audit-logs?limit=${limit}`),
 
   uploadEventImage: async (eventId, file) => {
@@ -132,6 +136,9 @@ export const api = {
   publishGatheringNow: (id) => request('POST', `/gathering-templates/${id}/publish-now`),
   pauseGatheringTemplate: (id) => request('POST', `/gathering-templates/${id}/pause`),
   getGatheringManage: (id) => request('GET', `/gatherings/${id}/manage`),
+  changeGatheringSchedule: (id, event_date) => request('POST', `/gatherings/${id}/change-schedule`, { event_date }),
+  getGatheringHistory: (id) => request('GET', `/gatherings/${id}/history`),
+  stepDownGatheringHost: (id) => request('POST', `/gatherings/${id}/host/step-down`),
   finalizeGathering: (id, data) => request('POST', `/gatherings/${id}/finalize`, data),
   assignCarpool: (id, passenger_signup_id, driver_signup_id) => request('POST', `/gatherings/${id}/carpool/assign`, { passenger_signup_id, driver_signup_id }),
   unassignCarpool: (id, passenger_signup_id) => request('POST', `/gatherings/${id}/carpool/unassign`, { passenger_signup_id }),

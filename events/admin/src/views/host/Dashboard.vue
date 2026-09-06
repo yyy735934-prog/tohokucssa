@@ -3,59 +3,20 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">{{ auth.isReviewer ? '所有活动' : auth.role === 'user' ? '活动中心' : '我的活动' }}</h1>
-        <p class="page-sub">{{ auth.isReviewer ? '管理全部活动' : auth.role === 'user' ? '创建活动即可成为活动主理人' : '创建并管理你的活动' }}</p>
+        <p class="page-sub">{{ auth.isReviewer ? '管理全部活动' : '管理你担当的活动' }}</p>
       </div>
       <div class="flex gap-8" style="flex-wrap:wrap">
         <button v-if="auth.isReviewer" class="btn btn-outline btn-sm" @click="exportAll('csv')">导出 CSV</button>
         <button v-if="auth.isReviewer" class="btn btn-outline btn-sm" @click="exportAll('json')">导出 JSON</button>
-        <router-link to="/admin/events/new" class="btn btn-primary btn-sm">创建活动</router-link>
-      </div>
-    </div>
-
-    <!-- Host workflow guide (only for hosts, shown when few events) -->
-    <div v-if="!auth.isReviewer && !loading && events.length < 3" class="card workflow-guide mb-16">
-      <h3 style="font-size:15px;font-weight:600;margin-bottom:12px">活动发布流程</h3>
-      <div class="workflow-steps">
-        <div class="step">
-          <div class="step-num">1</div>
-          <div>
-            <div class="step-title">创建活动</div>
-            <div class="step-desc">填写活动信息，保存为草稿</div>
-          </div>
-        </div>
-        <div class="step-arrow">→</div>
-        <div class="step">
-          <div class="step-num">2</div>
-          <div>
-            <div class="step-title">提交审核</div>
-            <div class="step-desc">在活动详情页点击「提交审核」</div>
-          </div>
-        </div>
-        <div class="step-arrow">→</div>
-        <div class="step">
-          <div class="step-num">3</div>
-          <div>
-            <div class="step-title">等待审批</div>
-            <div class="step-desc">审核员审批后自动开放报名</div>
-          </div>
-        </div>
-        <div class="step-arrow">→</div>
-        <div class="step">
-          <div class="step-num">4</div>
-          <div>
-            <div class="step-title">管理活动</div>
-            <div class="step-desc">查看报名、扫码签到、导出数据</div>
-          </div>
-        </div>
+        <router-link v-if="auth.isReviewer" to="/admin/events/new" class="btn btn-primary btn-sm">创建正式活动</router-link>
       </div>
     </div>
 
     <!-- Empty state for hosts -->
     <div v-if="!loading && !events.length && !auth.isReviewer" class="card empty-hero">
       <div class="empty-icon">+</div>
-      <h2>还没有活动</h2>
-      <p>创建你的第一个活动，填写信息后提交审核</p>
-      <router-link to="/admin/events/new" class="btn btn-primary btn-lg" style="margin-top:16px">创建活动</router-link>
+      <h2>暂无担当活动</h2>
+      <p>管理员指定你担当正式活动，或你接手组局后，活动会显示在这里。</p>
     </div>
 
     <!-- Stats (only show if has events) -->
@@ -115,7 +76,7 @@
                 <div class="flex gap-8">
                   <router-link :to="managePath(e)" class="btn btn-outline btn-sm">管理</router-link>
                   <a v-if="['open','active','closed'].includes(e.status)" :href="publicPath(e)" target="_blank" class="btn btn-outline btn-sm">预览 ↗</a>
-                  <router-link v-if="e.status === 'draft'" :to="`/admin/events/${e.id}/edit`" class="btn btn-outline btn-sm">编辑</router-link>
+                  <router-link v-if="auth.isReviewer && e.status === 'draft'" :to="`/admin/events/${e.id}/edit`" class="btn btn-outline btn-sm">编辑</router-link>
                 </div>
               </td>
             </tr>

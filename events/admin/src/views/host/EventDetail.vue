@@ -10,9 +10,9 @@
       </div>
       <div class="flex gap-8" style="flex-wrap:wrap">
         <button v-if="['open','active'].includes(event.status)" class="btn btn-outline btn-sm" @click="showPoster = true">生成报名海报</button>
-        <router-link v-if="event.status === 'draft'" :to="`/admin/events/${event.id}/edit`" class="btn btn-outline btn-sm">编辑</router-link>
-        <button v-if="event.status === 'draft'" class="btn btn-primary btn-sm" @click="submitEvent" :disabled="busy">提交审核</button>
-        <button v-if="event.status === 'pending'" class="btn btn-outline btn-sm" @click="withdrawEvent" :disabled="busy">撤回</button>
+        <router-link v-if="auth.isReviewer && event.status === 'draft'" :to="`/admin/events/${event.id}/edit`" class="btn btn-outline btn-sm">编辑</router-link>
+        <button v-if="auth.isReviewer && event.status === 'draft'" class="btn btn-primary btn-sm" @click="submitEvent" :disabled="busy">发布活动</button>
+        <button v-if="auth.isReviewer && event.status === 'pending'" class="btn btn-outline btn-sm" @click="withdrawEvent" :disabled="busy">撤回</button>
         <button v-if="event.status === 'open' && !isLocked" class="btn btn-outline btn-sm" style="color:var(--c-warning)" @click="lockSignups" :disabled="busy">锁定报名</button>
         <button v-if="event.status === 'open' && isLocked" class="btn btn-outline btn-sm" style="color:var(--c-success)" @click="unlockSignups" :disabled="busy">解锁报名</button>
         <button v-if="event.status === 'open'" class="btn btn-primary btn-sm" @click="activateEvent" :disabled="busy">开始活动</button>
@@ -21,9 +21,15 @@
         <button v-if="auth.isReviewer" class="btn btn-outline btn-sm" @click="togglePin" :disabled="busy">
           {{ event.pinned ? '取消置顶' : '置顶' }}
         </button>
-        <button class="btn btn-outline btn-sm" @click="duplicateEvent" :disabled="busy">复制</button>
-        <button v-if="event.status === 'draft'" class="btn btn-danger btn-sm" @click="deleteEvent" :disabled="busy">删除</button>
+        <button v-if="auth.isReviewer" class="btn btn-outline btn-sm" @click="duplicateEvent" :disabled="busy">复制</button>
+        <button v-if="auth.isReviewer && event.status === 'draft'" class="btn btn-danger btn-sm" @click="deleteEvent" :disabled="busy">删除</button>
       </div>
+    </div>
+
+    <div v-if="auth.isReviewer" class="card mb-16">
+      <div class="flex items-center justify-between mb-16"><div><h2 style="font-size:16px">活动担当</h2><p style="font-size:12px;color:var(--c-text-2)">已接受的主理人可管理报名、签到和通知，不能修改发布内容。</p></div><button class="btn btn-outline btn-sm" :disabled="busy" @click="syncChat">重新同步活动群</button></div>
+      <div class="flex gap-8" style="align-items:flex-end;flex-wrap:wrap"><div class="field" style="min-width:240px;margin:0"><label class="label">选择主理人</label><select v-model.number="selectedHostId"><option :value="null">请选择</option><option v-for="u in availableHosts" :key="u.id" :value="u.id">{{ u.display_name || u.email }}</option></select></div><button class="btn btn-primary btn-sm" :disabled="!selectedHostId || busy" @click="inviteHost">发送邀请</button></div>
+      <div v-if="hostAssignments.length" class="facts" style="margin-top:12px"><span v-for="a in hostAssignments" :key="a.user_id">{{ a.display_name || a.email }} · {{ assignmentLabel(a.status) }} <button v-if="a.status !== 'removed'" class="btn btn-outline btn-sm" @click="removeHost(a)">移除</button></span></div>
     </div>
 
     <!-- Workflow progress bar -->
@@ -82,7 +88,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <h2 style="font-size:16px;font-weight:600">活动信息</h2>
         <div class="flex gap-8">
-          <button v-if="!editingInfo" class="btn btn-outline btn-sm" @click="startEditInfo">编辑信息</button>
+          <button v-if="auth.isReviewer && !editingInfo" class="btn btn-outline btn-sm" @click="startEditInfo">编辑信息</button>
           <button v-if="editingInfo" class="btn btn-primary btn-sm" @click="saveInfo" :disabled="busy">保存</button>
           <button v-if="editingInfo" class="btn btn-outline btn-sm" @click="editingInfo = false">取消</button>
         </div>
@@ -582,6 +588,11 @@ const event = ref(null)
 const signups = ref([])
 const error = ref('')
 const busy = ref(false)
+const hostAssignments = ref([])
+const hostUsers = ref([])
+const selectedHostId = ref(null)
+const availableHosts = computed(() => hostUsers.value.filter((u) => u.role === 'host'))
+const assignmentLabel = (value) => ({ invited: '待接受', accepted: '已接受', declined: '已谢绝', removed: '已移除' }[value] || value)
 
 const activityTypes = [
   { value: 'indoor-general', icon: '\u{1F3E0}', label: '室内·通用' },
@@ -833,8 +844,17 @@ async function load() {
     const signupData = await api.listSignups(id)
     event.value = eventData.event
     signups.value = signupData.signups
+    if (auth.isReviewer) {
+      const [assignmentData, userData] = await Promise.all([api.listEventHostAssignments(id), api.listUsers()])
+      hostAssignments.value = assignmentData.assignments || []
+      hostUsers.value = userData.users || []
+    }
   } catch (e) { error.value = e.message }
 }
+
+async function inviteHost() { busy.value = true; try { await api.inviteEventHosts(event.value.id, [selectedHostId.value]); selectedHostId.value = null; showToast('担当邀请已发送'); await load() } catch (e) { showToast(e.message, 'error') } busy.value = false }
+async function removeHost(item) { if (!confirm(`移除 ${item.display_name || item.email} 的担当权限？`)) return; busy.value = true; try { await api.removeEventHost(event.value.id, item.user_id); showToast('已移除担当'); await load() } catch (e) { showToast(e.message, 'error') } busy.value = false }
+async function syncChat() { busy.value = true; try { await api.syncEventChat(event.value.id); showToast('活动群已同步') } catch (e) { showToast(e.message, 'error') } busy.value = false }
 
 onMounted(load)
 

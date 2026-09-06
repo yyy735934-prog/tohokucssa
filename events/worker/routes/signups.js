@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { getSession, extractToken } from '../lib/session.js'
 import { sendEmail, signupConfirmEmail, checkinConfirmEmail } from '../lib/email.js'
+import { addChatMember, ensureCometChatUser, ensureEventChatGroup, removeChatMember, safelySyncChat } from '../lib/cometchat.js'
+import { canOperateEvent } from '../lib/permissions.js'
 
 const signups = new Hono()
 
@@ -16,13 +18,14 @@ signups.post('/', async (c) => {
   const { event_id, name, email, phone, extra } = body
   if (!event_id || !name || !email) return c.json({ ok: false, message: '姓名和邮箱必填' }, 400)
 
-  const event = await c.env.DB.prepare('SELECT id, title, event_date, location, status, capacity, lock_at, event_mode FROM events WHERE id = ?').bind(event_id).first()
+  const event = await c.env.DB.prepare('SELECT id, title, event_date, location, status, capacity, lock_at, event_mode, event_subtype, registration_mode, registration_target, registration_email_subject, registration_email_body FROM events WHERE id = ?').bind(event_id).first()
   if (!event || event.status !== 'open') return c.json({ ok: false, message: '活动未开放报名' }, 400)
   if (event.event_mode === 'gathering') return c.json({ ok: false, message: '组局必须使用 Google 登录后参加' }, 403)
   if (event.lock_at !== null && event.lock_at !== undefined) return c.json({ ok: false, message: '活动创建者已暂停报名' }, 400)
 
   const emailNorm = email.trim().toLowerCase()
   const token = crypto.randomUUID()
+  const chatAccessToken = crypto.randomUUID()
   const nameTrim = name.trim()
   const phoneTrim = (phone || '').trim()
   const dataJson = JSON.stringify(extra || {})
@@ -32,25 +35,44 @@ signups.post('/', async (c) => {
   try {
     if (cap) {
       result = await c.env.DB.prepare(
-        `INSERT INTO signups (event_id, name, email, phone, data, token)
-         SELECT ?, ?, ?, ?, ?, ?
+        `INSERT INTO signups (event_id, name, email, phone, data, token, chat_access_token)
+         SELECT ?, ?, ?, ?, ?, ?, ?
          WHERE (SELECT COUNT(*) FROM signups WHERE event_id = ?) < ?`
-      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token, event_id, cap).run()
+      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token, chatAccessToken, event_id, cap).run()
       if (!result.meta.changes) return c.json({ ok: false, message: '报名已满' }, 400)
     } else {
       result = await c.env.DB.prepare(
-        'INSERT INTO signups (event_id, name, email, phone, data, token) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token).run()
+        'INSERT INTO signups (event_id, name, email, phone, data, token, chat_access_token) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token, chatAccessToken).run()
     }
   } catch (e) {
     if (e.message?.includes('UNIQUE')) return c.json({ ok: false, message: '该邮箱已报名此活动' }, 400)
     throw e
   }
 
-  const emailContent = signupConfirmEmail(event, { name: nameTrim, email: emailNorm, phone: phoneTrim, data: extra || {} })
+  const signupId = result.meta.last_row_id
+  const origin = new URL(c.req.url).origin
+  const chatUrl = `${origin}/e/${event_id}/chat?token=${encodeURIComponent(chatAccessToken)}`
+  const emailContent = signupConfirmEmail(event, { name: nameTrim, email: emailNorm, phone: phoneTrim, data: extra || {} }, chatUrl)
   c.executionCtx.waitUntil(sendEmail(c.env, { to: emailNorm, ...emailContent }))
+  c.executionCtx.waitUntil(safelySyncChat(c.env, { type: 'signup', id: signupId }, async () => {
+    const uid = `signup-${signupId}`; await ensureCometChatUser(c.env, uid, nameTrim)
+    const guid = await ensureEventChatGroup(c.env, event); await addChatMember(c.env, guid, uid)
+  }))
 
-  return c.json({ ok: true, id: result.meta.last_row_id, token })
+  let redirect = null
+  if (event.event_mode === 'standard' && event.event_subtype === 'assisted') {
+    if (event.registration_mode === 'external_url' && event.registration_target) {
+      redirect = { type: 'url', target: event.registration_target }
+    } else if (event.registration_mode === 'external_email' && event.registration_target) {
+      const subject = event.registration_email_subject ? `?subject=${encodeURIComponent(event.registration_email_subject)}` : ''
+      const body = event.registration_email_body
+        ? `${subject ? '&' : '?'}body=${encodeURIComponent(event.registration_email_body)}` : ''
+      redirect = { type: 'email', target: `mailto:${event.registration_target}${subject}${body}` }
+    }
+  }
+
+  return c.json({ ok: true, id: signupId, token, redirect })
 })
 
 // GET /api/signups — admin: list signups for an event
@@ -59,10 +81,8 @@ signups.get('/', async (c) => {
   const eventId = Number(c.req.query('event_id'))
   if (!eventId) return c.json({ ok: false, message: '缺少 event_id' }, 400)
 
-  if (session.role !== 'reviewer') {
-    const event = await c.env.DB.prepare('SELECT created_by FROM events WHERE id = ?').bind(eventId).first()
-    if (!event || event.created_by !== session.id) return c.json({ ok: false, message: '无权查看' }, 403)
-  }
+  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first()
+  if (!await canOperateEvent(c.env.DB, event, session)) return c.json({ ok: false, message: '无权查看' }, 403)
 
   const rows = await c.env.DB.prepare('SELECT * FROM signups WHERE event_id = ? ORDER BY created_at ASC').bind(eventId).all()
   return c.json({ ok: true, signups: rows.results })
@@ -77,7 +97,7 @@ signups.get('/export', async (c) => {
 
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
-  if (session.role !== 'reviewer' && event.created_by !== session.id) {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权导出' }, 403)
   }
 
@@ -262,10 +282,8 @@ signups.post('/:id/checkin', async (c) => {
   const signup = await c.env.DB.prepare('SELECT * FROM signups WHERE id = ?').bind(id).first()
   if (!signup) return c.json({ ok: false, message: '报名记录不存在' }, 404)
 
-  if (session.role !== 'reviewer') {
-    const event = await c.env.DB.prepare('SELECT created_by FROM events WHERE id = ?').bind(signup.event_id).first()
-    if (!event || event.created_by !== session.id) return c.json({ ok: false, message: '无权操作' }, 403)
-  }
+  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(signup.event_id).first()
+  if (!await canOperateEvent(c.env.DB, event, session)) return c.json({ ok: false, message: '无权操作' }, 403)
 
   await c.env.DB.prepare("UPDATE signups SET checked_in = 1, checked_in_at = ?, attendance_status = 'attended' WHERE id = ?")
     .bind(Date.now(), id).run()
@@ -278,10 +296,8 @@ signups.post('/batch-checkin', async (c) => {
   const { event_id } = await c.req.json()
   if (!event_id) return c.json({ ok: false, message: '缺少 event_id' }, 400)
 
-  if (session.role !== 'reviewer') {
-    const event = await c.env.DB.prepare('SELECT created_by FROM events WHERE id = ?').bind(event_id).first()
-    if (!event || event.created_by !== session.id) return c.json({ ok: false, message: '无权操作' }, 403)
-  }
+  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(event_id).first()
+  if (!await canOperateEvent(c.env.DB, event, session)) return c.json({ ok: false, message: '无权操作' }, 403)
 
   const result = await c.env.DB.prepare(
     "UPDATE signups SET checked_in = 1, checked_in_at = ?, attendance_status = 'attended' WHERE event_id = ? AND checked_in = 0"
@@ -296,15 +312,16 @@ signups.post('/manual', async (c) => {
   const { event_id, name, email, phone, extra } = body
   if (!event_id || !name || !email) return c.json({ ok: false, message: '姓名和邮箱必填' }, 400)
 
-  const event = await c.env.DB.prepare('SELECT id, created_by, capacity, lock_at, event_mode FROM events WHERE id = ?').bind(event_id).first()
+  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(event_id).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
   if (event.event_mode === 'gathering') return c.json({ ok: false, message: '请在组局管理页面添加成员' }, 400)
-  if (session.role !== 'reviewer' && event.created_by !== session.id) {
+  if (!await canOperateEvent(c.env.DB, event, session)) {
     return c.json({ ok: false, message: '无权操作' }, 403)
   }
 
   const emailNorm = email.trim().toLowerCase()
   const token = crypto.randomUUID()
+  const chatAccessToken = crypto.randomUUID()
   const nameTrim = name.trim()
   const phoneTrim = (phone || '').trim()
   const dataJson = JSON.stringify(extra || {})
@@ -314,15 +331,15 @@ signups.post('/manual', async (c) => {
   try {
     if (cap) {
       result = await c.env.DB.prepare(
-        `INSERT INTO signups (event_id, name, email, phone, data, token)
-         SELECT ?, ?, ?, ?, ?, ?
+        `INSERT INTO signups (event_id, name, email, phone, data, token, chat_access_token)
+         SELECT ?, ?, ?, ?, ?, ?, ?
          WHERE (SELECT COUNT(*) FROM signups WHERE event_id = ?) < ?`
-      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token, event_id, cap).run()
+      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token, chatAccessToken, event_id, cap).run()
       if (!result.meta.changes) return c.json({ ok: false, message: '报名已满，无法添加' }, 400)
     } else {
       result = await c.env.DB.prepare(
-        'INSERT INTO signups (event_id, name, email, phone, data, token) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token).run()
+        'INSERT INTO signups (event_id, name, email, phone, data, token, chat_access_token) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(event_id, nameTrim, emailNorm, phoneTrim, dataJson, token, chatAccessToken).run()
     }
   } catch (e) {
     if (e.message?.includes('UNIQUE')) return c.json({ ok: false, message: '该邮箱已报名此活动' }, 400)
@@ -331,8 +348,13 @@ signups.post('/manual', async (c) => {
 
   const fullEvent = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(event_id).first()
   if (fullEvent) {
-    const emailContent = signupConfirmEmail(fullEvent, { name: nameTrim, email: emailNorm, phone: phoneTrim, data: extra || {} })
+    const chatUrl = `${new URL(c.req.url).origin}/e/${event_id}/chat?token=${encodeURIComponent(chatAccessToken)}`
+    const emailContent = signupConfirmEmail(fullEvent, { name: nameTrim, email: emailNorm, phone: phoneTrim, data: extra || {} }, chatUrl)
     c.executionCtx.waitUntil(sendEmail(c.env, { to: emailNorm, ...emailContent }))
+    c.executionCtx.waitUntil(safelySyncChat(c.env, { type: 'signup', id: result.meta.last_row_id }, async () => {
+      const uid = `signup-${result.meta.last_row_id}`; await ensureCometChatUser(c.env, uid, nameTrim)
+      const guid = await ensureEventChatGroup(c.env, fullEvent); await addChatMember(c.env, guid, uid)
+    }))
   }
 
   return c.json({ ok: true, id: result.meta.last_row_id, token })
@@ -342,15 +364,17 @@ signups.post('/manual', async (c) => {
 signups.delete('/:id', async (c) => {
   const session = await requireAuth(c)
   const id = Number(c.req.param('id'))
-  const signup = await c.env.DB.prepare('SELECT event_id FROM signups WHERE id = ?').bind(id).first()
+  const signup = await c.env.DB.prepare('SELECT id, event_id, user_id FROM signups WHERE id = ?').bind(id).first()
   if (!signup) return c.json({ ok: false, message: '报名记录不存在' }, 404)
 
-  if (session.role !== 'reviewer') {
-    const event = await c.env.DB.prepare('SELECT created_by FROM events WHERE id = ?').bind(signup.event_id).first()
-    if (!event || event.created_by !== session.id) return c.json({ ok: false, message: '无权删除' }, 403)
-  }
+  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(signup.event_id).first()
+  if (!await canOperateEvent(c.env.DB, event, session)) return c.json({ ok: false, message: '无权删除' }, 403)
 
   await c.env.DB.prepare('DELETE FROM signups WHERE id = ?').bind(id).run()
+  if (event.chat_group_guid) {
+    const uid = event.event_mode === 'standard' ? `signup-${signup.id}` : signup.user_id ? `account-${signup.user_id}` : null
+    if (uid) c.executionCtx.waitUntil(safelySyncChat(c.env, { type: 'event', id: event.id }, () => removeChatMember(c.env, event.chat_group_guid, uid)))
+  }
   return c.json({ ok: true })
 })
 

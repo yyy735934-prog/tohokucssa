@@ -5,11 +5,11 @@
     <template v-else-if="gathering">
       <div class="card mb hero-card">
         <div class="topline">
-          <span class="category">{{ categoryLabel }}</span>
+          <span class="category">{{ gathering.event_subtype === 'date_choice' ? '选日期组局' : '定日期组局' }} · {{ categoryLabel }}</span>
           <span class="state" :class="`state-${gathering.gathering_state}`">{{ stateLabel }}</span>
         </div>
         <h1>{{ gathering.title }}</h1>
-        <div class="meta">{{ gathering.event_date }}<span v-if="gathering.location"> · {{ gathering.location }}</span></div>
+        <div class="meta">{{ gathering.event_subtype === 'date_choice' ? '请选择下方一个或多个日期' : gathering.event_date }}<span v-if="gathering.location"> · {{ gathering.location }}</span></div>
         <p v-if="gathering.content" class="content">{{ gathering.content }}</p>
         <p v-if="gathering.notes && gathering.gathering_state === 'confirmed'" class="notes">{{ gathering.notes }}</p>
       </div>
@@ -18,7 +18,20 @@
         <img :src="`/api/images/serve/${gathering.id}`" :alt="`${gathering.title}活动图片`" class="event-image" />
       </div>
 
-      <div class="card mb formation-card">
+      <div v-if="gathering.event_subtype === 'date_choice'" class="card mb occurrence-card">
+        <h2>未来可选日期</h2>
+        <p v-if="!auth.isLoggedIn || auth.login_method !== 'google'" class="form-hint">使用 Google 登录后可选择日期，人数在选择前始终可见。</p>
+        <p v-if="formError" class="error">{{ formError }}</p>
+        <div v-for="o in occurrences" :key="o.id" class="occurrence-row">
+          <div><strong>{{ o.event_date }}</strong><p>{{ o.selected_count }} / {{ o.max_participants || '不限' }} 人 · {{ occurrenceText(o) }}</p></div>
+          <router-link v-if="o.selected_by_me && o.state === 'confirmed'" :to="`/g/${gathering.id}/chat?occurrence_id=${o.id}`" class="btn btn-primary btn-sm">进入本次群聊</router-link>
+          <button v-else-if="o.selected_by_me" class="btn btn-outline btn-sm" :disabled="busy || o.registration_locked_at" @click="toggleOccurrence(o, false)">取消该日期</button>
+          <button v-else class="btn btn-primary btn-sm" :disabled="busy || !canSelectOccurrence(o)" @click="toggleOccurrence(o, true)">我可以参加</button>
+        </div>
+        <a v-if="!auth.isLoggedIn || auth.login_method !== 'google'" :href="googleLoginUrl" class="btn btn-primary">使用 Google 登录</a>
+      </div>
+
+      <div v-if="gathering.event_subtype !== 'date_choice'" class="card mb formation-card">
         <div class="formation-head">
           <div><strong>{{ gathering.effective_count }}</strong> / {{ gathering.min_participants }} 人</div>
           <span v-if="gathering.gathering_state === 'recruiting' && remaining > 0">还差 {{ remaining }} 人成局</span>
@@ -37,7 +50,12 @@
         </div>
       </div>
 
-      <div v-if="mySignup && mySignup.signup_status !== 'cancelled'" class="card mb my-status">
+      <div v-if="mySignup?.schedule_reconfirm_status === 'pending'" class="card mb reconfirm-card">
+        <div><div class="eyebrow">活动时间已发生变化</div><h2>新时间：{{ gathering.event_date }}</h2><p>未重新确认前，你不计入成局人数。</p></div>
+        <div class="flex gap-8"><button class="btn btn-primary btn-sm" :disabled="busy" @click="reconfirm('keep')">继续参加</button><button class="btn btn-outline btn-sm danger" :disabled="busy" @click="reconfirm('leave')">无法参加</button></div>
+      </div>
+
+      <div v-if="gathering.event_subtype !== 'date_choice' && mySignup && mySignup.signup_status !== 'cancelled'" class="card mb my-status">
         <div>
           <div class="eyebrow">我的状态</div>
           <h2>{{ signupStatusLabel }}</h2>
@@ -46,6 +64,7 @@
           <p v-if="mySignup.signup_status === 'general_waitlist'">当前普通名额已满，将按报名顺序候补。</p>
         </div>
         <button v-if="canCancel" class="btn btn-outline btn-sm danger" :disabled="busy" @click="cancelSignup">退出组局</button>
+        <router-link v-if="gathering.gathering_state === 'confirmed' && ['joined','ride_assigned'].includes(mySignup.signup_status)" :to="`/g/${gathering.id}/chat`" class="btn btn-primary btn-sm">进入活动群聊</router-link>
       </div>
 
       <div v-else-if="canJoin" class="card join-card">
@@ -109,6 +128,7 @@ const route = useRoute()
 const gathering = ref(null)
 const mySignup = ref(null)
 const myHostOfferStatus = ref(null)
+const occurrences = ref([])
 const loading = ref(true)
 const error = ref('')
 const formError = ref('')
@@ -130,7 +150,7 @@ const stateLabel = computed(() => states[gathering.value?.gathering_state] || ''
 const signupStatusLabel = computed(() => signupStates[mySignup.value?.signup_status] || '')
 const remaining = computed(() => Math.max(0, (gathering.value?.min_participants || 0) - (gathering.value?.effective_count || 0)))
 const progress = computed(() => Math.min(100, (gathering.value?.effective_count || 0) / (gathering.value?.min_participants || 1) * 100))
-const canJoin = computed(() => gathering.value?.lock_at === null && ['recruiting', 'arrangement_pending', 'confirmed'].includes(gathering.value?.gathering_state))
+const canJoin = computed(() => gathering.value?.event_subtype !== 'date_choice' && gathering.value?.lock_at === null && ['recruiting', 'arrangement_pending', 'confirmed'].includes(gathering.value?.gathering_state))
 const canCancel = computed(() => !['completed', 'cancelled'].includes(gathering.value?.gathering_state) && !mySignup.value?.checked_in)
 const googleLoginUrl = computed(() => `/api/auth/google?from=public&return_to=${encodeURIComponent(`/g/${route.params.id}`)}`)
 
@@ -143,8 +163,25 @@ async function load() {
     gathering.value = data.gathering
     mySignup.value = data.my_signup
     myHostOfferStatus.value = data.my_host_offer_status
+    if (gathering.value.event_subtype === 'date_choice') occurrences.value = (await api.getOccurrences(route.params.id)).occurrences
   } catch (e) { error.value = e.message }
   loading.value = false
+}
+
+function canSelectOccurrence(o) {
+  return auth.isLoggedIn && auth.login_method === 'google' && ['recruiting', 'confirmed'].includes(o.state) && !o.registration_locked_at && (!o.max_participants || o.selected_count < o.max_participants)
+}
+function occurrenceText(o) {
+  if (o.state === 'confirmed') return '已成局'
+  if (o.state === 'cancelled') return '未成局'
+  if (o.registration_locked_at) return '报名已截止'
+  return `还差 ${Math.max(0, o.min_participants - o.selected_count)} 人成局`
+}
+async function toggleOccurrence(o, selected) {
+  busy.value = true; formError.value = ''
+  try { if (selected) await api.selectOccurrence(gathering.value.id, o.id); else await api.cancelOccurrence(gathering.value.id, o.id); await load() }
+  catch (e) { formError.value = e.message }
+  busy.value = false
 }
 
 async function join() {
@@ -168,6 +205,8 @@ async function cancelSignup() {
   busy.value = false
 }
 
+async function reconfirm(action) { busy.value = true; formError.value = ''; try { await api.submitReconfirm(mySignup.value.schedule_reconfirm_token, action); await load() } catch (e) { formError.value = e.message } busy.value = false }
+
 function formatDate(timestamp) {
   return new Date(timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
@@ -186,6 +225,7 @@ function formatDate(timestamp) {
 .content { white-space: pre-wrap; color: var(--c-text); }
 .notes, .pending-note, .ride-notice, .host-offer-note { background: var(--c-bg); border-radius: 8px; padding: 12px; font-size: 13px; }
 .host-offer-note { margin: 12px 0; color: #166534; background: var(--c-success-bg); }
+.reconfirm-card { border-color:#f59e0b; background:#fffbeb; display:flex; align-items:center; justify-content:space-between; gap:16px; }.reconfirm-card h2 { font-size:17px; margin-top:4px; }.reconfirm-card p { color:var(--c-text-2); font-size:13px; margin-top:4px; }
 .formation-head strong { color: var(--c-primary); font-size: 28px; }
 .formation-head span, .formation-meta { color: var(--c-text-2); font-size: 13px; }
 .progress { height: 8px; background: var(--c-border); border-radius: 99px; overflow: hidden; margin: 12px 0; }
@@ -204,6 +244,7 @@ function formatDate(timestamp) {
 .transport-grid span { font-size: 12px; color: var(--c-text-3); }
 .ride-notice { margin-bottom: 12px; color: #92400e; background: #fffbeb; }
 .result-card { text-align: center; }
+.occurrence-card h2{font-size:18px;margin-bottom:12px}.occurrence-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-top:1px solid var(--c-border)}.occurrence-row p{font-size:13px;color:var(--c-text-2);margin-top:4px}
 .back-link { display: block; text-align: center; color: var(--c-text-2); font-size: 13px; margin-top: 24px; }
 @media (max-width: 520px) { .transport-grid { grid-template-columns: 1fr; } .my-status { align-items: flex-start; flex-direction: column; } }
 </style>

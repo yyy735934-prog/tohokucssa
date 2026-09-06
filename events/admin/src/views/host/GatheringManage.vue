@@ -17,6 +17,13 @@
 
     <div v-if="isLocked" class="card locked-banner mb-16">🔒 报名已锁定在 {{ event.lock_at }} 人；已有成员状态不受影响，其他人暂时不能加入。</div>
 
+    <div v-if="event.event_subtype === 'scheduled'" class="card mb-16">
+      <div class="section-head"><div><h2>时间协调</h2><p>Revision {{ event.schedule_revision || 0 }} · 已确认 {{ effectiveCount }} 人 · 待重新确认 {{ pendingReconfirm }} 人</p></div><div class="flex gap-8"><a v-if="['confirmed','in_progress'].includes(event.gathering_state)" :href="`/g/${event.id}/chat`" target="_blank" class="btn btn-primary btn-sm">进入活动群</a><button v-if="auth.isReviewer && ['confirmed','in_progress'].includes(event.gathering_state)" class="btn btn-outline btn-sm" @click="syncChat">重新同步群聊</button></div></div>
+      <form v-if="['recruiting','arrangement_pending'].includes(event.gathering_state)" class="form-row" @submit.prevent="changeSchedule"><div class="field"><label class="label">新日期时间</label><input v-model="scheduleDate" placeholder="YYYY-MM-DD HH:mm" required /></div><div style="align-self:flex-end"><button class="btn btn-primary" :disabled="busy">确认改期并通知</button></div></form>
+      <div v-if="history.length" class="history"><div v-for="item in history" :key="item.id"><strong>{{ formatTime(item.created_at) }}</strong><span>{{ historyText(item.detail) }}</span></div></div>
+      <button v-if="isCurrentHost && ['recruiting','arrangement_pending'].includes(event.gathering_state)" class="btn btn-outline btn-sm danger" @click="stepDown">退出主理人担当</button>
+    </div>
+
     <div class="card image-card mb-16">
       <div class="image-head"><h2>活动图片</h2><span>将在统一活动广场和组局详情中展示</span></div>
       <div v-if="event.image_key" class="img-preview">
@@ -98,6 +105,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../../api.js'
+import { auth } from '../../lib/auth.js'
 import { showToast } from '../../lib/toast.js'
 import EventPosterModal from '../../components/EventPosterModal.vue'
 
@@ -105,6 +113,9 @@ const route = useRoute()
 const event = ref(null)
 const signups = ref([])
 const hostOffers = ref([])
+const history = ref([])
+const isCurrentHost = ref(false)
+const scheduleDate = ref('')
 const effectiveCount = ref(0)
 const loading = ref(true)
 const error = ref('')
@@ -127,6 +138,7 @@ const rideAssigned = computed(() => signups.value.filter((s) => s.signup_status 
 const isLocked = computed(() => event.value?.lock_at !== null && event.value?.lock_at !== undefined)
 const categoryLabel = computed(() => ({ karaoke: '唱歌', sport: '多人体育', outdoor: '徒步·户外', salon: '沙龙', boardgame: '桌游', movie: '观影', other: '其他' }[event.value?.gathering_category] || '组局'))
 const stateLabel = computed(() => ({ recruiting: '组局中', arrangement_pending: '待确认安排', confirmed: '已成局', in_progress: '进行中', completed: '已结束', cancelled: '已取消' }[event.value?.gathering_state] || ''))
+const pendingReconfirm = computed(() => signups.value.filter((s) => s.signup_status !== 'cancelled' && s.schedule_reconfirm_status === 'pending').length)
 
 onMounted(load)
 
@@ -134,7 +146,8 @@ async function load() {
   loading.value = true
   try {
     const data = await api.getGatheringManage(route.params.id)
-    event.value = data.event; signups.value = data.signups; hostOffers.value = data.host_offers || []; effectiveCount.value = data.effective_count
+    event.value = data.event; signups.value = data.signups; hostOffers.value = data.host_offers || []; effectiveCount.value = data.effective_count; isCurrentHost.value = !!data.is_current_host; scheduleDate.value = data.event.event_date || ''
+    if (data.event.event_subtype === 'scheduled') history.value = (await api.getGatheringHistory(route.params.id)).history || []
     finalForm.event_date = data.event.event_date || ''; finalForm.location = data.event.location || ''; finalForm.notes = data.event.notes || ''
   } catch (e) { error.value = e.message }
   loading.value = false
@@ -162,6 +175,10 @@ async function finalize() { busy.value = true; try { await api.finalizeGathering
 async function startEvent() { if (!confirm('确认开始活动？')) return; await api.startGathering(event.value.id); showToast('活动已开始'); await load() }
 async function completeEvent() { if (!confirm('确认结束活动？未签到的确认成员将记录为未到场。')) return; await api.completeGathering(event.value.id); showToast('活动已结束'); await load() }
 async function cancelEvent() { const reason = prompt('请输入取消原因'); if (reason === null) return; await api.cancelGatheringEvent(event.value.id, reason); showToast('组局已取消'); await load() }
+async function changeSchedule() { if (!confirm(`将时间修改为 ${scheduleDate.value}，并要求所有成员重新确认？`)) return; busy.value = true; try { const data = await api.changeGatheringSchedule(event.value.id, scheduleDate.value); showToast(`已发送 ${data.reconfirm_count || 0} 份重新确认通知`); await load() } catch (e) { showToast(e.message, 'error') } busy.value = false }
+async function stepDown() { if (!confirm('退出后活动将显示主理人空缺，确定继续？')) return; try { await api.stepDownGatheringHost(event.value.id); showToast('已退出担当'); await load() } catch (e) { showToast(e.message, 'error') } }
+async function syncChat() { busy.value = true; try { await api.syncEventChat(event.value.id); showToast('活动群已同步') } catch (e) { showToast(e.message, 'error') } busy.value = false }
+function historyText(detail) { try { const value = JSON.parse(detail); return `${value.old_value} → ${value.new_value}（revision ${value.schedule_revision}）` } catch { return detail } }
 async function setSignupLock(locked) {
   if (locked && !confirm(`锁定后将保留当前 ${activeSignups.value.length} 位参加者，并暂停其他人继续报名。确定锁定？`)) return
   busy.value = true
@@ -199,5 +216,6 @@ function formatTime(ts) { return new Date(ts).toLocaleString('zh-CN', { timeZone
 .assignment-list, .assigned-list { display: flex; flex-direction: column; gap: 8px; }.assignment-row, .assigned-row { display: grid; grid-template-columns: 1fr 220px auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--c-border); border-radius: 8px; }.assignment-row div { display: flex; flex-direction: column; }.assignment-row span, .sub { font-size: 12px; color: var(--c-text-2); }.assigned-list { margin-top: 16px; }.assigned-list h3 { font-size: 14px; }.assigned-row { grid-template-columns: 1fr auto; }
 .muted { opacity: .5; }.sub { margin-top: 3px; }.attendance-select { min-width: 92px; padding: 6px 8px; font-size: 12px; }
 .modal-tip { font-size:13px; color:var(--c-text-2); margin-bottom:12px; }.announce-preview { display:block; width:180px; max-height:140px; object-fit:cover; border-radius:8px; margin-bottom:8px; }
+.history { display:flex; flex-direction:column; gap:6px; margin:12px 0; }.history div { display:flex; gap:12px; font-size:12px; padding:8px; background:var(--c-bg); border-radius:7px; }.history span { color:var(--c-text-2); }
 @media (max-width: 760px) { .state-grid { grid-template-columns: repeat(2,1fr); }.form-row { flex-direction: column; gap: 0; }.assignment-row { grid-template-columns: 1fr; } }
 </style>
