@@ -187,7 +187,7 @@ async function pause(t) { try { await api.pauseGatheringTemplate(t.id); showToas
 const categoryLabel = (value) => categories.find((c) => c.value === value)?.label || value
 const weekdayLabel = (value) => weekdays.find((d) => d.value === Number(value))?.label || value
 const clockMinutes = (value) => { const [hour, minute] = String(value || '00:00').split(':').map(Number); return hour * 60 + minute }
-const publishLeadMinutes = (template) => { const stored = Number(template.publish_lead_minutes); if (stored > 0) return stored; let legacy = ((Number(template.event_weekday) - Number(template.publish_weekday) + 7) % 7) * 1440 + clockMinutes(template.event_time) - clockMinutes(template.publish_time); if (legacy <= 0) legacy += 10080; return legacy }
+const publishLeadMinutes = (template) => { const stored = Number(template.publish_lead_minutes); if (stored >= 60 && stored % 60 === 0) return stored; let legacy = ((Number(template.event_weekday) - Number(template.publish_weekday) + 7) % 7) * 1440 + clockMinutes(template.event_time) - clockMinutes(template.publish_time); if (legacy <= 0) legacy += 10080; return legacy }
 const publishLeadLabel = (minutes) => { const total = Number(minutes || 0); const days = Math.floor(total / 1440); const hours = Math.floor((total % 1440) / 60); return [days ? `${days} 天` : '', hours ? `${hours} 小时` : ''].filter(Boolean).join(' ') || '0 小时' }
 const approvalLabel = (value) => ({ draft: '草稿', approved: '自动发布中', paused: '已暂停' }[value] || value)
 const jobTypeLabel = (value) => ({ weekly_publish: '每周自动发布', manual_publish: '管理员立即生成', formation_deadline: '成局判定', arrangement_timeout: '主理人确认超时', admin_takeover: '转交管理员' }[value] || value)
