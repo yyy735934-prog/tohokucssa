@@ -6,7 +6,7 @@ import {
   gatheringFinalizedEmail,
 } from './email.js'
 import { audit } from './audit.js'
-import { safelySyncChat, syncOccurrenceChatMembers } from './cometchat.js'
+import { safelySyncChat, syncEventChatMembers, syncOccurrenceChatMembers } from './cometchat.js'
 
 export const GATHERING_CATEGORIES = ['karaoke', 'sport', 'outdoor', 'salon', 'boardgame', 'movie', 'other']
 export const GATHERING_STATES = ['recruiting', 'arrangement_pending', 'confirmed', 'in_progress', 'completed', 'cancelled']
@@ -171,11 +171,18 @@ export function formationRequirementsMet(event, effectiveCount) {
     && (!event.requires_host || !!event.created_by)
 }
 
+export function scheduledFormationState(event, effectiveCount) {
+  if (event.event_subtype === 'date_choice' || ['in_progress', 'completed', 'cancelled'].includes(event.gathering_state)) {
+    return event.gathering_state
+  }
+  return formationRequirementsMet(event, effectiveCount) ? 'confirmed' : 'recruiting'
+}
+
 export async function refreshGatheringState(env, eventId, timestamp = Date.now()) {
   const event = await env.DB.prepare(
     "SELECT * FROM events WHERE id = ? AND event_mode = 'gathering'"
   ).bind(eventId).first()
-  if (!event || ['confirmed', 'in_progress', 'completed', 'cancelled'].includes(event.gathering_state)) {
+  if (!event || ['in_progress', 'completed', 'cancelled'].includes(event.gathering_state)) {
     return { event, transitioned: false, effectiveCount: event ? await effectiveSignupCount(env.DB, eventId) : 0 }
   }
 
@@ -185,27 +192,37 @@ export async function refreshGatheringState(env, eventId, timestamp = Date.now()
 
   const count = await effectiveSignupCount(env.DB, eventId)
   const minimum = Number(event.min_participants || 1)
-  const hasArrangementOwner = !event.requires_host || !!event.created_by
+  const desiredState = scheduledFormationState(event, count)
 
-  // Scheduled gatherings remain in coordination until their per-occurrence deadline.
-  // Reaching the minimum early is informative only; it is not confirmation.
-  if (event.gathering_state === 'recruiting' && formationRequirementsMet(event, count)
-      && event.formation_deadline && timestamp >= Number(event.formation_deadline)) {
-    const dueAt = timestamp + 12 * 60 * 60 * 1000
+  // 人数和主理人条件一旦满足即自动成局，不等待固定判定时点。
+  if (['recruiting', 'arrangement_pending'].includes(event.gathering_state) && desiredState === 'confirmed') {
     const result = await env.DB.prepare(
-      "UPDATE events SET gathering_state = 'arrangement_pending', arrangement_due_at = ?, admin_takeover_at = NULL WHERE id = ? AND gathering_state = 'recruiting' AND formation_deadline <= ?"
-    ).bind(dueAt, eventId, timestamp).run()
+      `UPDATE events SET gathering_state = 'confirmed', arrangement_due_at = NULL,
+       admin_takeover_at = NULL, arrangement_confirmed_at = ?, arrangement_confirmed_by = created_by
+       WHERE id = ? AND gathering_state IN ('recruiting', 'arrangement_pending')
+         AND (requires_host = 0 OR created_by IS NOT NULL)
+         AND (SELECT COUNT(*) FROM signups s WHERE s.event_id = events.id
+           AND s.signup_status IN ('joined', 'ride_assigned')
+           AND s.schedule_reconfirm_status = 'confirmed'
+           AND s.schedule_confirmed_revision = events.schedule_revision) >= min_participants`
+    ).bind(timestamp, eventId).run()
     if (result.meta.changes) {
-      const updated = { ...event, gathering_state: 'arrangement_pending', arrangement_due_at: dueAt }
-      await notifyArrangementOwner(env, updated, false)
-      await audit(env.DB, 'gathering_threshold_reached', 'event', eventId, `有效人数达到 ${count}/${minimum}`, 'system')
+      const updated = { ...event, gathering_state: 'confirmed', arrangement_due_at: null, arrangement_confirmed_at: timestamp }
+      await safelySyncChat(env, { type: 'event', id: eventId }, () => syncEventChatMembers(env, updated))
+      const signups = await env.DB.prepare(
+        "SELECT name, email FROM signups WHERE event_id = ? AND signup_status != 'cancelled'"
+      ).bind(eventId).all()
+      await Promise.all(signups.results.map((signup) => sendEmail(env, { to: signup.email, ...gatheringFinalizedEmail(updated, signup) })))
+      await audit(env.DB, 'gathering_auto_confirm', 'event', eventId, `有效人数达到 ${count}/${minimum}，主理人条件已满足`, 'system')
       return { event: updated, transitioned: true, effectiveCount: count }
     }
   }
 
-  if (event.gathering_state === 'arrangement_pending' && (count < minimum || !hasArrangementOwner)) {
+  if (['arrangement_pending', 'confirmed'].includes(event.gathering_state) && desiredState === 'recruiting') {
     const result = await env.DB.prepare(
-      "UPDATE events SET gathering_state = 'recruiting', arrangement_due_at = NULL, admin_takeover_at = NULL WHERE id = ? AND gathering_state = 'arrangement_pending'"
+      `UPDATE events SET gathering_state = 'recruiting', arrangement_due_at = NULL, admin_takeover_at = NULL,
+       arrangement_confirmed_at = NULL, arrangement_confirmed_by = NULL
+       WHERE id = ? AND gathering_state IN ('arrangement_pending', 'confirmed')`
     ).bind(eventId).run()
     if (result.meta.changes) {
       await audit(env.DB, 'gathering_below_threshold', 'event', eventId, `有效人数降至 ${count}/${minimum}`, 'system')
@@ -230,6 +247,17 @@ export async function refreshDateChoiceOccurrence(env, occurrenceId, timestamp =
     "SELECT COUNT(*) AS c FROM gathering_occurrence_selections WHERE occurrence_id = ? AND status = 'selected'"
   ).bind(occurrenceId).first()
   const selectedCount = Number(row?.c || 0)
+  if (occurrence.state === 'confirmed' && selectedCount < Number(occurrence.min_participants || 1)
+      && timestamp < Number(occurrence.formation_deadline)) {
+    const result = await env.DB.prepare(
+      `UPDATE gathering_occurrences SET state = 'recruiting', confirmed_at = NULL, updated_at = ?
+       WHERE id = ? AND state = 'confirmed' AND formation_deadline > ?`
+    ).bind(timestamp, occurrenceId, timestamp).run()
+    if (result.meta.changes) {
+      await audit(env.DB, 'gathering_occurrence_below_threshold', 'occurrence', occurrenceId, `${selectedCount}/${occurrence.min_participants}`, 'system')
+      return { occurrence: { ...occurrence, state: 'recruiting', confirmed_at: null }, transitioned: true, selectedCount }
+    }
+  }
   if (occurrence.state === 'recruiting' && selectedCount >= Number(occurrence.min_participants || 1)
       && timestamp < Number(occurrence.formation_deadline)) {
     const result = await env.DB.prepare(
@@ -370,7 +398,7 @@ export async function runGatheringAutomation(env, timestamp = Date.now()) {
   const events = await env.DB.prepare(
     `SELECT * FROM events
      WHERE event_mode = 'gathering'
-       AND gathering_state IN ('recruiting', 'arrangement_pending')`
+       AND gathering_state IN ('recruiting', 'arrangement_pending', 'confirmed')`
   ).all()
 
   // Date-choice parent events stay open. Only their occurrences are locked or cancelled.

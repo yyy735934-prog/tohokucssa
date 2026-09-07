@@ -152,7 +152,12 @@ const stateLabel = computed(() => states[gathering.value?.gathering_state] || ''
 const signupStatusLabel = computed(() => signupStates[mySignup.value?.signup_status] || '')
 const remaining = computed(() => Math.max(0, (gathering.value?.min_participants || 0) - (gathering.value?.effective_count || 0)))
 const progress = computed(() => Math.min(100, (gathering.value?.effective_count || 0) / (gathering.value?.min_participants || 1) * 100))
-const canJoin = computed(() => gathering.value?.event_subtype !== 'date_choice' && gathering.value?.lock_at === null && ['recruiting', 'arrangement_pending', 'confirmed'].includes(gathering.value?.gathering_state))
+const canJoin = computed(() => {
+  if (gathering.value?.event_subtype === 'date_choice' || gathering.value?.lock_at !== null) return false
+  if (!['recruiting', 'arrangement_pending', 'confirmed'].includes(gathering.value?.gathering_state)) return false
+  if (gathering.value.formation_deadline && Date.now() >= Number(gathering.value.formation_deadline)) return false
+  return gathering.value.gathering_state !== 'confirmed' || !gathering.value.capacity || Number(gathering.value.effective_count || 0) < Number(gathering.value.capacity)
+})
 const canCancel = computed(() => !['completed', 'cancelled'].includes(gathering.value?.gathering_state) && !mySignup.value?.checked_in)
 const googleLoginUrl = computed(() => `/api/auth/google?from=public&return_to=${encodeURIComponent(`/g/${route.params.id}`)}`)
 const chatEntries = computed(() => {

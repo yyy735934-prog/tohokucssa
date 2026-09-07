@@ -184,10 +184,11 @@ gatherings.delete('/:id/occurrences/:occurrenceId/select', async (c) => {
      WHERE occurrence_id = ? AND status = 'selected' AND signup_id IN (SELECT id FROM signups WHERE event_id = ? AND user_id = ?)`
   ).bind(Date.now(), occurrenceId, eventId, session.id).run()
   if (!result.meta.changes) return c.json({ ok: false, message: '未找到该日期报名' }, 404)
+  const refreshed = await refreshDateChoiceOccurrence(c.env, occurrenceId)
   if (occurrence?.chat_group_guid) {
     c.executionCtx.waitUntil(safelySyncChat(c.env, { type: 'occurrence', id: occurrenceId }, () => removeChatMember(c.env, occurrence.chat_group_guid, `account-${session.id}`)))
   }
-  return c.json({ ok: true })
+  return c.json({ ok: true, occurrence: refreshed.occurrence, selected_count: refreshed.selectedCount })
 })
 
 gatherings.get('/host-offers/:token', async (c) => {
@@ -356,8 +357,12 @@ gatherings.post('/:id/join', async (c) => {
     return c.json({ ok: false, message: '当前组局已停止参加' }, 400)
   }
   if (event.lock_at !== null && event.lock_at !== undefined) return c.json({ ok: false, message: '主理人已暂停接受新成员' }, 400)
-  if (event.formation_deadline && Date.now() >= event.formation_deadline && event.gathering_state === 'recruiting') {
-    return c.json({ ok: false, message: '成局报名时间已截止' }, 400)
+  if (event.formation_deadline && Date.now() >= Number(event.formation_deadline)) {
+    return c.json({ ok: false, message: '报名时间已截止' }, 400)
+  }
+  if (event.gathering_state === 'confirmed' && event.capacity
+      && await effectiveSignupCount(c.env.DB, id) >= Number(event.capacity)) {
+    return c.json({ ok: false, message: '活动人数已满' }, 400)
   }
 
   const body = await c.req.json().catch(() => ({}))

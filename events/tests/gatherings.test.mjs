@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   formatJstDateTime,
   formationRequirementsMet,
+  scheduledFormationState,
   isoWeekKey,
   isValidClock,
   jstParts,
@@ -84,6 +85,14 @@ test('weekly intervals and monthly recurrence use lead time for publishing and w
   assert.equal(monthlyDate.occurrenceKey, '2026-09-15 19:00')
   const firstSaturday = nextScheduledOccurrence({ ...base, recurrence_json: JSON.stringify({ frequency: 'monthly', interval: 1, anchor_date: '2026-09-01', weekday: 6, ordinal: 1 }) }, now)
   assert.equal(firstSaturday.occurrenceKey, '2026-09-05 19:00')
+})
+
+test('scheduled gatherings confirm immediately and reopen when effective members fall below minimum', () => {
+  const event = { event_subtype: 'scheduled', gathering_state: 'recruiting', min_participants: 4, requires_host: 1, created_by: 12 }
+  assert.equal(scheduledFormationState(event, 4), 'confirmed')
+  assert.equal(scheduledFormationState({ ...event, gathering_state: 'confirmed' }, 3), 'recruiting')
+  assert.equal(scheduledFormationState({ ...event, gathering_state: 'confirmed' }, 5), 'confirmed')
+  assert.equal(scheduledFormationState({ ...event, gathering_state: 'in_progress' }, 2), 'in_progress')
 })
 
 test('gathering content is editable by administrators and the current host only', () => {
