@@ -53,7 +53,7 @@ export default function PwaInstallPrompt() {
   if (!showButton) return null;
   return (
     <>
-      <button className="pwa-install-button" type="button" onClick={() => void install()}><span>⇩</span> 安装到桌面</button>
+      <button className="pwa-install-button" type="button" onClick={() => void install()}><span>⇩</span> 放到桌面，快速打开</button>
       {showGuide && <div className="pwa-guide-backdrop" role="presentation" onClick={() => setShowGuide(false)}>
         <section className="pwa-guide" role="dialog" aria-modal="true" aria-label="安装东北集市" onClick={(event) => event.stopPropagation()}>
           <button className="pwa-guide-close" type="button" aria-label="关闭" onClick={() => setShowGuide(false)}>×</button>
