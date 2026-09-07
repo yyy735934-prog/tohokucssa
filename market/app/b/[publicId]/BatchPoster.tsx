@@ -8,7 +8,10 @@ import { toPng } from "html-to-image";
 export type PosterItem = {
   id: string;
   title: string;
+  description: string;
   price: number;
+  place: string;
+  createdAt: string;
   imageUrl: string | null;
   icon: string;
   status: string;
@@ -20,6 +23,16 @@ const posterStatusText: Record<string, string> = {
   withdrawn: "已下架",
   rejected: "未通过",
 };
+
+function posterPublishedAt(value: string) {
+  const date = new Date(value.includes("T") ? value : `${value.replace(" ", "T")}Z`);
+  if (!Number.isFinite(date.getTime())) return "近期发布";
+  return `${new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    timeZone: "Asia/Tokyo",
+  }).format(date)}发布`;
+}
 
 export default function BatchPoster({
   title, sellerName, sellerVerified, place, items,
@@ -81,8 +94,11 @@ export default function BatchPoster({
   useEffect(() => {
     if (!qr || !posterLogo) return;
     let cancelled = false;
-    setPreparingShare(true);
-    void createPosterFile()
+    void Promise.resolve()
+      .then(() => {
+        if (!cancelled) setPreparingShare(true);
+        return createPosterFile();
+      })
       .then((file) => {
         if (!cancelled) shareFileRef.current = file;
       })
@@ -159,6 +175,11 @@ export default function BatchPoster({
                 </div>
                 <h2>{item.title}</h2>
                 <strong>{item.price === 0 ? "免费" : `¥${item.price.toLocaleString()}`}</strong>
+                <p title={item.description}><span>成色</span>{item.description}</p>
+                <div className="poster-item-meta">
+                  <span title={item.place}>⌖ {item.place}</span>
+                  <time dateTime={item.createdAt}>{posterPublishedAt(item.createdAt)}</time>
+                </div>
               </article>
             ))}
           </div>

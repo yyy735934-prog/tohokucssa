@@ -33,7 +33,7 @@ export default async function PosterPage({ params }: { params: Promise<{ publicI
     db.select({
       id: listings.id, title: listings.title, description: listings.description, price: listings.price,
       category: listings.category, place: listings.place, status: listings.status, icon: listings.icon,
-      imageKey: listings.imageKey, position: listingPosterItems.position,
+      imageKey: listings.imageKey, createdAt: listings.createdAt, position: listingPosterItems.position,
     }).from(listingPosterItems).innerJoin(listings, eq(listingPosterItems.listingId, listings.id))
       .where(eq(listingPosterItems.posterId, poster.id)).orderBy(asc(listingPosterItems.position)),
     db.select({ publicNameMode: users.publicNameMode, publicNickname: users.publicNickname, academicStatus: users.academicStatus })
@@ -46,7 +46,8 @@ export default async function PosterPage({ params }: { params: Promise<{ publicI
   const places = Array.from(new Set(itemRows.map((item) => item.place)));
   const place = places.length === 1 ? places[0] : "仙台多处 · 详见商品";
   const posterItems: PosterItem[] = itemRows.map((item) => ({
-    id: item.id, title: item.title, price: item.price, status: item.status, icon: item.icon,
+    id: item.id, title: item.title, description: item.description, price: item.price,
+    place: item.place, createdAt: item.createdAt, status: item.status, icon: item.icon,
     imageUrl: item.imageKey ? `/api/images?key=${encodeURIComponent(item.imageKey)}` : null,
   }));
 

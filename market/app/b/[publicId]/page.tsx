@@ -48,7 +48,8 @@ export default async function BatchPage({ params }: { params: Promise<{ publicId
   const sellerName = publicMemberName(seller?.publicNameMode, seller?.publicNickname);
   const sellerVerified = seller?.academicStatus === "verified";
   const posterItems: PosterItem[] = itemRows.map((item) => ({
-    id: item.id, title: item.title, price: item.price, status: item.status, icon: item.icon,
+    id: item.id, title: item.title, description: item.description, price: item.price,
+    place: item.place, createdAt: item.createdAt, status: item.status, icon: item.icon,
     imageUrl: item.imageKey ? `/api/images?key=${encodeURIComponent(item.imageKey)}` : null,
   }));
   const hasPending = itemRows.some((item) => item.status === "pending");
