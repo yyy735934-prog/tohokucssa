@@ -89,6 +89,18 @@ async function readJson<T>(response: Response): Promise<T | null> {
   }
 }
 
+function mobilePlatform() {
+  if (typeof navigator === "undefined") return "other" as const;
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (ios) return "ios" as const;
+  return /Android/i.test(navigator.userAgent) ? "android" as const : "other" as const;
+}
+
+function isStandalonePwa() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(display-mode: standalone)").matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+}
+
 async function fetchWithTimeout(
   input: RequestInfo | URL,
   init: RequestInit,
@@ -166,7 +178,10 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
   const [price, setPrice] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [contactingId, setContactingId] = useState<string | null>(null);
+  const [pwaPromptListingId, setPwaPromptListingId] = useState<string | null>(null);
+  const [showPwaInstallHelp, setShowPwaInstallHelp] = useState(false);
   const [pushPromptListingId, setPushPromptListingId] = useState<string | null>(null);
+  const [pushDeniedListingId, setPushDeniedListingId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -376,15 +391,41 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
     }
   };
 
-  const openChat = async (listingId: string, skipPushPrompt = false) => {
+  const openChat = async (listingId: string, skipPushPrompt = false, skipPwaPrompt = false) => {
     if (!viewer) {
       window.location.assign(`/signin-with-chatgpt?return_to=${encodeURIComponent(`/?listing=${listingId}`)}`);
       return;
     }
     if (!chatEnabled) { showNotice("聊天服务暂时不可用，请稍后再试。"); return; }
-    if (!skipPushPrompt && "Notification" in window && Notification.permission === "default") {
+    if (
+      !skipPwaPrompt &&
+      mobilePlatform() !== "other" &&
+      !isStandalonePwa() &&
+      localStorage.getItem("chat-pwa-onboarding-seen") !== "1"
+    ) {
+      setShowPwaInstallHelp(false);
+      setPwaPromptListingId(listingId);
+      return;
+    }
+    if (!skipPushPrompt && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window) {
+      if (Notification.permission === "denied" && localStorage.getItem("chat-push-denied-explained") !== "1") {
+        setPushDeniedListingId(listingId);
+        return;
+      }
       const dismissedAt = Number(localStorage.getItem("chat-push-prompt-dismissed-at") || 0);
-      if (Date.now() - dismissedAt > 30 * 24 * 60 * 60 * 1000) { setPushPromptListingId(listingId); return; }
+      if (Date.now() - dismissedAt > 30 * 24 * 60 * 60 * 1000) {
+        let subscription: PushSubscription | null = null;
+        if (Notification.permission === "granted") {
+          try {
+            const registration = await navigator.serviceWorker.register("/sw.js");
+            subscription = await registration.pushManager.getSubscription();
+          } catch { /* notification setup remains optional */ }
+        }
+        if (Notification.permission === "default" || (Notification.permission === "granted" && !subscription)) {
+          setPushPromptListingId(listingId);
+          return;
+        }
+      }
     }
     setContactingId(listingId);
     try {
@@ -397,6 +438,23 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
       showNotice(error instanceof Error ? error.message : "暂时无法开始聊天。");
       setContactingId(null);
     }
+  };
+
+  const continueAfterPwaPrompt = async () => {
+    const listingId = pwaPromptListingId;
+    if (!listingId) return;
+    localStorage.setItem("chat-pwa-onboarding-seen", "1");
+    setPwaPromptListingId(null);
+    setShowPwaInstallHelp(false);
+    await openChat(listingId, false, true);
+  };
+
+  const continueAfterDeniedNotice = async () => {
+    const listingId = pushDeniedListingId;
+    if (!listingId) return;
+    localStorage.setItem("chat-push-denied-explained", "1");
+    setPushDeniedListingId(null);
+    await openChat(listingId, true, true);
   };
 
   const decidePushPrompt = async (enable: boolean) => {
@@ -424,7 +482,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
         }
       } catch { /* 通知是可选项，失败不阻断聊天 */ }
     }
-    await openChat(listingId, true);
+    await openChat(listingId, true, true);
   };
 
   const updateItemIntelligence = (
@@ -706,6 +764,40 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
           <span>◇</span><h2>及时收到卖家回复</h2>
           <p>开启通知后，即使没有停留在聊天页面，也能收到匿名交易消息。你也可以稍后在个人中心开启。</p>
           <div><button type="button" onClick={() => void decidePushPrompt(false)}>暂不开启</button><button type="button" onClick={() => void decidePushPrompt(true)}>开启通知并聊天</button></div>
+        </section>
+      </div>}
+
+      {pwaPromptListingId && <div className="push-soft-backdrop" role="presentation" onClick={() => void continueAfterPwaPrompt()}>
+        <section className="push-soft-dialog chat-onboarding-dialog" role="dialog" aria-modal="true" aria-label="把东北集市放到桌面" onClick={(event) => event.stopPropagation()}>
+          <span>东</span>
+          <h2>放到桌面后，更容易及时收到回复</h2>
+          <p>从桌面打开东北集市更快捷，也更适合接收卖家的新消息通知。安装不是使用聊天的必要条件。</p>
+          {showPwaInstallHelp && <div className="chat-install-help">
+            {mobilePlatform() === "ios"
+              ? <ol><li>点击浏览器底部的“分享”按钮 □↑</li><li>选择“添加到主屏幕”</li><li>添加后从桌面重新打开东北集市</li></ol>
+              : <ol><li>点击浏览器菜单</li><li>选择“安装应用”或“添加到主屏幕”</li><li>安装后从桌面打开东北集市</li></ol>}
+          </div>}
+          <div>
+            <button type="button" onClick={() => void continueAfterPwaPrompt()}>暂不安装，继续聊天</button>
+            {showPwaInstallHelp
+              ? <button type="button" onClick={() => void continueAfterPwaPrompt()}>继续设置消息通知</button>
+              : <button type="button" onClick={() => setShowPwaInstallHelp(true)}>查看安装方法</button>}
+          </div>
+        </section>
+      </div>}
+
+      {pushDeniedListingId && <div className="push-soft-backdrop" role="presentation" onClick={() => void continueAfterDeniedNotice()}>
+        <section className="push-soft-dialog chat-onboarding-dialog" role="dialog" aria-modal="true" aria-label="恢复消息通知权限" onClick={(event) => event.stopPropagation()}>
+          <span>!</span>
+          <h2>消息通知目前被关闭</h2>
+          <p>
+            {mobilePlatform() === "ios"
+              ? "如需恢复，请打开系统“设置”→“通知”→“东北集市”，允许通知。你仍可直接进入聊天。"
+              : mobilePlatform() === "android"
+                ? "如需恢复，请在浏览器的网站设置中找到“通知”，将 market.tohokucssa.org 改为允许。你仍可直接进入聊天。"
+                : "如需恢复，请点击地址栏旁的网站设置，将通知权限改为允许。你仍可直接进入聊天。"}
+          </p>
+          <div><button type="button" onClick={() => void continueAfterDeniedNotice()}>知道了，继续聊天</button></div>
         </section>
       </div>}
 
