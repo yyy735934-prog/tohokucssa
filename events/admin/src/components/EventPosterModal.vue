@@ -41,7 +41,15 @@ async function render() {
     const ctx = el.getContext('2d'); ctx.fillStyle = '#f5f1e8'; ctx.fillRect(0, 0, el.width, el.height)
     ctx.fillStyle = '#16382c'; ctx.fillRect(0, 0, el.width, 625)
     if (props.event.image_key) {
-      try { const img = await loadImage(`/api/images/serve/${props.event.id}?v=${encodeURIComponent(props.event.image_key)}`); const scale = Math.max(1080 / img.width, 625 / img.height); ctx.drawImage(img, (1080 - img.width * scale) / 2, (625 - img.height * scale) / 2, img.width * scale, img.height * scale); ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(0, 0, 1080, 625) } catch {}
+      try {
+        const img = await loadImage(`/api/images/serve/${props.event.id}?v=${encodeURIComponent(props.event.image_key)}`)
+        const scale = Math.max(1080 / img.width, 625 / img.height)
+        ctx.save()
+        ctx.beginPath(); ctx.rect(0, 0, 1080, 625); ctx.clip()
+        ctx.drawImage(img, (1080 - img.width * scale) / 2, (625 - img.height * scale) / 2, img.width * scale, img.height * scale)
+        ctx.restore()
+        ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(0, 0, 1080, 625)
+      } catch {}
     }
     ctx.fillStyle = props.event.event_mode === 'gathering' ? '#ff7a45' : '#2e7d62'; roundedRect(ctx, 72, 64, props.event.event_mode === 'gathering' ? 170 : 210, 64, 32)
     ctx.fillStyle = '#fff'; ctx.font = 'bold 31px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(props.event.event_mode === 'gathering' ? '组个局' : '正式活动', props.event.event_mode === 'gathering' ? 157 : 177, 107); ctx.textAlign = 'left'

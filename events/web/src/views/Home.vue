@@ -23,7 +23,7 @@
           <p v-if="item.content" class="activity-desc">{{ item.content }}</p>
 
           <template v-if="item.kind === 'gathering'">
-            <template v-if="item.event_subtype !== 'date_choice'"><div class="formation"><strong>{{ item.effective_count }}</strong> / {{ item.min_participants }} 人</div><div class="progress"><div class="progress-fill" :style="{ width: gatheringProgress(item) }"></div></div></template>
+            <template v-if="item.event_subtype !== 'date_choice'"><div class="formation"><strong>{{ item.effective_count }}</strong> / {{ gatheringDisplayLimit(item) }} 人</div><div class="progress"><div class="progress-fill" :style="{ width: gatheringProgress(item) }"></div></div></template>
             <div class="card-foot"><span>{{ categoryLabel(item.gathering_category) }}</span><span>{{ stateLabel(item.gathering_state) }}</span></div>
           </template>
           <template v-else>
@@ -54,6 +54,9 @@ const feed = computed(() => [
 const categoryLabel = (value) => categoryLabels[value] || '其他'
 const stateLabel = (value) => stateLabels[value] || value
 const subtypeLabel = (item) => ({ self_hosted: '自主', assisted: '协助', scheduled: '定日期', date_choice: '选日期' }[item.event_subtype] || '')
+const gatheringDisplayLimit = (item) => Number(item.effective_count || 0) >= Number(item.min_participants || 1) && item.capacity
+  ? Number(item.capacity)
+  : Number(item.min_participants || 1)
 const gatheringProgress = (item) => `${Math.min(100, Number(item.effective_count || 0) / Number(item.min_participants || 1) * 100)}%`
 
 onMounted(async () => {

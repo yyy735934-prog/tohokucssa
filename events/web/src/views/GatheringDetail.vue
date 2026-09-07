@@ -11,7 +11,7 @@
         <h1>{{ gathering.title }}</h1>
         <div class="meta">{{ gathering.event_subtype === 'date_choice' ? '请选择下方一个或多个日期' : gathering.event_date }}<span v-if="gathering.location"> · {{ gathering.location }}</span></div>
         <p v-if="gathering.content" class="content">{{ gathering.content }}</p>
-        <p v-if="gathering.notes && gathering.gathering_state === 'confirmed'" class="notes">{{ gathering.notes }}</p>
+        <div v-if="gathering.notes" class="notes"><strong>参加须知</strong><p>{{ gathering.notes }}</p></div>
       </div>
 
       <div v-if="gathering.image_key" class="card mb event-image-card">
