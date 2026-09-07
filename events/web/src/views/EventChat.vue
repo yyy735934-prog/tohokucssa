@@ -21,6 +21,9 @@ const backPath = computed(() => `${isGathering.value ? '/g/' : '/e/'}${route.par
 
 onMounted(async () => {
   try {
+    if (!isGathering.value && route.query.token) {
+      localStorage.setItem(`event_chat_access_${route.params.id}`, String(route.query.token))
+    }
     const data = await api.chatSession({
       event_id: Number(route.params.id),
       occurrence_id: route.query.occurrence_id ? Number(route.query.occurrence_id) : undefined,
