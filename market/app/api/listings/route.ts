@@ -7,6 +7,7 @@ import { listingToMarketItem } from "../../../lib/listings";
 import { publicMemberName } from "../../../lib/public-identity";
 import { canUseMarketplace } from "../../../lib/member-status";
 import { listingPublicationStatus, type ListingRiskLevel } from "../../../lib/listing-moderation";
+import { listingPriceUpdate, PRICE_PROMOTION_DURATION_MS } from "../../../lib/listing-price";
 
 function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -19,11 +20,15 @@ export async function GET() {
   try {
     const member = await getMemberAccess();
     const db = await getDb();
+    const recentReductionCutoff = new Date(Date.now() - PRICE_PROMOTION_DURATION_MS).toISOString();
     const rows = await db
       .select()
       .from(listings)
       .where(eq(listings.status, "active"))
-      .orderBy(desc(listings.createdAt))
+      .orderBy(
+        desc(sql`CASE WHEN ${listings.priceReducedAt} >= ${recentReductionCutoff} THEN 1 ELSE 0 END`),
+        desc(listings.createdAt),
+      )
       .limit(60);
     let soldRows: typeof rows = [];
     let soldCount = 0;
@@ -176,13 +181,48 @@ export async function PATCH(request: Request) {
   const member = await getMemberAccess();
   if (!member) return Response.json({ error: "请先登录。" }, { status: 401 });
 
-  const payload = (await request.json()) as { id?: string; status?: string };
-  if (!payload.id || !["sold", "withdrawn"].includes(payload.status ?? "")) {
+  const payload = (await request.json()) as { id?: string; status?: string; price?: unknown };
+  if (!payload.id) {
     return Response.json({ error: "无效的操作。" }, { status: 400 });
   }
 
   const db = await getDb();
   const now = new Date().toISOString();
+  if (payload.price !== undefined) {
+    const nextPrice = typeof payload.price === "number" ? payload.price : Number.NaN;
+    if (!Number.isSafeInteger(nextPrice) || nextPrice < 0 || nextPrice > 100_000_000) {
+      return Response.json({ error: "请输入 0 至 100,000,000 日元之间的整数价格。" }, { status: 400 });
+    }
+    const [current] = await db
+      .select()
+      .from(listings)
+      .where(and(
+        eq(listings.id, payload.id),
+        eq(listings.ownerEmail, member.email),
+        inArray(listings.status, ["pending", "active"]),
+      ))
+      .limit(1);
+    if (!current) {
+      return Response.json({ error: "仅可修改自己待审核或展示中的商品价格。" }, { status: 404 });
+    }
+    const priceUpdate = listingPriceUpdate(current.price, current.originalPrice, nextPrice, now);
+    const [updated] = await db
+      .update(listings)
+      .set({ ...priceUpdate, updatedAt: now })
+      .where(and(
+        eq(listings.id, current.id),
+        eq(listings.ownerEmail, member.email),
+        inArray(listings.status, ["pending", "active"]),
+      ))
+      .returning();
+    return updated
+      ? Response.json({ listing: listingToMarketItem(updated, member.email), reduced: nextPrice < current.price })
+      : Response.json({ error: "商品状态已变化，请刷新后重试。" }, { status: 409 });
+  }
+
+  if (!["sold", "withdrawn"].includes(payload.status ?? "")) {
+    return Response.json({ error: "无效的操作。" }, { status: 400 });
+  }
   const [updated] = await db
     .update(listings)
     .set({ status: payload.status, soldAt: payload.status === "sold" ? now : null, updatedAt: now })

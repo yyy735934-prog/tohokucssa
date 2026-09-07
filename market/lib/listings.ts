@@ -13,6 +13,8 @@ export function listingToMarketItem(
     id: listing.id,
     title: listing.title,
     price: listing.price,
+    originalPrice: listing.originalPrice,
+    priceReducedAt: listing.priceReducedAt,
     category: listingCategoryLabel(listing.category),
     place: listing.place,
     time: formatRelativeTime(listing.createdAt),

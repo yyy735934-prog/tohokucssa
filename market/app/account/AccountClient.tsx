@@ -10,6 +10,8 @@ type Listing = {
   id: string;
   title: string;
   price: number;
+  originalPrice?: number | null;
+  priceReducedAt?: string | null;
   place: string;
   status: string;
   icon: string;
@@ -40,6 +42,9 @@ export default function AccountClient({
 }) {
   const [listings, setListings] = useState(initialListings);
   const [message, setMessage] = useState("");
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [priceDraft, setPriceDraft] = useState("");
+  const [savingPrice, setSavingPrice] = useState(false);
 
   const updateListing = async (id: string, status: "sold" | "withdrawn") => {
     const response = await fetch("/api/listings", {
@@ -56,6 +61,34 @@ export default function AccountClient({
       current.map((listing) => (listing.id === id ? { ...listing, status } : listing)),
     );
     setMessage(status === "sold" ? "已标记为售出。" : "商品已下架。");
+  };
+
+  const savePrice = async (listing: Listing) => {
+    const nextPrice = Number(priceDraft);
+    if (!Number.isSafeInteger(nextPrice) || nextPrice < 0 || nextPrice > 100_000_000) {
+      setMessage("请输入 0 至 100,000,000 日元之间的整数价格。");
+      return;
+    }
+    setSavingPrice(true);
+    try {
+      const response = await fetch("/api/listings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: listing.id, price: nextPrice }),
+      });
+      const result = await response.json() as { listing?: Listing; reduced?: boolean; error?: string };
+      if (!response.ok || !result.listing) {
+        setMessage(result.error ?? "价格修改失败，请稍后再试。");
+        return;
+      }
+      setListings((current) => current.map((row) => row.id === listing.id ? { ...row, ...result.listing } : row));
+      setEditingPriceId(null);
+      setMessage(result.reduced ? "降价成功：商品将在首页优先展示 24 小时。" : "商品价格已更新。");
+    } catch {
+      setMessage("价格修改失败，请检查网络后重试。");
+    } finally {
+      setSavingPrice(false);
+    }
   };
 
   return (
@@ -81,13 +114,24 @@ export default function AccountClient({
                   <h3>{listing.title}</h3>
                   <p>⌖ {listing.place} · {listing.time}</p>
                 </div>
-                <strong>{listing.price === 0 ? "免费" : `¥${listing.price.toLocaleString()}`}</strong>
+                <div className="manage-price">
+                  {listing.originalPrice !== null && listing.originalPrice !== undefined && listing.originalPrice > listing.price && (
+                    <del>¥{listing.originalPrice.toLocaleString()}</del>
+                  )}
+                  <strong>{listing.price === 0 ? "免费" : `¥${listing.price.toLocaleString()}`}</strong>
+                </div>
                 {["pending", "active"].includes(listing.status) && (
                   <div className="manage-actions">
+                    <button onClick={() => { setEditingPriceId(listing.id); setPriceDraft(String(listing.price)); }}>改价格</button>
                     {listing.status === "active" && <button onClick={() => updateListing(listing.id, "sold")}>标记售出</button>}
                     <button onClick={() => updateListing(listing.id, "withdrawn")}>下架</button>
                   </div>
                 )}
+                {editingPriceId === listing.id && <form className="manage-price-editor" onSubmit={(event) => { event.preventDefault(); void savePrice(listing); }}>
+                  <label><span>新价格（日元）</span><input type="number" min="0" max="100000000" step="1" required autoFocus value={priceDraft} onChange={(event) => setPriceDraft(event.target.value)} /></label>
+                  <small>降低价格后将保留原价对比，并在首页优先展示 24 小时。</small>
+                  <div><button type="button" disabled={savingPrice} onClick={() => setEditingPriceId(null)}>取消</button><button type="submit" disabled={savingPrice}>{savingPrice ? "保存中…" : "保存价格"}</button></div>
+                </form>}
               </article>
             ))}
           </div>

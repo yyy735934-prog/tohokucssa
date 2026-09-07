@@ -8,6 +8,7 @@ import {
   type ListingCategory,
 } from "../lib/listing-intelligence";
 import { matchesMarketSearch } from "../lib/market-search";
+import { isRecentPriceReduction, isReducedPrice } from "../lib/listing-price";
 import PublishLocationMap, { type PublishLocation } from "./PublishLocationMap";
 import PwaInstallPrompt from "./PwaInstallPrompt";
 import MobileNav from "./MobileNav";
@@ -21,6 +22,8 @@ type MarketItem = {
   id: string;
   title: string;
   price: number;
+  originalPrice?: number | null;
+  priceReducedAt?: string | null;
   category: string;
   place: string;
   time: string;
@@ -48,7 +51,19 @@ function shuffleMarketItems(items: MarketItem[]) {
     const targetIndex = Math.floor(Math.random() * (index + 1));
     [shuffled[index], shuffled[targetIndex]] = [shuffled[targetIndex], shuffled[index]];
   }
-  return shuffled;
+  const now = Date.now();
+  return shuffled.sort((first, second) =>
+    Number(isRecentPriceReduction(second.price, second.originalPrice, second.priceReducedAt, now)) -
+    Number(isRecentPriceReduction(first.price, first.originalPrice, first.priceReducedAt, now))
+  );
+}
+
+function ListingPrice({ item, detail = false }: { item: MarketItem; detail?: boolean }) {
+  const reduced = isReducedPrice(item.price, item.originalPrice);
+  return <div className={detail ? "detail-price listing-sale-price" : `price${reduced ? " listing-sale-price" : ""}`}>
+    {reduced && <del>¥{item.originalPrice!.toLocaleString()}</del>}
+    <strong>{item.price === 0 ? (detail ? "免费赠送" : "免费") : `¥${item.price.toLocaleString()}`}</strong>
+  </div>;
 }
 
 function Icon({ children }: { children: React.ReactNode }) {
@@ -687,10 +702,10 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
         <div className="item-grid">
           {filtered.map((item) => (
             <article className="item-card" data-testid={`item-${item.id}`} key={item.id} role="button" tabIndex={0} onClick={() => setSelectedItem(item)} onKeyDown={(e) => { if (e.key === "Enter") setSelectedItem(item); }}>
-              <div className={`item-photo ${item.tone}`}>{item.imageUrl ? <Image className="listing-image" src={item.imageUrl} alt={item.title} fill sizes="(max-width: 620px) 50vw, 33vw" unoptimized /> : <span>{item.icon}</span>}<label>{item.badge}</label><button className={favorites.includes(item.id) ? "favorited" : ""} aria-label={`收藏${item.title}`} onClick={(e) => { e.stopPropagation(); toggleFavorite(item.id); }}>{favorites.includes(item.id) ? "♥" : "♡"}</button></div>
+              <div className={`item-photo ${item.tone}`}>{item.imageUrl ? <Image className="listing-image" src={item.imageUrl} alt={item.title} fill sizes="(max-width: 620px) 50vw, 33vw" unoptimized /> : <span>{item.icon}</span>}<label>{item.badge}</label>{isReducedPrice(item.price, item.originalPrice) && <b className="price-drop-badge">限时降价</b>}<button className={favorites.includes(item.id) ? "favorited" : ""} aria-label={`收藏${item.title}`} onClick={(e) => { e.stopPropagation(); toggleFavorite(item.id); }}>{favorites.includes(item.id) ? "♥" : "♡"}</button></div>
               <div className="item-info">
                 <h3>{item.title}</h3>
-                <div className="price">{item.price === 0 ? "免费" : <>¥{item.price.toLocaleString()}</>}</div>
+                <ListingPrice item={item} />
                 <div className="meta"><span>⌖ {item.place}</span><span>{item.time}</span></div>
               </div>
             </article>
@@ -740,7 +755,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
           <div className="detail-content">
             <span className="detail-category">{selectedItem.category} · {selectedItem.time}</span>
             <h2>{selectedItem.title}</h2>
-            <div className="detail-price">{selectedItem.price === 0 ? "免费赠送" : `¥${selectedItem.price.toLocaleString()}`}</div>
+            <ListingPrice item={selectedItem} detail />
             <p>{selectedItem.note}</p>
             <div className="seller-row"><span>{selectedItem.seller.slice(0,1)}</span><div><b>{selectedItem.seller}</b><small>{selectedItem.sellerVerified ? "✓ 已认证学友" : "身份待核验"} · 通常1小时内回复</small></div></div>
             <div className="pickup">⌖ 建议交接地点 <b>{selectedItem.place}附近公共场所</b></div>

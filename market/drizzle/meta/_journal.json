@@ -127,6 +127,13 @@
       "when": 1788747038530,
       "tag": "0017_violet_praxagora",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1788770542793,
+      "tag": "0018_lying_black_widow",
+      "breakpoints": true
     }
   ]
 }

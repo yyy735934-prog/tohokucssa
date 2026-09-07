@@ -118,6 +118,8 @@ export const listings = sqliteTable(
     title: text("title").notNull(),
     description: text("description").notNull(),
     price: integer("price").notNull().default(0),
+    originalPrice: integer("original_price"),
+    priceReducedAt: text("price_reduced_at"),
     category: text("category").notNull(),
     place: text("place").notNull(),
     latitude: integer("latitude"),
@@ -135,6 +137,7 @@ export const listings = sqliteTable(
   (table) => [
     index("listings_status_created_idx").on(table.status, table.createdAt),
     index("listings_status_sold_idx").on(table.status, table.soldAt),
+    index("listings_status_price_reduced_idx").on(table.status, table.priceReducedAt),
     index("listings_owner_idx").on(table.ownerEmail, table.createdAt),
     index("listings_batch_idx").on(table.batchId, table.batchPosition),
   ],
