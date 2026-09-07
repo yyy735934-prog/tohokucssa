@@ -76,7 +76,7 @@ signups.post('/', async (c) => {
     }
   }
 
-  return c.json({ ok: true, id: signupId, token, redirect })
+  return c.json({ ok: true, id: signupId, token, chat_access_token: chatAccessToken, redirect })
 })
 
 // GET /api/signups — admin: list signups for an event
@@ -228,7 +228,7 @@ signups.get('/export-all', async (c) => {
 signups.get('/by-token/:token', async (c) => {
   const token = c.req.param('token')
   const signup = await c.env.DB.prepare(
-    `SELECT s.id, s.name, s.email, s.checked_in, s.checked_in_at, s.event_id,
+    `SELECT s.id, s.name, s.email, s.checked_in, s.checked_in_at, s.event_id, s.chat_access_token,
             e.title as event_title, e.event_date, e.location, e.status as event_status
      FROM signups s JOIN events e ON e.id = s.event_id
      WHERE s.token = ?`

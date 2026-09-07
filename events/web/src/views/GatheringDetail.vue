@@ -114,6 +114,7 @@
       </div>
 
       <router-link to="/" class="back-link">← 返回活动列表</router-link>
+      <FloatingChatEntry v-if="chatEntries.length" :entries="chatEntries" />
     </template>
   </div>
 </template>
@@ -123,6 +124,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api.js'
 import { auth } from '../auth.js'
+import FloatingChatEntry from '../components/FloatingChatEntry.vue'
 
 const route = useRoute()
 const gathering = ref(null)
@@ -153,6 +155,16 @@ const progress = computed(() => Math.min(100, (gathering.value?.effective_count 
 const canJoin = computed(() => gathering.value?.event_subtype !== 'date_choice' && gathering.value?.lock_at === null && ['recruiting', 'arrangement_pending', 'confirmed'].includes(gathering.value?.gathering_state))
 const canCancel = computed(() => !['completed', 'cancelled'].includes(gathering.value?.gathering_state) && !mySignup.value?.checked_in)
 const googleLoginUrl = computed(() => `/api/auth/google?from=public&return_to=${encodeURIComponent(`/g/${route.params.id}`)}`)
+const chatEntries = computed(() => {
+  if (!gathering.value) return []
+  if (gathering.value.event_subtype === 'date_choice') {
+    return occurrences.value
+      .filter((o) => o.selected_by_me && ['confirmed', 'in_progress'].includes(o.state))
+      .map((o) => ({ eventId: gathering.value.id, occurrenceId: o.id, label: `${o.event_date} 群聊`, to: `/g/${gathering.value.id}/chat?occurrence_id=${o.id}` }))
+  }
+  if (!['confirmed', 'in_progress'].includes(gathering.value.gathering_state) || !['joined', 'ride_assigned'].includes(mySignup.value?.signup_status)) return []
+  return [{ eventId: gathering.value.id, label: `${gathering.value.title}群聊`, to: `/g/${gathering.value.id}/chat` }]
+})
 
 onMounted(load)
 

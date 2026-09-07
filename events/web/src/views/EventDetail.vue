@@ -143,6 +143,7 @@
       </div>
 
       <router-link to="/" class="back-link">← 返回活动列表</router-link>
+      <FloatingChatEntry v-if="chatToken" :entries="chatEntries" />
     </template>
   </div>
 </template>
@@ -152,6 +153,7 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api.js'
 import { auth } from '../auth.js'
+import FloatingChatEntry from '../components/FloatingChatEntry.vue'
 
 const route = useRoute()
 const event = ref(null)
@@ -169,6 +171,13 @@ const done = ref(false)
 const signupToken = ref('')
 const externalRedirect = ref(null)
 const agreed = ref(false)
+const chatToken = ref(localStorage.getItem(`event_chat_access_${route.params.id}`) || '')
+const chatEntries = computed(() => chatToken.value ? [{
+  eventId: Number(route.params.id),
+  token: chatToken.value,
+  label: `${event.value?.title || '活动'}群聊`,
+  to: `/e/${route.params.id}/chat?token=${encodeURIComponent(chatToken.value)}`,
+}] : [])
 
 const customFields = computed(() => {
   if (!event.value?.custom_fields) return []
@@ -240,6 +249,8 @@ async function doSignup() {
       }
     })
     signupToken.value = data.token
+    chatToken.value = data.chat_access_token || ''
+    if (chatToken.value) localStorage.setItem(`event_chat_access_${route.params.id}`, chatToken.value)
     externalRedirect.value = data.redirect || null
     done.value = true
     event.value.signupCount++

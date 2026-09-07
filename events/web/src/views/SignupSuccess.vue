@@ -28,21 +28,29 @@
         <router-link :to="`/e/${signup.event_id}`" class="btn btn-outline btn-sm" style="flex:1">活动详情</router-link>
         <router-link to="/my" class="btn btn-outline btn-sm" style="flex:1">我的</router-link>
       </div>
+      <FloatingChatEntry v-if="signup.chat_access_token" :entries="chatEntries" />
     </template>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { computed, ref, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api.js'
 import QRCode from 'qrcode'
+import FloatingChatEntry from '../components/FloatingChatEntry.vue'
 
 const route = useRoute()
 const signup = ref(null)
 const error = ref('')
 const qrCanvas = ref(null)
 const showQr = ref(false)
+const chatEntries = computed(() => signup.value?.chat_access_token ? [{
+  eventId: signup.value.event_id,
+  token: signup.value.chat_access_token,
+  label: `${signup.value.event_title}群聊`,
+  to: `/e/${signup.value.event_id}/chat?token=${encodeURIComponent(signup.value.chat_access_token)}`,
+}] : [])
 
 function isWithinDays(eventDate, days) {
   if (!eventDate) return false
@@ -58,6 +66,7 @@ onMounted(async () => {
   try {
     const data = await api.getSignupByToken(token)
     signup.value = data.signup
+    if (data.signup.chat_access_token) localStorage.setItem(`event_chat_access_${data.signup.event_id}`, data.signup.chat_access_token)
     showQr.value = isWithinDays(data.signup.event_date, 1)
     await nextTick()
     if (showQr.value && qrCanvas.value) {
