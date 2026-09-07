@@ -1,6 +1,18 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { listings, moderationLog, users, verificationAppeals } from "../../../db/schema";
+import {
+  chatConversationReads,
+  chatConversations,
+  chatMessageEvents,
+  contactRequests,
+  favorites,
+  listingAnalyses,
+  listingPosterItems,
+  listings,
+  moderationLog,
+  users,
+  verificationAppeals,
+} from "../../../db/schema";
 import {
   isAppealModerationAction,
   isListingModerationAction,
@@ -114,5 +126,78 @@ export async function PATCH(request: Request) {
     action: payload.action!,
   });
   if (notification) await sendWebPushNotification(notification.email, notification.message);
+  return Response.json({ ok: true });
+}
+
+export async function DELETE(request: Request) {
+  const admin = await getAdminAccess();
+  if (!admin) return Response.json({ error: "没有管理员权限。" }, { status: 403 });
+
+  const payload = (await request.json()) as {
+    targetType?: "listing";
+    targetId?: string;
+  };
+  if (payload.targetType !== "listing" || !payload.targetId) {
+    return Response.json({ error: "无效的删除操作。" }, { status: 400 });
+  }
+
+  const db = await getDb();
+  const [target] = await db
+    .select({ id: listings.id, imageKey: listings.imageKey })
+    .from(listings)
+    .where(and(eq(listings.id, payload.targetId), eq(listings.status, "sold")))
+    .limit(1);
+  if (!target) {
+    return Response.json({ error: "仅允许删除已售商品记录。" }, { status: 404 });
+  }
+
+  const conversationIds = db
+    .select({ id: chatConversations.id })
+    .from(chatConversations)
+    .where(eq(chatConversations.listingId, target.id));
+
+  const results = await db.batch([
+    db.delete(chatMessageEvents).where(inArray(chatMessageEvents.conversationId, conversationIds)),
+    db.delete(chatConversationReads).where(inArray(chatConversationReads.conversationId, conversationIds)),
+    db.delete(chatConversations).where(eq(chatConversations.listingId, target.id)),
+    db.delete(contactRequests).where(eq(contactRequests.listingId, target.id)),
+    db.delete(favorites).where(eq(favorites.listingId, target.id)),
+    db.delete(listingPosterItems).where(eq(listingPosterItems.listingId, target.id)),
+    db.delete(listings)
+      .where(and(eq(listings.id, target.id), eq(listings.status, "sold")))
+      .returning({ id: listings.id }),
+    db.insert(moderationLog).values({
+      actorEmail: admin.email,
+      targetType: "listing",
+      targetId: target.id,
+      action: "deleted",
+      note: "永久删除已售商品记录",
+    }),
+  ]);
+
+  const deletedRows = results[6] as Array<{ id: string }>;
+  if (!deletedRows[0]) {
+    return Response.json({ error: "商品状态已发生变化，请刷新后重试。" }, { status: 409 });
+  }
+
+  if (target.imageKey) {
+    const [otherReference] = await db
+      .select({ id: listings.id })
+      .from(listings)
+      .where(eq(listings.imageKey, target.imageKey))
+      .limit(1);
+    if (!otherReference) {
+      await db.delete(listingAnalyses).where(eq(listingAnalyses.imageKey, target.imageKey));
+      try {
+        const { env } = await import("cloudflare:workers");
+        const runtimeEnv = env as unknown as { BUCKET: R2Bucket };
+        await runtimeEnv.BUCKET.delete(target.imageKey);
+      } catch {
+        // The database record is already gone. A stale R2 object is safer than
+        // reporting that the destructive operation failed and inviting retries.
+      }
+    }
+  }
+
   return Response.json({ ok: true });
 }

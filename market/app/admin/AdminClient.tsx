@@ -84,6 +84,7 @@ export default function AdminClient({
   const [selectedListingIds, setSelectedListingIds] = useState<string[]>([]);
   const [posterTitle, setPosterTitle] = useState("东北集市 · 本周精选");
   const [creatingPoster, setCreatingPoster] = useState(false);
+  const [deletingListingId, setDeletingListingId] = useState<string | null>(null);
 
   const visibleListings = useMemo(
     () => (filter === "all" ? listingRows : listingRows.filter((listing) => listing.status === filter)),
@@ -148,6 +149,34 @@ export default function AdminClient({
       }
     }
     setMessage("已保存审核结果。");
+  };
+
+  const deleteSoldListing = async (listing: AdminListing) => {
+    if (listing.status !== "sold") return;
+    const confirmed = window.confirm(
+      `确定永久删除已售记录“${listing.title}”吗？此操作无法撤销，关联的收藏、联系申请和聊天索引也会一并清理。`,
+    );
+    if (!confirmed) return;
+
+    setDeletingListingId(listing.id);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ targetType: "listing", targetId: listing.id }),
+      });
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) {
+        setMessage(result?.error ?? "删除失败，请刷新后重试。");
+        return;
+      }
+      setListingRows((current) => current.filter((row) => row.id !== listing.id));
+      setSelectedListingIds((current) => current.filter((id) => id !== listing.id));
+      setMessage("已永久删除已售商品记录。");
+    } finally {
+      setDeletingListingId(null);
+    }
   };
 
   return (
@@ -231,6 +260,15 @@ export default function AdminClient({
                   )}
                   {["rejected", "withdrawn"].includes(listing.status) && (
                     <button className="approve" onClick={() => moderate("listing", listing.id, "active")}>重新上架</button>
+                  )}
+                  {listing.status === "sold" && (
+                    <button
+                      className="danger"
+                      disabled={deletingListingId === listing.id}
+                      onClick={() => void deleteSoldListing(listing)}
+                    >
+                      {deletingListingId === listing.id ? "删除中…" : "永久删除"}
+                    </button>
                   )}
                 </div>
               </article>
