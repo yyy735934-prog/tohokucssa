@@ -32,6 +32,8 @@ type MarketItem = {
   note: string;
   status?: string;
   imageUrl?: string | null;
+  soldAt?: string | null;
+  soldTime?: string | null;
   lat?: number | null;
   lng?: number | null;
   createdAt?: string;
@@ -51,6 +53,32 @@ function shuffleMarketItems(items: MarketItem[]) {
 
 function Icon({ children }: { children: React.ReactNode }) {
   return <span className="icon" aria-hidden="true">{children}</span>;
+}
+
+function SoldListingCard({ item }: { item: MarketItem }) {
+  return (
+    <article className="sold-card">
+      <div className={`sold-photo ${item.tone}`}>
+        {item.imageUrl
+          ? <Image className="listing-image" src={item.imageUrl} alt={item.title} fill sizes="160px" unoptimized />
+          : <span>{item.icon}</span>}
+        <b>✓ 已找到新主人</b>
+      </div>
+      <div className="sold-info">
+        <h3>{item.title}</h3>
+        <strong>{item.price === 0 ? "免费" : `¥${item.price.toLocaleString()}`}</strong>
+        <small>⌖ {item.place} · {item.soldTime ?? "最近"}</small>
+      </div>
+    </article>
+  );
+}
+
+function SoldListingStrip({ items }: { items: MarketItem[] }) {
+  return (
+    <div className="sold-strip" tabIndex={0} aria-label="最近成交商品，可横向滚动">
+      {items.map((item) => <SoldListingCard key={item.id} item={item} />)}
+    </div>
+  );
 }
 
 async function readJson<T>(response: Response): Promise<T | null> {
@@ -110,6 +138,10 @@ async function compressListingPhoto(file: File) {
 
 export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Viewer; chatEnabled?: boolean }) {
   const [items, setItems] = useState<MarketItem[]>([]);
+  const [recentlySold, setRecentlySold] = useState<MarketItem[]>([]);
+  const [soldCount, setSoldCount] = useState(0);
+  const [soldSearchResults, setSoldSearchResults] = useState<MarketItem[]>([]);
+  const [soldSearchLoading, setSoldSearchLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部");
   const [selectedItem, setSelectedItem] = useState<MarketItem | null>(null);
@@ -141,11 +173,13 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
     fetch("/api/listings")
       .then(async (response) => {
         if (!response.ok) return null;
-        return (await response.json()) as { listings?: MarketItem[] };
+        return (await response.json()) as { listings?: MarketItem[]; recentlySold?: MarketItem[]; soldCount?: number };
       })
       .then((result) => {
         if (active && result?.listings) {
           setItems(shuffleMarketItems(result.listings));
+          setRecentlySold(result.recentlySold ?? []);
+          setSoldCount(Number(result.soldCount ?? 0));
           const listingId = new URLSearchParams(window.location.search).get("listing");
           const matched = listingId ? result.listings.find((item) => item.id === listingId) : null;
           if (matched) setSelectedItem(matched);
@@ -164,6 +198,37 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
       .then((result) => { if (result?.listings) setFavorites(result.listings.map((item) => item.id)); })
       .catch(() => undefined);
   }, [viewer]);
+
+  useEffect(() => {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      const timer = window.setTimeout(() => {
+        setSoldSearchResults([]);
+        setSoldSearchLoading(false);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+    const controller = new AbortController();
+    const loadingTimer = window.setTimeout(() => setSoldSearchLoading(true), 0);
+    const timer = window.setTimeout(() => {
+      fetch(`/api/listings/history?q=${encodeURIComponent(trimmedQuery)}`, { signal: controller.signal })
+        .then(async (response) => response.ok ? await response.json() as { listings?: MarketItem[] } : null)
+        .then((result) => {
+          if (!controller.signal.aborted) setSoldSearchResults(result?.listings ?? []);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setSoldSearchResults([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSoldSearchLoading(false);
+        });
+    }, 250);
+    return () => {
+      window.clearTimeout(loadingTimer);
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query]);
 
   const filtered = useMemo(() => items.filter((item) =>
     (category === "全部" || item.category === category) &&
@@ -543,9 +608,19 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
         <div><Icon>↻</Icon><span><b>物尽其用</b><small>少一点浪费，多一点连接</small></span></div>
       </section>
 
+      {!query.trim() && soldCount > 0 && recentlySold.length > 0 && (
+        <section className="recent-sold-section" aria-labelledby="recent-sold-title">
+          <div className="recent-sold-heading">
+            <div><span className="kicker">RECENTLY SOLD</span><h2 id="recent-sold-title">好物刚刚完成接力</h2></div>
+            <span className="sold-count">♻️ 已有 {soldCount} 件好物找到新主人</span>
+          </div>
+          <SoldListingStrip items={recentlySold} />
+        </section>
+      )}
+
       <section className="market-section" id="market">
         <div className="section-heading">
-          <div><span className="kicker">JUST IN</span><h2>刚刚上新</h2><p>看看同学们今天分享了什么</p></div>
+          <div><span className="kicker">{query.trim() ? "SEARCH RESULTS" : "JUST IN"}</span><h2>{query.trim() ? "搜索结果 / 当前在售" : "刚刚上新"}</h2><p>{query.trim() ? `先看目前仍在售的「${query.trim()}」` : "看看同学们今天分享了什么"}</p></div>
           <button className="view-all">查看全部 <span>→</span></button>
         </div>
         <div className="filters" role="group" aria-label="商品分类">
@@ -563,7 +638,17 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
             </article>
           ))}
         </div>
-        {filtered.length === 0 && <div className="empty"><span>🪴</span><h3>暂时没有找到</h3><p>换个关键词看看，或者发布求购信息。</p></div>}
+        {query.trim() && soldSearchLoading && filtered.length === 0 && <p className="search-history-loading">正在查找历史成交…</p>}
+        {filtered.length === 0 && !soldSearchLoading && soldSearchResults.length > 0 && (
+          <div className="empty"><span>🪴</span><h3>目前没有在售的「{query.trim()}」</h3><p>最近有同类商品在这里找到新主人，可以参考历史挂牌信息。</p></div>
+        )}
+        {filtered.length === 0 && !soldSearchLoading && !soldSearchResults.length && <div className="empty"><span>🪴</span><h3>暂时没有找到</h3><p>换个关键词看看，或者发布求购信息。</p></div>}
+        {query.trim() && soldSearchResults.length > 0 && (
+          <section className="sold-search-section" aria-labelledby="sold-search-title">
+            <div className="recent-sold-heading"><div><span className="kicker">HISTORY REFERENCE</span><h2 id="sold-search-title">历史成交参考</h2><p>这些同类商品之前已经找到新主人</p></div></div>
+            <SoldListingStrip items={soldSearchResults} />
+          </section>
+        )}
       </section>
 
       <section className="guide-section" id="guide">

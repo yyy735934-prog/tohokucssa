@@ -25,6 +25,11 @@ export function listingToMarketItem(
     status: listing.status,
     isOwner: Boolean(viewerEmail && listing.ownerEmail === viewerEmail),
     createdAt: listing.createdAt,
+    updatedAt: listing.updatedAt,
+    soldAt: listing.soldAt,
+    soldTime: listing.status === "sold"
+      ? formatRelativeTime(listing.soldAt ?? listing.updatedAt)
+      : null,
     lat: listing.latitude === null ? null : listing.latitude / 1_000_000,
     lng: listing.longitude === null ? null : listing.longitude / 1_000_000,
     imageUrl: listing.imageKey
@@ -33,7 +38,7 @@ export function listingToMarketItem(
   };
 }
 
-function formatRelativeTime(value: string) {
+export function formatRelativeTime(value: string) {
   const created = new Date(value).getTime();
   const elapsedMinutes = Math.max(0, Math.floor((Date.now() - created) / 60_000));
   if (elapsedMinutes < 1) return "刚刚";

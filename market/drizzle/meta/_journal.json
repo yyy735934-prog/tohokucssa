@@ -120,6 +120,13 @@
       "when": 1788545721421,
       "tag": "0016_elite_tomorrow_man",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1788747038530,
+      "tag": "0017_violet_praxagora",
+      "breakpoints": true
     }
   ]
 }

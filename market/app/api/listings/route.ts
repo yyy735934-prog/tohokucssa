@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../../db";
 import { listingAnalyses, listings, users } from "../../../db/schema";
 import { getMemberAccess } from "../../../lib/auth";
@@ -25,7 +25,23 @@ export async function GET() {
       .where(eq(listings.status, "active"))
       .orderBy(desc(listings.createdAt))
       .limit(60);
-    const ownerEmails = Array.from(new Set(rows.map((listing) => listing.ownerEmail)));
+    let soldRows: typeof rows = [];
+    let soldCount = 0;
+    try {
+      const [soldCountRow, soldCandidates] = await Promise.all([
+        db.select({ value: count() }).from(listings).where(eq(listings.status, "sold")),
+        db.select()
+          .from(listings)
+          .where(eq(listings.status, "sold"))
+          .orderBy(desc(sql`coalesce(${listings.soldAt}, ${listings.updatedAt})`))
+          .limit(8),
+      ]);
+      soldCount = Number(soldCountRow[0]?.value ?? 0);
+      soldRows = soldCandidates;
+    } catch {
+      // The active market remains usable while an older database is waiting for the soldAt migration.
+    }
+    const ownerEmails = Array.from(new Set([...rows, ...soldRows].map((listing) => listing.ownerEmail)));
     const sellerProfiles = ownerEmails.length
       ? await db.select({
           email: users.email,
@@ -38,10 +54,12 @@ export async function GET() {
       name: publicMemberName(profile.publicNameMode, profile.publicNickname),
       verified: profile.academicStatus === "verified",
     }]));
+    const serialize = (listing: typeof rows[number]) =>
+      listingToMarketItem(listing, member?.email, sellerByEmail.get(listing.ownerEmail));
     return Response.json({
-      listings: rows.map((listing) =>
-        listingToMarketItem(listing, member?.email, sellerByEmail.get(listing.ownerEmail)),
-      ),
+      listings: rows.map(serialize),
+      recentlySold: soldRows.map(serialize),
+      soldCount,
     });
   } catch (error) {
     return Response.json({ error: errorMessage(error) }, { status: 503 });
@@ -164,9 +182,10 @@ export async function PATCH(request: Request) {
   }
 
   const db = await getDb();
+  const now = new Date().toISOString();
   const [updated] = await db
     .update(listings)
-    .set({ status: payload.status, updatedAt: new Date().toISOString() })
+    .set({ status: payload.status, soldAt: payload.status === "sold" ? now : null, updatedAt: now })
     .where(and(eq(listings.id, payload.id), eq(listings.ownerEmail, member.email)))
     .returning();
 

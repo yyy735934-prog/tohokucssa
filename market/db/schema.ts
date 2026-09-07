@@ -129,10 +129,12 @@ export const listings = sqliteTable(
     batchId: text("batch_id").references(() => listingBatches.id),
     batchPosition: integer("batch_position"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    soldAt: text("sold_at"),
     updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   },
   (table) => [
     index("listings_status_created_idx").on(table.status, table.createdAt),
+    index("listings_status_sold_idx").on(table.status, table.soldAt),
     index("listings_owner_idx").on(table.ownerEmail, table.createdAt),
     index("listings_batch_idx").on(table.batchId, table.batchPosition),
   ],
