@@ -43,6 +43,16 @@ async function requireManager(c, eventId) {
   return { session, event }
 }
 
+async function queueConfirmedScheduledChatSync(c, eventId) {
+  const event = await c.env.DB.prepare(
+    "SELECT * FROM events WHERE id = ? AND event_mode = 'gathering' AND event_subtype = 'scheduled'"
+  ).bind(eventId).first()
+  if (!event || !['confirmed', 'in_progress'].includes(event.gathering_state)) return
+  c.executionCtx.waitUntil(
+    safelySyncChat(c.env, { type: 'event', id: eventId }, () => syncEventChatMembers(c.env, event)),
+  )
+}
+
 gatherings.get('/', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT e.id, e.title, e.event_date, e.location, e.content, e.notes, e.capacity, e.lock_at,
@@ -411,6 +421,7 @@ gatherings.post('/:id/join', async (c) => {
   const hostAcceptance = await acceptGatheringHost(c.env, id, session.id, session.email)
   await refreshGatheringState(c.env, id)
   await audit(c.env.DB, 'gathering_join', 'event', id, `${session.email}：${signup.signup_status}`, session.email)
+  await queueConfirmedScheduledChatSync(c, id)
   return c.json({ ok: true, signup, host_accepted: hostAcceptance.ok && hostAcceptance.newlyAccepted })
 })
 
@@ -445,9 +456,7 @@ gatherings.post('/:id/cancel', async (c) => {
   await promoteGeneralWaitlist(c.env.DB, event)
   await refreshGatheringState(c.env, id)
   await audit(c.env.DB, 'gathering_leave', 'event', id, `${session.email}：${cancelType}`, session.email)
-  if (event.chat_group_guid) {
-    c.executionCtx.waitUntil(safelySyncChat(c.env, { type: 'event', id }, () => removeChatMember(c.env, event.chat_group_guid, `account-${session.id}`)))
-  }
+  await queueConfirmedScheduledChatSync(c, id)
   return c.json({ ok: true, cancel_type: cancelType })
 })
 
@@ -495,6 +504,7 @@ gatherings.post('/:id/carpool/assign', async (c) => {
   const content = gatheringCarpoolAssignedEmail(managed.event, passenger, driver)
   c.executionCtx.waitUntil(sendEmail(c.env, { to: passenger.email, ...content }))
   await audit(c.env.DB, 'gathering_carpool_assign', 'event', id, `${passenger.name} → ${driver.name}`, managed.session.email)
+  await queueConfirmedScheduledChatSync(c, id)
   return c.json({ ok: true })
 })
 
@@ -509,6 +519,7 @@ gatherings.post('/:id/carpool/unassign', async (c) => {
   if (!result.meta.changes) return c.json({ ok: false, message: '未找到已分配的乘客' }, 404)
   await refreshGatheringState(c.env, id)
   await audit(c.env.DB, 'gathering_carpool_unassign', 'event', id, String(passenger_signup_id), managed.session.email)
+  await queueConfirmedScheduledChatSync(c, id)
   return c.json({ ok: true })
 })
 

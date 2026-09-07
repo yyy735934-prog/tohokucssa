@@ -55,10 +55,14 @@ signups.post('/', async (c) => {
   const chatUrl = `${origin}/e/${event_id}/chat?token=${encodeURIComponent(chatAccessToken)}`
   const emailContent = signupConfirmEmail(event, { name: nameTrim, email: emailNorm, phone: phoneTrim, data: extra || {} }, chatUrl)
   c.executionCtx.waitUntil(sendEmail(c.env, { to: emailNorm, ...emailContent }))
-  c.executionCtx.waitUntil(safelySyncChat(c.env, { type: 'signup', id: signupId }, async () => {
+  const syncSignupChat = () => safelySyncChat(c.env, { type: 'signup', id: signupId }, async () => {
     const uid = `signup-${signupId}`; await ensureCometChatUser(c.env, uid, nameTrim)
     const guid = await ensureEventChatGroup(c.env, event); await addChatMember(c.env, guid, uid)
-  }))
+  })
+  // assisted 的产品顺序是：本站实名 signup -> 尝试完成入群 -> 再返回外部报名 redirect。
+  // safelySyncChat 会吞掉外部服务故障，因此 CometChat 暂时失败也不会回滚本地 signup。
+  if (event.event_subtype === 'assisted') await syncSignupChat()
+  else c.executionCtx.waitUntil(syncSignupChat())
 
   let redirect = null
   if (event.event_mode === 'standard' && event.event_subtype === 'assisted') {

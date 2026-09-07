@@ -4,6 +4,14 @@ function configured(env) {
   return !!(env.COMETCHAT_APP_ID && env.COMETCHAT_REGION && env.COMETCHAT_REST_API_KEY)
 }
 
+function isAlreadyMemberError(error) {
+  const code = String(error?.code || '')
+  const message = String(error?.message || '')
+  return error?.status === 409
+    || /ALREADY.*(?:MEMBER|JOINED)/i.test(code)
+    || /already\s+(?:a\s+)?member|already\s+joined|already\s+part\s+of/i.test(message)
+}
+
 export async function cometChatRequest(env, path, { method = 'GET', body } = {}) {
   if (!configured(env)) throw new Error('CometChat 尚未配置')
   const response = await fetch(`https://${env.COMETCHAT_APP_ID}.api-${env.COMETCHAT_REGION}.cometchat.io/v3${path}`, {
@@ -61,10 +69,17 @@ export async function addChatMember(env, guid, uid, scope = 'participant') {
   let data
   try {
     data = await cometChatRequest(env, `/groups/${encodeURIComponent(guid)}/members`, {
-      method: 'POST', body: { admins: [], moderators: [], participants: [], usersToBan: [], [key]: [uid] },
+      method: 'POST', body: { [key]: [uid] },
     })
+    const memberResult = data?.[key]?.[uid]
+    if (memberResult?.success === false) {
+      const detail = memberResult?.error?.message || memberResult?.message || memberResult?.error || 'unknown error'
+      const error = new Error(`CometChat add member failed for ${uid}: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`)
+      error.code = memberResult?.error?.code
+      throw error
+    }
   } catch (error) {
-    if (error.status !== 409 && !/already|member/i.test(error.message || '')) throw error
+    if (!isAlreadyMemberError(error)) throw error
     data = { already_member: true }
   }
   await audit(env.DB, 'chat_member_add', 'chat_group', null, `${guid}:${uid}:${scope}`, 'system')
@@ -78,20 +93,43 @@ export async function removeChatMember(env, guid, uid) {
   await audit(env.DB, 'chat_member_remove', 'chat_group', null, `${guid}:${uid}`, 'system')
 }
 
+async function listAllGroupMembers(env, guid) {
+  const members = []
+  const perPage = 1000
+  for (let page = 1; page <= 100; page++) {
+    const data = await cometChatRequest(
+      env,
+      `/groups/${encodeURIComponent(guid)}/members?perPage=${perPage}&page=${page}`,
+    )
+    const batch = Array.isArray(data) ? data : (data?.members || [])
+    members.push(...batch)
+    if (batch.length < perPage) break
+  }
+  return members
+}
+
 async function reconcileGroupMembers(env, guid, desiredMembers) {
   const desired = new Map(desiredMembers.map((member) => [member.uid, member]))
-  const currentData = await cometChatRequest(env, `/groups/${encodeURIComponent(guid)}/members?per_page=100`)
-  const current = Array.isArray(currentData) ? currentData : (currentData?.members || [])
+  const current = await listAllGroupMembers(env, guid)
+  const currentByUid = new Map()
   for (const member of current) {
     const uid = member.uid || member.user?.uid
+    if (uid) currentByUid.set(uid, member)
     if (uid && !desired.has(uid)) await removeChatMember(env, guid, uid)
   }
   for (const member of desired.values()) {
     await ensureCometChatUser(env, member.uid, member.name)
-    await addChatMember(env, guid, member.uid, member.scope)
-    await cometChatRequest(env, `/groups/${encodeURIComponent(guid)}/members/${encodeURIComponent(member.uid)}`, {
-      method: 'PUT', body: { scope: member.scope },
-    })
+    const existing = currentByUid.get(member.uid)
+    if (!existing) {
+      await addChatMember(env, guid, member.uid, member.scope)
+      continue
+    }
+    const existingScope = existing.scope || existing.user?.scope || 'participant'
+    if (existingScope !== member.scope) {
+      await cometChatRequest(env, `/groups/${encodeURIComponent(guid)}/members/${encodeURIComponent(member.uid)}`, {
+        method: 'PUT', body: { scope: member.scope },
+      })
+    }
   }
 }
 
@@ -101,6 +139,9 @@ export async function createCometChatAuthToken(env, uid) {
 }
 
 export async function syncEventChatMembers(env, event) {
+  if (event.event_mode === 'gathering' && event.event_subtype === 'date_choice') {
+    throw new Error('date_choice parent event 不建立永久活动群，请同步具体 occurrence')
+  }
   const guid = await ensureEventChatGroup(env, event)
   const members = []
   if (event.event_mode === 'standard') {
@@ -113,8 +154,10 @@ export async function syncEventChatMembers(env, event) {
     for (const host of hosts.results) members.push({ uid: `account-${host.id}`, name: host.display_name, scope: 'moderator' })
   } else {
     const signups = await env.DB.prepare(
-      "SELECT s.user_id, s.name FROM signups s WHERE s.event_id = ? AND s.signup_status IN ('joined', 'ride_assigned') AND s.user_id IS NOT NULL"
-    ).bind(event.id).all()
+      `SELECT s.user_id, s.name FROM signups s WHERE s.event_id = ?
+       AND s.signup_status IN ('joined', 'ride_assigned') AND s.user_id IS NOT NULL
+       AND s.schedule_reconfirm_status = 'confirmed' AND s.schedule_confirmed_revision = ?`
+    ).bind(event.id, Number(event.schedule_revision || 0)).all()
     for (const signup of signups.results) members.push({ uid: `account-${signup.user_id}`, name: signup.name, scope: 'participant' })
     if (event.created_by) {
       const host = await env.DB.prepare('SELECT id, display_name FROM admin_users WHERE id = ?').bind(event.created_by).first()

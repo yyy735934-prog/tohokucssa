@@ -65,6 +65,15 @@ chat.post('/events/:id/sync', async (c) => {
   const session = await optionalSession(c); if (!session || session.role !== 'reviewer') return c.json({ ok: false, message: '仅管理员可同步群聊' }, 403)
   const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(Number(c.req.param('id'))).first()
   if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
+  if (event.event_mode === 'gathering' && event.event_subtype === 'date_choice') {
+    return c.json({ ok: false, message: '选日期组局必须按具体场次同步，不能为 parent event 建永久群' }, 400)
+  }
+  if (event.event_mode === 'standard' && ['draft', 'pending'].includes(event.status)) {
+    return c.json({ ok: false, message: '正式活动尚未开放，不应创建活动群' }, 409)
+  }
+  if (event.event_mode === 'gathering' && !['confirmed', 'in_progress', 'completed'].includes(event.gathering_state)) {
+    return c.json({ ok: false, message: '定日期组局尚未成局，不应创建活动群' }, 409)
+  }
   const result = await safelySyncChat(c.env, { type: 'event', id: event.id }, () => syncEventChatMembers(c.env, event))
   await audit(c.env.DB, 'chat_sync', 'event', event.id, JSON.stringify(result), session.email)
   return c.json({ ok: result.ok, ...result }, result.ok ? 200 : 502)
@@ -78,7 +87,9 @@ chat.post('/occurrences/:id/sync', async (c) => {
      FROM gathering_occurrences o JOIN events e ON e.id = o.event_id WHERE o.id = ?`
   ).bind(Number(c.req.param('id'))).first()
   if (!occurrence || occurrence.event_subtype !== 'date_choice') return c.json({ ok: false, message: '场次不存在' }, 404)
-  const result = await safelySyncChat(c.env, { type: 'occurrence', id: occurrence.id }, () => syncOccurrenceChatMembers(c.env, occurrence, occurrence))
+  if (!['confirmed', 'in_progress', 'completed'].includes(occurrence.state)) return c.json({ ok: false, message: '该场次尚未成局，不应创建群聊' }, 409)
+  const parentEvent = { id: occurrence.event_id, title: occurrence.title, created_by: occurrence.created_by, event_mode: occurrence.event_mode, event_subtype: occurrence.event_subtype }
+  const result = await safelySyncChat(c.env, { type: 'occurrence', id: occurrence.id }, () => syncOccurrenceChatMembers(c.env, parentEvent, occurrence))
   await audit(c.env.DB, 'chat_sync', 'occurrence', occurrence.id, JSON.stringify(result), session.email)
   return c.json({ ...result })
 })
