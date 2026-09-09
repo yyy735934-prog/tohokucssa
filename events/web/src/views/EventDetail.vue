@@ -1,12 +1,13 @@
 <template>
-  <div class="page">
+  <div class="page event-page">
     <div v-if="!event" class="empty">{{ error || '加载中…' }}</div>
     <template v-else>
       <header class="event-hero">
+        <div class="hero-top"><router-link to="/" aria-label="返回活动列表">‹ 活动</router-link><button type="button" @click="shareEvent">分享</button></div>
         <div class="hero-kicker"><span>{{ event.event_subtype === 'assisted' ? '协助活动' : '学友会活动' }}</span><span>{{ statusText }}</span></div>
         <h1>{{ event.title }}</h1>
         <p>{{ event.event_date }}<span v-if="event.location"> · {{ event.location }}</span></p>
-        <div class="hero-facts"><b>{{ chatToken ? '✓ 已报名' : chatReady ? '活动管理' : statusText }}</b><span><strong>{{ event.signupCount }}</strong>{{ effectiveCap ? ` / ${effectiveCap}` : '' }} 人参加</span></div>
+        <div class="hero-actions"><span>{{ chatToken ? '✓ 已报名' : chatReady ? '活动管理' : statusText }}</span><button type="button" @click="selectTab('people')"><strong>{{ event.signupCount }}</strong>{{ effectiveCap ? ` / ${effectiveCap}` : '' }} 人参加</button></div>
       </header>
       <nav class="event-tabs" aria-label="活动内容">
         <button :class="{ active: activeTab === 'detail' }" @click="selectTab('detail')">详情</button>
@@ -14,25 +15,40 @@
         <button :class="{ active: activeTab === 'people' }" @click="selectTab('people')">参与者</button>
       </nav>
       <section v-show="activeTab === 'detail'" class="event-tab-panel">
-      <!-- Event Info -->
-      <div v-if="event.content || event.notes" class="card mb">
-        <div v-if="event.content" class="content">{{ event.content }}</div>
-        <div v-if="event.notes" class="notes"><b>📌 最新通知</b><small>主办方</small><p>{{ event.notes }}</p></div>
+      <div v-if="event.notes && !announcementRead" class="card mb announcement-card">
+        <div class="announcement-head"><b>📌 最新通知</b><small>主办方</small></div>
+        <p>{{ event.notes }}</p>
+        <div class="announcement-actions"><button type="button" @click="selectTab('discussion')">进入讨论查看上下文 →</button><button type="button" @click="markAnnouncementRead">✓ 我知道了</button></div>
       </div>
 
-      <!-- Event Image -->
       <div v-if="event.image_key" class="card mb event-image-card">
         <img :src="`/api/images/serve/${event.id}?v=${encodeURIComponent(event.image_key)}`" alt="活动图片" class="event-image" />
       </div>
 
-      <!-- Signup count roster -->
+      <div class="card mb event-info-card">
+        <h2>活动信息</h2>
+        <div class="info-grid">
+          <div><b>时间</b><span>{{ event.event_date || '待主办方通知' }}</span></div>
+          <div><b>集合</b><span>{{ event.location || '待主办方通知' }}</span></div>
+          <div><b>人数</b><span>{{ event.signupCount }}{{ effectiveCap ? ` / ${effectiveCap}` : '' }} 人</span></div>
+          <div><b>状态</b><span>{{ statusText }}</span></div>
+        </div>
+        <div v-if="effectiveCap" class="roster-progress"><div class="roster-progress-fill" :style="{ width: pct+'%' }" :class="{ full: isFull }"></div></div>
+      </div>
+
+      <div v-if="event.content" class="card mb about-card">
+        <h2>关于活动</h2>
+        <div class="content">{{ event.content }}</div>
+      </div>
+
+      <div v-if="event.notes && announcementRead" class="card mb compact-notice">
+        <b>📌 主办方通知</b><p>{{ event.notes }}</p><button type="button" @click="announcementRead = false">重新查看</button>
+      </div>
+
       <div class="card mb roster-card">
         <div class="roster-head">
           <h3>已确认参加 <strong>{{ event.signupCount }}</strong> {{ effectiveCap ? `/ ${effectiveCap}` : '' }} 位</h3>
-          <span class="roster-hint">为保护隐私，不显示姓名</span>
-        </div>
-        <div v-if="effectiveCap" class="roster-progress">
-          <div class="roster-progress-fill" :style="{ width: pct+'%' }" :class="{ full: isFull }"></div>
+          <button type="button" @click="selectTab('people')">查看参与者 ›</button>
         </div>
         <p v-if="!event.signupCount" class="roster-empty">还没有人报名，快来成为第一个吧。</p>
         <div v-else class="roster-dots">
@@ -44,7 +60,7 @@
       <div v-if="chatReady" class="card mb discussion-summary-card">
         <div class="summary-head"><div><b>💬 活动讨论</b><small>集合、装备和临时安排都在这里</small></div><span v-if="unreadCount">{{ unreadCount }} 条未读</span></div>
         <div v-if="discussionSummaries.length" class="topic-list">
-          <article v-for="topic in discussionSummaries" :key="topic.id"><b>{{ topic.sender.name }}</b><p>{{ topic.preview }}</p><span v-if="topic.replyCount">↳ {{ topic.moderatorReplied ? '主办方已回复 ✓ · ' : '' }}{{ topic.replyCount }} 条回复<em v-if="topic.unreadReplies"> · {{ topic.unreadReplies }} 条新回复</em></span><small v-if="topic.latestReply">最新：{{ topic.latestReply.sender.name }}：{{ topic.latestReply.preview }}</small></article>
+          <article v-for="topic in discussionSummaries" :key="topic.id" tabindex="0" @click="selectTab('discussion')" @keydown.enter="selectTab('discussion')"><b>{{ topic.sender.name }}</b><p>{{ topic.preview }}</p><span v-if="topic.replyCount">↳ {{ topic.moderatorReplied ? '主办方已回复 ✓ · ' : '' }}{{ topic.replyCount }} 条回复<em v-if="topic.unreadReplies"> · {{ topic.unreadReplies }} 条新回复</em></span><small v-if="topic.latestReply">最新：{{ topic.latestReply.sender.name }}：{{ topic.latestReply.preview }}</small></article>
         </div>
         <p v-else class="summary-empty">讨论区还没有消息，来发起第一个话题吧。</p>
         <button class="event-action" type="button" @click="selectTab('discussion')">进入活动讨论</button>
@@ -173,6 +189,7 @@
           <p v-else>为保护参与者隐私，报名后可在活动讨论中查看共同参与活动的同学。</p>
         </div>
       </section>
+      <div v-if="toastMessage" class="event-toast" role="status">{{ toastMessage }}</div>
       <router-link to="/" class="back-link">← 返回活动列表</router-link>
     </template>
   </div>
@@ -219,9 +236,12 @@ const chatSession = ref(null)
 const chatMembers = ref([])
 const discussionSummaries = ref([])
 const unreadCount = ref(0)
+const announcementRead = ref(false)
+const toastMessage = ref('')
 const listenerId = `event-detail-${eventId}-${Math.random().toString(36).slice(2)}`
 let chatInitPromise = null
 let refreshTimer = null
+let toastTimer = null
 
 const customFields = computed(() => {
   if (!event.value?.custom_fields) return []
@@ -246,6 +266,32 @@ const isFull = computed(() => effectiveCap.value && event.value.signupCount >= e
 const isLocked = computed(() => event.value?.lock_at !== null && event.value?.lock_at !== undefined)
 const chatReady = computed(() => Boolean(chatSession.value?.group))
 const statusText = computed(() => ({ open: '报名中', active: '进行中', closed: '已结束' }[event.value?.status] || event.value?.status || ''))
+
+function showToast(message) {
+  toastMessage.value = message
+  clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => { toastMessage.value = '' }, 1900)
+}
+
+async function shareEvent() {
+  const shareData = { title: event.value?.title || '東北地区中国学友会活动', text: event.value?.title || '', url: window.location.href }
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData)
+      return
+    }
+    await navigator.clipboard.writeText(window.location.href)
+    showToast('活动链接已复制')
+  } catch (error) {
+    if (error?.name !== 'AbortError') showToast('分享失败，请复制浏览器地址')
+  }
+}
+
+function markAnnouncementRead() {
+  announcementRead.value = true
+  localStorage.setItem(`event_announcement_read_${eventId}`, event.value?.notes || '')
+  showToast('公告已标记为已读')
+}
 
 function selectTab(tab) {
   activeTab.value = tab
@@ -303,6 +349,7 @@ onMounted(async () => {
   try {
     const data = await api.getEvent(route.params.id)
     event.value = data.event
+    announcementRead.value = Boolean(data.event.notes) && localStorage.getItem(`event_announcement_read_${eventId}`) === data.event.notes
   } catch (e) { error.value = e.message }
 
   if (auth.isLoggedIn) {
@@ -329,6 +376,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   clearTimeout(refreshTimer)
+  clearTimeout(toastTimer)
   CometChat.removeMessageListener(listenerId)
 })
 
@@ -368,20 +416,21 @@ async function doSignup() {
 </script>
 
 <style scoped>
-.event-page { --event-bg:#f5f6f8; --event-card:#fff; --event-text:#17202a; --event-muted:#6b7280; --event-line:#e8ebef; --event-brand:#16a085; --event-brand-dark:#0f766e; --event-soft:#e9f7f3; --event-warn:#fff7df; color:var(--event-text); }
-.event-hero { margin:-16px -16px 0; padding:27px 22px 24px; background:linear-gradient(135deg,#1d8b76,#1f6f65); color:#fff; }
-.hero-kicker,.hero-facts { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.hero-kicker { font-size:12px; opacity:.85; }.event-hero h1 { margin-top:15px; font-size:29px; line-height:1.2; overflow-wrap:anywhere; }.event-hero>p { margin-top:9px; font-size:14px; line-height:1.55; opacity:.92; }
-.hero-facts { margin-top:22px; padding-top:17px; border-top:1px solid rgba(255,255,255,.22); font-size:14px; }.hero-facts strong { font-size:22px; }
+.event-page { --event-bg:#f5f6f8; --event-card:#fff; --event-text:#17202a; --event-muted:#6b7280; --event-line:#e8ebef; --event-brand:#16a085; --event-brand-dark:#0f766e; --event-soft:#e9f7f3; --event-warn:#fff7df; max-width:470px; min-height:calc(100dvh - 50px); color:var(--event-text); background:var(--event-bg); box-shadow:0 0 40px rgba(0,0,0,.06); }
+.event-hero { margin:-16px -16px 0; padding:18px 18px 20px; background:linear-gradient(135deg,#1d8b76,#1f6f65); color:#fff; }
+.hero-top,.hero-kicker,.hero-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.hero-top a,.hero-top button { padding:8px 10px; border:0; border-radius:12px; background:rgba(255,255,255,.13); color:#fff; font-size:13px; }
+.hero-kicker { margin-top:18px; font-size:12px; opacity:.9; }.hero-kicker span:first-child { padding:5px 9px; border-radius:999px; background:rgba(255,255,255,.16); }.event-hero h1 { margin-top:8px; font-size:26px; line-height:1.25; overflow-wrap:anywhere; }.event-hero>p { margin-top:8px; font-size:14px; line-height:1.55; opacity:.95; }
+.hero-actions { justify-content:flex-start; margin-top:14px; }.hero-actions>span,.hero-actions>button { padding:10px 14px; border:0; border-radius:12px; font-size:13px; font-weight:700; }.hero-actions>span { background:#fff; color:#12685d; }.hero-actions>button { background:rgba(255,255,255,.14); color:#fff; }.hero-actions strong { font-size:14px; }
 .event-tabs { position:sticky; top:49px; z-index:50; margin:0 -16px 16px; padding:0 16px; display:grid; grid-template-columns:repeat(3,1fr); background:#fff; border-bottom:1px solid var(--event-line); }
 .event-tabs button { min-width:0; padding:15px 4px 12px; border:0; border-bottom:3px solid transparent; background:transparent; color:var(--event-muted); font-size:14px; font-weight:700; white-space:nowrap; }.event-tabs button.active { border-bottom-color:var(--event-brand); color:var(--event-brand-dark); }.event-tabs button span { min-width:18px; height:18px; padding:0 5px; display:inline-grid; place-items:center; border-radius:9px; background:#e34a42; color:#fff; font-size:10px; }
-.event-tab-panel { min-width:0; }.discussion-summary-card { border:1px solid #dbece7; }.summary-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }.summary-head b,.summary-head small { display:block; }.summary-head b { font-size:17px; }.summary-head small { margin-top:4px; color:var(--event-muted); font-size:12px; }.summary-head>span { flex:0 0 auto; padding:5px 8px; border-radius:999px; background:#fff0ef; color:#c33d35; font-size:12px; font-weight:700; }
-.topic-list { margin-top:14px; }.topic-list article { padding:13px 0; border-top:1px solid var(--event-line); }.topic-list article>b { font-size:13px; }.topic-list p { margin-top:3px; display:-webkit-box; overflow:hidden; font-size:14px; line-height:1.5; -webkit-box-orient:vertical; -webkit-line-clamp:2; }.topic-list span,.topic-list small { display:block; margin-top:5px; overflow:hidden; color:var(--event-brand-dark); font-size:12px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }.topic-list small { color:var(--event-muted); font-weight:400; }.topic-list em { font-style:normal; }.summary-empty,.discussion-locked p,.people-card>p { margin:14px 0; color:var(--event-muted); font-size:14px; line-height:1.65; }.event-action,.discussion-locked button { width:100%; margin-top:13px; padding:11px; border:0; border-radius:10px; background:var(--event-brand); color:#fff; font-weight:700; }.discussion-locked button { background:var(--event-line); color:var(--event-muted); }
+.event-tab-panel { min-width:0; }.event-tab-panel>.card { border-radius:18px; box-shadow:0 3px 10px rgba(15,23,42,.03); }.announcement-card { border-color:#f0dfad; background:linear-gradient(180deg,#fffaf0,#fff); }.announcement-head { display:flex; justify-content:space-between; gap:10px; }.announcement-head b { font-size:14px; }.announcement-head small { color:#876b17; font-size:12px; }.announcement-card>p { margin-top:8px; white-space:pre-wrap; font-size:14px; line-height:1.55; }.announcement-actions { margin-top:10px; display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; }.announcement-actions button,.compact-notice button { padding:0; border:0; background:transparent; color:#8a6c13; font-size:12px; font-weight:700; }.event-info-card h2,.about-card h2 { margin-bottom:10px; font-size:15px; }.info-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }.info-grid>div { min-width:0; padding:12px; border-radius:14px; background:#f8fafb; }.info-grid b,.info-grid span { display:block; }.info-grid b { font-size:13px; }.info-grid span { margin-top:3px; overflow-wrap:anywhere; color:var(--event-muted); font-size:12px; line-height:1.45; }.compact-notice { border-color:#d8eee8; background:var(--event-soft); }.compact-notice p { margin:8px 0; white-space:pre-wrap; color:var(--event-muted); font-size:13px; line-height:1.55; }.discussion-summary-card { border:1px solid #dbece7; }.summary-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }.summary-head b,.summary-head small { display:block; }.summary-head b { font-size:17px; }.summary-head small { margin-top:4px; color:var(--event-muted); font-size:12px; }.summary-head>span { flex:0 0 auto; padding:5px 8px; border-radius:999px; background:#fff0ef; color:#c33d35; font-size:12px; font-weight:700; }
+.topic-list { margin-top:14px; }.topic-list article { margin-top:8px; padding:11px 12px; border:1px solid #e3e9e7; border-radius:14px; background:#fbfdfc; cursor:pointer; }.topic-list article:focus-visible { outline:2px solid var(--event-brand); outline-offset:2px; }.topic-list article>b { font-size:13px; }.topic-list p { margin-top:3px; display:-webkit-box; overflow:hidden; font-size:14px; line-height:1.5; -webkit-box-orient:vertical; -webkit-line-clamp:2; }.topic-list span,.topic-list small { display:block; margin-top:5px; overflow:hidden; color:var(--event-brand-dark); font-size:12px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }.topic-list small { color:var(--event-muted); font-weight:400; }.topic-list em { font-style:normal; }.summary-empty,.discussion-locked p,.people-card>p { margin:14px 0; color:var(--event-muted); font-size:14px; line-height:1.65; }.event-action,.discussion-locked button { width:100%; margin-top:13px; padding:11px; border:0; border-radius:12px; background:var(--event-brand); color:#fff; font-weight:700; }.discussion-locked button { background:var(--event-line); color:var(--event-muted); }
 .people-card h2 { font-size:18px; }.people-list { margin-top:14px; }.people-list article { min-width:0; padding:11px 0; display:grid; grid-template-columns:38px minmax(0,1fr) auto; align-items:center; gap:10px; border-top:1px solid var(--event-line); }.people-list article>span { width:38px; height:38px; display:grid; place-items:center; border-radius:50%; background:var(--event-soft); color:var(--event-brand-dark); font-weight:700; }.people-list b { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.people-list em { padding:4px 7px; border-radius:999px; background:#f3f5f4; color:var(--event-muted); font-size:11px; font-style:normal; }.discussion-enter { margin-top:20px; background:var(--event-brand); }
 .mb { margin-bottom: 16px; }
 .title { font-size: 22px; font-weight: 700; flex: 1; min-width: 0; overflow-wrap: break-word; }
 .meta { font-size: 14px; color: var(--c-text-2); margin-top: 6px; }
-.content { white-space: pre-wrap; font-size: 15px; margin-top: 12px; line-height: 1.6; }
+.content { white-space: pre-wrap; color:var(--event-muted); font-size: 14px; line-height: 1.65; }
 .notes {
   margin-top: 12px; padding: 14px; background: var(--event-soft); border-radius: 14px;
 }
@@ -414,6 +463,7 @@ async function doSignup() {
 .roster-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
 .roster-head h3 { font-size: 15px; font-weight: 600; margin: 0; }
 .roster-head strong { color: var(--c-primary); }
+.roster-head button { padding:0; border:0; background:transparent; color:var(--event-brand-dark); font-size:12px; font-weight:700; }
 .roster-hint { font-size: 12px; color: var(--c-text-3); }
 .roster-progress {
   height: 6px; background: var(--c-border); border-radius: 3px;
@@ -434,6 +484,7 @@ async function doSignup() {
 }
 .roster-more { font-size: 12px; color: var(--c-text-3); margin-left: 2px; }
 .label-hint { font-weight: 400; font-size: 12px; color: var(--c-text-3); }
-@media (min-width:641px) { .event-page { max-width:760px; }.event-hero { margin-top:0; border-radius:18px; }.event-tabs { top:0; margin:0 0 16px; border-radius:0 0 14px 14px; } }
+.event-toast { position:fixed; left:50%; bottom:88px; z-index:600; transform:translateX(-50%); padding:10px 14px; border-radius:999px; background:#111827; color:#fff; font-size:13px; white-space:nowrap; box-shadow:0 8px 30px rgba(0,0,0,.18); }
+@media (min-width:641px) { .event-hero { margin-top:0; border-radius:18px 18px 0 0; }.event-tabs { top:0; margin:0 0 16px; border-radius:0 0 14px 14px; } }
 @media (max-width:360px) { .event-hero h1 { font-size:25px; }.event-tabs { padding:0 8px; }.event-tabs button { font-size:13px; }.people-list article { grid-template-columns:34px minmax(0,1fr) auto; }.people-list article>span { width:34px; height:34px; } }
 </style>

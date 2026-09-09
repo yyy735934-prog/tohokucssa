@@ -9,11 +9,20 @@ const chatLib = await readFile(new URL('../web/src/lib/event-chat.js', import.me
 const signups = await readFile(new URL('../worker/routes/signups.js', import.meta.url), 'utf8')
 
 test('formal event page integrates detail, discussion and participants without the floating entry', () => {
+  assert.match(detail, /class="page event-page"/)
   assert.match(detail, /activeTab === 'detail'/)
   assert.match(detail, /activeTab === 'discussion'/)
   assert.match(detail, /activeTab === 'people'/)
   assert.doesNotMatch(detail, /FloatingChatEntry/)
   assert.match(detail, /EventDiscussion/)
+})
+
+test('demo interactions use production data and browser capabilities', () => {
+  assert.match(detail, /navigator\.share/)
+  assert.match(detail, /navigator\.clipboard\.writeText/)
+  assert.match(detail, /event_announcement_read_/)
+  assert.match(detail, /@click="selectTab\('people'\)"/)
+  assert.match(detail, /@click="selectTab\('discussion'\)"/)
 })
 
 test('discussion summaries and participant roles come from native CometChat APIs', () => {
