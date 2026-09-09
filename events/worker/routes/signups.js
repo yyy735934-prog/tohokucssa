@@ -52,7 +52,7 @@ signups.post('/', async (c) => {
 
   const signupId = result.meta.last_row_id
   const origin = new URL(c.req.url).origin
-  const chatUrl = `${origin}/e/${event_id}?tab=discussion&token=${encodeURIComponent(chatAccessToken)}`
+  const chatUrl = `${origin}/e/${event_id}/chat?token=${encodeURIComponent(chatAccessToken)}`
   const emailContent = signupConfirmEmail(event, { name: nameTrim, email: emailNorm, phone: phoneTrim, data: extra || {} }, chatUrl)
   c.executionCtx.waitUntil(sendEmail(c.env, { to: emailNorm, ...emailContent }))
   const syncSignupChat = () => safelySyncChat(c.env, { type: 'signup', id: signupId }, async () => {
@@ -352,7 +352,7 @@ signups.post('/manual', async (c) => {
 
   const fullEvent = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(event_id).first()
   if (fullEvent) {
-    const chatUrl = `${new URL(c.req.url).origin}/e/${event_id}?tab=discussion&token=${encodeURIComponent(chatAccessToken)}`
+    const chatUrl = `${new URL(c.req.url).origin}/e/${event_id}/chat?token=${encodeURIComponent(chatAccessToken)}`
     const emailContent = signupConfirmEmail(fullEvent, { name: nameTrim, email: emailNorm, phone: phoneTrim, data: extra || {} }, chatUrl)
     c.executionCtx.waitUntil(sendEmail(c.env, { to: emailNorm, ...emailContent }))
     c.executionCtx.waitUntil(safelySyncChat(c.env, { type: 'signup', id: result.meta.last_row_id }, async () => {
