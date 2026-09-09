@@ -9,21 +9,23 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { CometChatMessages, CometChatUIKit, UIKitSettingsBuilder } from '@cometchat/chat-uikit-vue'
 import { CometChat } from '@cometchat/chat-sdk-javascript'
 import '@cometchat/chat-uikit-vue/dist/style.css'
 import { api } from '../api.js'
 
-const route = useRoute(); const loading = ref(true); const error = ref(''); const group = ref(null)
+const route = useRoute(); const router = useRouter(); const loading = ref(true); const error = ref(''); const group = ref(null)
 const isGathering = computed(() => route.path.startsWith('/g/'))
 const backPath = computed(() => `${isGathering.value ? '/g/' : '/e/'}${route.params.id}`)
 
 onMounted(async () => {
+  if (!isGathering.value) {
+    if (route.query.token) localStorage.setItem(`event_chat_access_${route.params.id}`, String(route.query.token))
+    await router.replace({ path: `/e/${route.params.id}`, query: { tab: 'discussion' } })
+    return
+  }
   try {
-    if (!isGathering.value && route.query.token) {
-      localStorage.setItem(`event_chat_access_${route.params.id}`, String(route.query.token))
-    }
     const data = await api.chatSession({
       event_id: Number(route.params.id),
       occurrence_id: route.query.occurrence_id ? Number(route.query.occurrence_id) : undefined,
