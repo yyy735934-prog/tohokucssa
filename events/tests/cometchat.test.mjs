@@ -70,3 +70,17 @@ test('addChatMember does not hide per-user membership failures', async (t) => {
     /validation failed/,
   )
 })
+
+test('addChatMember treats an existing member with the same scope as success', async (t) => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    data: { moderators: { 'account-6': { success: false, error: { message: 'Member already has the same scope moderator.' } } } },
+  }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  const result = await addChatMember(env(), 'event-596', 'account-6', 'moderator')
+  assert.deepEqual(result, { already_member: true })
+})
