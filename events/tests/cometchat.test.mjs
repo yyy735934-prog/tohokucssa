@@ -70,3 +70,16 @@ test('addChatMember does not hide per-user membership failures', async (t) => {
     /validation failed/,
   )
 })
+
+test('addChatMember accepts CometChat same-scope response for an existing member', async (t) => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    data: { participants: { 'signup-7': { success: false, error: { message: 'Member already has the same scope participant.' } } } },
+  }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
+  t.after(() => { globalThis.fetch = originalFetch })
+
+  await assert.doesNotReject(() => addChatMember(env(), 'event-1', 'signup-7'))
+})

@@ -9,7 +9,7 @@ function isAlreadyMemberError(error) {
   const message = String(error?.message || '')
   return error?.status === 409
     || /ALREADY.*(?:MEMBER|JOINED)/i.test(code)
-    || /already\s+(?:a\s+)?member|already\s+joined|already\s+part\s+of/i.test(message)
+    || /already\s+(?:a\s+)?member|already\s+joined|already\s+part\s+of|member\s+already\s+has\s+the\s+same\s+scope/i.test(message)
 }
 
 export async function cometChatRequest(env, path, { method = 'GET', body } = {}) {
