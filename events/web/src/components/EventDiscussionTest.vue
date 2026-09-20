@@ -111,7 +111,8 @@ async function connect() {
       await CometChatUIKit.loginWithAuthToken(data.auth_token)
     }
     if (!alive) return
-    guid = data.guid; group.value = new CometChat.Group(guid)
+    guid = data.guid
+    group.value = await CometChat.getGroup(guid).catch(() => new CometChat.Group(guid))
     CometChat.addMessageListener(listenerId, new CometChat.MessageListener({ onTextMessageReceived: received, onMediaMessageReceived: received, onCustomMessageReceived: received }))
     stage = '获取群组成员'
     const people = await members().catch(() => [])
