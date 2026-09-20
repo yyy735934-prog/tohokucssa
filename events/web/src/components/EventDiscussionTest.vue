@@ -1,7 +1,7 @@
 <template>
   <div class="discussion-host">
     <div v-if="loading" class="discussion-state">正在连接活动讨论…</div>
-    <div v-else-if="error" class="discussion-state">活动讨论暂时无法连接，请稍后再试。<button type="button" @click="connect">重试</button></div>
+    <div v-else-if="error" class="discussion-state">活动讨论暂时无法连接：{{ error }}<button type="button" @click="connect">重试</button></div>
     <template v-else>
       <div v-if="active" class="discussion-head">
         <div v-if="notes" class="notice"><strong>📌 主办方通知</strong><p>{{ notes }}</p></div>
@@ -36,7 +36,7 @@ import { api } from '../api.js'
 
 const props = defineProps({ eventId: { type: Number, required: true }, token: { type: String, default: '' }, sessionData: { type: Object, default: null }, notes: { type: String, default: '' }, eventDate: { type: String, default: '' }, count: { type: Number, default: 0 }, closed: Boolean, active: Boolean })
 const emit = defineEmits(['update'])
-const loading = ref(true), error = ref(false), group = ref(null)
+const loading = ref(true), error = ref(''), group = ref(null)
 const opened = ref(props.active)
 const threadConfig = computed(() => new ThreadedMessagesConfiguration({ hideMessageComposer: props.closed, onClose: () => scheduleRefresh() }))
 const isWechat = /MicroMessenger/i.test(navigator.userAgent)
@@ -97,11 +97,14 @@ function received(message) {
 }
 async function connect() {
   if ((!props.token && !props.sessionData) || !alive) return
-  loading.value = true; error.value = false
+  loading.value = true; error.value = ''
+  let stage = '获取活动群聊会话'
   try {
     const data = props.sessionData || await api.chatSession({ event_id: props.eventId, chat_access_token: props.token })
+    stage = '初始化 CometChat'
     const settings = new UIKitSettingsBuilder().setAppId(data.app_id).setRegion(data.region).setAutoEstablishSocketConnection(true).build()
     await CometChatUIKit.init(settings)
+    stage = '登录 CometChat'
     const logged = await CometChatUIKit.getLoggedinUser()
     if (!logged || logged.getUid() !== data.uid) {
       if (logged) await CometChatUIKit.logout()
@@ -110,10 +113,11 @@ async function connect() {
     if (!alive) return
     guid = data.guid; group.value = new CometChat.Group(guid)
     CometChat.addMessageListener(listenerId, new CometChat.MessageListener({ onTextMessageReceived: received, onMediaMessageReceived: received, onCustomMessageReceived: received }))
+    stage = '获取群组成员'
     const people = await members().catch(() => [])
     emit('update', { people })
     await refresh()
-  } catch { error.value = true }
+  } catch (e) { error.value = `${stage}失败（${e?.message || e?.code || '未知错误'}）` }
   finally { loading.value = false }
 }
 function interact() {
