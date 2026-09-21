@@ -273,9 +273,20 @@ async function doSignup() {
 .form-title { font-size: 17px; font-weight: 600; margin-bottom: 16px; }
 .consent-row {
   display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--c-text-2);
-  margin-top: 16px; cursor: pointer; user-select: none;
+  min-height: 24px; margin: 20px 0 22px; cursor: pointer; user-select: none;
 }
-.consent-row input[type="checkbox"] { width: 16px; height: 16px; margin: 0; flex-shrink: 0; cursor: pointer; }
+.consent-row input[type="checkbox"] {
+  appearance: none; display: grid; place-content: center; width: 18px; height: 18px; margin: 0;
+  flex-shrink: 0; cursor: pointer; border: 1.5px solid #a8b2af; border-radius: 4px; background: #fff;
+}
+.consent-row input[type="checkbox"]::after {
+  content: ''; width: 5px; height: 9px; margin-top: -2px; border: solid #fff; border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0); transition: transform .12s ease;
+}
+.consent-row input[type="checkbox"]:checked { border-color: #16a085; background: #16a085; }
+.consent-row input[type="checkbox"]:checked::after { transform: rotate(45deg) scale(1); }
+.consent-row input[type="checkbox"]:focus-visible { outline: 3px solid #bde8de; outline-offset: 2px; }
+.event-signup-test form.card > .btn[type="submit"] { display: block; width: 100%; margin-top: 0; }
 .consent-row a { color: var(--c-primary); text-decoration: underline; }
 .result-card { text-align: center; padding: 32px 20px; }
 .check-icon {
@@ -315,4 +326,3 @@ async function doSignup() {
 .roster-more { font-size: 12px; color: var(--c-text-3); margin-left: 2px; }
 .label-hint { font-weight: 400; font-size: 12px; color: var(--c-text-3); }
 </style>
-
