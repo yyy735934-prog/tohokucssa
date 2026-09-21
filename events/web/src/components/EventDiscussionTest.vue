@@ -75,7 +75,7 @@ function chineseDateLabel(element) {
   return pattern === 0 ? time : pattern === 2 && difference === 0 ? time : pattern === 3 ? `${date.getMonth() + 1}月${date.getDate()}日 ${time}` : relative
 }
 function localizeDates() {
-  chatShell.value?.querySelectorAll('cometchat-date').forEach(element => {
+  document.querySelectorAll('cometchat-date').forEach(element => {
     const label = chineseDateLabel(element)
     if (label && element.getAttribute('customdatestring') !== label) element.setAttribute('customdatestring', label)
   })
