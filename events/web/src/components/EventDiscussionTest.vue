@@ -9,7 +9,7 @@
         <p v-if="closed" class="archive">本活动已结束 · 讨论已归档<br>历史消息仍可查看</p>
         <div class="chat-head"><div><strong>活动讨论</strong><span>仅参与者可发言</span></div><small>{{ count }} 人参加</small></div>
       </div>
-      <div v-show="active" class="chat-shell" :class="{ closed }" @pointerdown="interact" @focusin="interact">
+      <div ref="chatShell" v-show="active" class="chat-shell" :class="{ closed }" @pointerdown="interact" @focusin="interact">
         <CometChatMessages v-if="opened" :group="group" :hide-message-header="true" :hide-message-composer="closed" :message-list-configuration="messageListConfig" :message-composer-configuration="composerConfig" :threaded-messages-configuration="threadConfig" />
       </div>
       <div v-if="showHint" class="sheet-backdrop" @click.self="dismissHint">
@@ -37,6 +37,7 @@ const props = defineProps({ eventId: { type: Number, required: true }, token: { 
 const emit = defineEmits(['update'])
 const loading = ref(true), error = ref(''), group = ref(null)
 const opened = ref(props.active)
+const chatShell = ref(null)
 const chineseResources = {
   zh: {
     ENTER_YOUR_MESSAGE_HERE: '发消息…', THREAD: '消息回复', REPLY: '条回复', REPLIES: '条回复',
@@ -58,7 +59,26 @@ const hintSeen = ref(!!localStorage.getItem(`event_float_hint_seen_${props.event
 const showHint = ref(false)
 const listenerId = `event-test-${Math.random().toString(36).slice(2)}`
 let guid = '', alive = true, refreshTimer = null
+let dateObserver = null
 const scopes = new Map()
+
+const pad = number => String(number).padStart(2, '0')
+function chineseDateLabel(element) {
+  const date = new Date(Number(element.timestamp) * 1000)
+  if (Number.isNaN(date.getTime())) return ''
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  const today = new Date(), day = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const current = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const difference = Math.round((current - day) / 86400000)
+  const relative = difference === 0 ? '今天' : difference === 1 ? '昨天' : difference > 1 && difference < 7 ? `星期${'日一二三四五六'[date.getDay()]}` : `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
+  return Number(element.pattern) === 0 ? time : Number(element.pattern) === 2 && difference === 0 ? time : Number(element.pattern) === 3 ? `${date.getMonth() + 1}月${date.getDate()}日 ${time}` : relative
+}
+function localizeDates() {
+  chatShell.value?.querySelectorAll('cometchat-date').forEach(element => {
+    const label = chineseDateLabel(element)
+    if (label && element.customDateString !== label) element.customDateString = label
+  })
+}
 
 const value = (item, method, field) => item?.[method]?.() ?? item?.[field]
 const senderName = (message) => value(message, 'getSender', 'sender')?.getName?.() || value(message, 'getSender', 'sender')?.name || '参与者'
@@ -153,8 +173,12 @@ function interact() {
   showHint.value = true
 }
 function dismissHint() { showHint.value = false }
-onMounted(connect)
-onBeforeUnmount(() => { alive = false; clearTimeout(refreshTimer); CometChat.removeMessageListener(listenerId) })
+onMounted(() => {
+  dateObserver = new MutationObserver(() => queueMicrotask(localizeDates))
+  if (chatShell.value) dateObserver.observe(chatShell.value, { childList:true, subtree:true })
+  connect()
+})
+onBeforeUnmount(() => { alive = false; clearTimeout(refreshTimer); dateObserver?.disconnect(); CometChat.removeMessageListener(listenerId) })
 watch(() => props.active, active => { if (active) { opened.value = true; setTimeout(refresh, 600) } else scheduleRefresh() })
 defineExpose({ refresh })
 </script>
