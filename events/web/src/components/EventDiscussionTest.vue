@@ -64,19 +64,20 @@ const scopes = new Map()
 
 const pad = number => String(number).padStart(2, '0')
 function chineseDateLabel(element) {
-  const date = new Date(Number(element.timestamp) * 1000)
+  const date = new Date(Number(element.getAttribute('timestamp') || element.timestamp) * 1000)
   if (Number.isNaN(date.getTime())) return ''
   const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`
   const today = new Date(), day = new Date(date.getFullYear(), date.getMonth(), date.getDate())
   const current = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const difference = Math.round((current - day) / 86400000)
   const relative = difference === 0 ? '今天' : difference === 1 ? '昨天' : difference > 1 && difference < 7 ? `星期${'日一二三四五六'[date.getDay()]}` : `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
-  return Number(element.pattern) === 0 ? time : Number(element.pattern) === 2 && difference === 0 ? time : Number(element.pattern) === 3 ? `${date.getMonth() + 1}月${date.getDate()}日 ${time}` : relative
+  const pattern = Number(element.getAttribute('pattern') ?? element.pattern)
+  return pattern === 0 ? time : pattern === 2 && difference === 0 ? time : pattern === 3 ? `${date.getMonth() + 1}月${date.getDate()}日 ${time}` : relative
 }
 function localizeDates() {
   chatShell.value?.querySelectorAll('cometchat-date').forEach(element => {
     const label = chineseDateLabel(element)
-    if (label && element.customDateString !== label) element.customDateString = label
+    if (label && element.getAttribute('customdatestring') !== label) element.setAttribute('customdatestring', label)
   })
 }
 
