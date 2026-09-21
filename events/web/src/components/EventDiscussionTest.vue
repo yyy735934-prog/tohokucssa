@@ -1,7 +1,7 @@
 <template>
   <div class="discussion-host">
     <div v-if="loading" class="discussion-state">正在连接活动讨论…</div>
-    <div v-else-if="error" class="discussion-state">活动讨论暂时无法连接：{{ error }}<button type="button" @click="connect">重试</button></div>
+    <div v-else-if="error" class="discussion-state">活动讨论暂时无法连接，请稍后再试。<button type="button" @click="connect">重试</button></div>
     <template v-else>
       <div v-if="active" class="discussion-head">
         <div v-if="notes" class="notice"><strong>📌 主办方通知</strong><p>{{ notes }}</p></div>
@@ -118,7 +118,10 @@ async function connect() {
     const people = await members().catch(() => [])
     emit('update', { people })
     await refresh()
-  } catch (e) { error.value = `${stage}失败（${e?.message || e?.code || '未知错误'}）` }
+  } catch (e) {
+    console.warn('活动讨论连接失败', stage, e?.message || e?.code || '未知错误')
+    error.value = '连接失败'
+  }
   finally { loading.value = false }
 }
 function interact() {
