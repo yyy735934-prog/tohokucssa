@@ -1,5 +1,5 @@
 <template>
-  <nav class="nav">
+  <nav v-if="!isEventTest" class="nav">
     <div class="nav-inner">
       <router-link to="/" class="nav-brand">活动平台</router-link>
       <div class="nav-links">
@@ -23,13 +23,14 @@
 </template>
 
 <script setup>
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { auth } from './auth.js'
 import { toasts, showToast } from './lib/toast.js'
 
 const route = useRoute()
 const router = useRouter()
+const isEventTest = computed(() => /^\/e\/[^/]+\/test(?:\/signup)?$/.test(route.path))
 
 watch(() => route.query.google_token, (token) => {
   if (!token) return

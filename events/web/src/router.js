@@ -4,6 +4,7 @@ const routes = [
   { path: '/', component: () => import('./views/Home.vue') },
   { path: '/e/:id', component: () => import('./views/EventDetail.vue') },
   { path: '/e/:id/test', component: () => import('./views/EventDetailTest.vue') },
+  { path: '/e/:id/test/signup', component: () => import('./views/EventSignupTest.vue') },
   { path: '/e/:id/chat', component: () => import('./views/EventChat.vue') },
   { path: '/g/:id', component: () => import('./views/GatheringDetail.vue') },
   { path: '/g/:id/chat', component: () => import('./views/EventChat.vue') },
