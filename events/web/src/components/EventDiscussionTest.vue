@@ -177,7 +177,7 @@ function interact() {
 function dismissHint() { showHint.value = false }
 onMounted(() => {
   dateObserver = new MutationObserver(() => queueMicrotask(localizeDates))
-  if (chatShell.value) dateObserver.observe(chatShell.value, { childList:true, subtree:true })
+  dateObserver.observe(document.body, { childList:true, subtree:true, attributes:true, attributeFilter:['timestamp', 'pattern'] })
   connect()
 })
 onBeforeUnmount(() => { alive = false; clearTimeout(refreshTimer); dateObserver?.disconnect(); CometChat.removeMessageListener(listenerId) })
