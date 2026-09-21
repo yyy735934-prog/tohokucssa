@@ -286,7 +286,13 @@ async function doSignup() {
 .consent-row input[type="checkbox"]:checked { border-color: #16a085; background: #16a085; }
 .consent-row input[type="checkbox"]:checked::after { transform: rotate(45deg) scale(1); }
 .consent-row input[type="checkbox"]:focus-visible { outline: 3px solid #bde8de; outline-offset: 2px; }
-.event-signup-test form.card > .btn[type="submit"] { display: block; width: 100%; margin-top: 0; }
+.event-signup-test form.card > .btn[type="submit"] {
+  display: block; width: 100%; margin-top: 0; border-color: #16a085; background: #16a085; color: #fff;
+  box-shadow: 0 6px 16px rgba(22,160,133,.2);
+}
+.event-signup-test form.card > .btn[type="submit"]:hover:not(:disabled) { border-color: #138f78; background: #138f78; }
+.event-signup-test form.card > .btn[type="submit"]:active:not(:disabled) { border-color: #0f766e; background: #0f766e; }
+.event-signup-test form.card > .btn[type="submit"]:disabled { border-color: #b8d9d1; background: #b8d9d1; color: #fff; box-shadow: none; }
 .consent-row a { color: var(--c-primary); text-decoration: underline; }
 .result-card { text-align: center; padding: 32px 20px; }
 .check-icon {
