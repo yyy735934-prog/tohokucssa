@@ -79,6 +79,14 @@ function localizeDates() {
     const label = chineseDateLabel(element)
     if (label && element.getAttribute('customdatestring') !== label) element.setAttribute('customdatestring', label)
   })
+  document.querySelectorAll('cometchat-text-bubble').forEach(element => {
+    const root = element.shadowRoot
+    if (!root || root.querySelector('[data-event-chat-text]')) return
+    const style = document.createElement('style')
+    style.dataset.eventChatText = 'true'
+    style.textContent = '.cc__text { color: #17202a !important; }'
+    root.append(style)
+  })
 }
 
 const value = (item, method, field) => item?.[method]?.() ?? item?.[field]
