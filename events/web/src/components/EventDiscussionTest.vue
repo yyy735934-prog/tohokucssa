@@ -118,7 +118,9 @@ async function connect() {
     stage = '初始化 CometChat'
     const settings = new UIKitSettingsBuilder().setAppId(data.app_id).setRegion(data.region).setAutoEstablishSocketConnection(true).build()
     await CometChatUIKit.init(settings)
-    CometChatUIKit.Localize.init('zh', chineseResources)
+    CometChatUIKit.Localize.init('zh', {
+      zh: { ...CometChatUIKit.Localize.translations.zh, ...chineseResources.zh }
+    })
     stage = '登录 CometChat'
     const logged = await CometChatUIKit.getLoggedinUser()
     if (!logged || logged.getUid() !== data.uid) {
