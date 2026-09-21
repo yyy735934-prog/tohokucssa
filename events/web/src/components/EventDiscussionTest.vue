@@ -29,7 +29,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { CometChat } from '@cometchat/chat-sdk-javascript'
-import { CometChatLocalize, CometChatMessages, CometChatUIKit, MessageComposerConfiguration, MessageComposerStyle, MessageListConfiguration, MessageListStyle, ThreadedMessagesConfiguration, ThreadedMessagesStyle, UIKitSettingsBuilder } from '@cometchat/chat-uikit-vue'
+import { CometChatMessages, CometChatUIKit, MessageComposerConfiguration, MessageComposerStyle, MessageListConfiguration, MessageListStyle, ThreadedMessagesConfiguration, ThreadedMessagesStyle, UIKitSettingsBuilder } from '@cometchat/chat-uikit-vue'
 import '@cometchat/chat-uikit-vue/dist/style.css'
 import { api } from '../api.js'
 
@@ -49,7 +49,7 @@ const chineseResources = {
     MESSAGE_INFORMATION: '消息详情', CLOSE: '关闭', CANCEL: '取消', YOU: '我', TYPING: '正在输入', IS_TYPING: '正在输入…'
   }
 }
-CometChatLocalize.init('zh', chineseResources)
+CometChatUIKit.Localize.init('zh', chineseResources)
 const composerStyle = new MessageComposerStyle({ background:'#fff', inputBackground:'#f5f7f7', inputBorder:'1px solid #dfe5e4', inputBorderRadius:'20px', textColor:'#17202a', placeHolderTextColor:'#88928f', attachIcontint:'#58746e', emojiIconTint:'#58746e', voiceRecordingIconTint:'#58746e', sendIconTint:'#16a085', dividerTint:'transparent' })
 const composerConfig = new MessageComposerConfiguration({ messageComposerStyle:composerStyle })
 const messageListConfig = new MessageListConfiguration({ showAvatar:true, messageListStyle:new MessageListStyle({ background:'#f8faf9', nameTextColor:'#687570', threadReplyTextColor:'#0f766e', threadReplyIconTint:'#0f766e', TimestampTextColor:'#8a9591', emptyStateTextColor:'#7b8883' }) })
@@ -117,9 +117,9 @@ async function connect() {
   try {
     const data = props.sessionData || await api.chatSession({ event_id: props.eventId, chat_access_token: props.token })
     stage = '初始化 CometChat'
-    CometChatLocalize.init('zh', chineseResources)
     const settings = new UIKitSettingsBuilder().setAppId(data.app_id).setRegion(data.region).setAutoEstablishSocketConnection(true).build()
     await CometChatUIKit.init(settings)
+    CometChatUIKit.Localize.init('zh', chineseResources)
     stage = '登录 CometChat'
     const logged = await CometChatUIKit.getLoggedinUser()
     if (!logged || logged.getUid() !== data.uid) {
