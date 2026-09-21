@@ -10,7 +10,7 @@
         <div class="chat-head"><div><strong>活动讨论</strong><span>仅参与者可发言</span></div><small>{{ count }} 人参加</small></div>
       </div>
       <div v-show="active" class="chat-shell" :class="{ closed }" @pointerdown="interact" @focusin="interact">
-        <CometChatMessages v-if="opened" :group="group" :hide-message-header="true" :hide-message-composer="closed" :threaded-messages-configuration="threadConfig" />
+        <CometChatMessages v-if="opened" :group="group" :hide-message-header="true" :hide-message-composer="closed" :message-list-configuration="messageListConfig" :message-composer-configuration="composerConfig" :threaded-messages-configuration="threadConfig" />
       </div>
       <div v-if="showHint" class="sheet-backdrop" @click.self="dismissHint">
         <div class="hint-sheet" role="dialog" aria-modal="true" aria-label="微信浮窗提示">
@@ -29,7 +29,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { CometChat } from '@cometchat/chat-sdk-javascript'
-import { CometChatMessages, CometChatUIKit, ThreadedMessagesConfiguration, UIKitSettingsBuilder } from '@cometchat/chat-uikit-vue'
+import { CometChatLocalize, CometChatMessages, CometChatUIKit, MessageComposerConfiguration, MessageComposerStyle, MessageListConfiguration, MessageListStyle, ThreadedMessagesConfiguration, ThreadedMessagesStyle, UIKitSettingsBuilder } from '@cometchat/chat-uikit-vue'
 import '@cometchat/chat-uikit-vue/dist/style.css'
 import { api } from '../api.js'
 
@@ -37,7 +37,23 @@ const props = defineProps({ eventId: { type: Number, required: true }, token: { 
 const emit = defineEmits(['update'])
 const loading = ref(true), error = ref(''), group = ref(null)
 const opened = ref(props.active)
-const threadConfig = computed(() => new ThreadedMessagesConfiguration({ hideMessageComposer: props.closed }))
+const chineseResources = {
+  zh: {
+    ENTER_YOUR_MESSAGE_HERE: '发消息…', THREAD: '消息回复', REPLY: '条回复', REPLIES: '条回复',
+    REPLY_TO_THREAD: '回复这条消息', REPLY_IN_THREAD: '回复这条消息', IN_A_THREAD: '在消息回复中',
+    TODAY: '今天', YESTERDAY: '昨天', MEMBERS: '位参与者', MEMBER: '位参与者', PARTICIPANTS: '参与者',
+    ATTACH: '添加', ATTACH_FILE: '文件', ATTACH_IMAGE: '图片', ATTACH_VIDEO: '视频', ATTACH_AUDIO: '语音',
+    STICKER: '贴图', EMOJI: '表情', VOICE_RECORDING: '语音', SEND_MESSAGE: '发送',
+    NO_MESSAGES_FOUND: '还没有消息，来打个招呼吧', NO_REPLIES_FOUND: '还没有回复', NEW_MESSAGE: '新消息', NEW_MESSAGES: '新消息',
+    REACT: '回应', COPY: '复制', EDIT: '编辑', DELETE: '删除', DELETE_MESSAGE: '删除消息', EDIT_MESSAGE: '编辑消息',
+    MESSAGE_INFORMATION: '消息详情', CLOSE: '关闭', CANCEL: '取消', YOU: '我', TYPING: '正在输入', IS_TYPING: '正在输入…'
+  }
+}
+CometChatLocalize.init('zh', chineseResources)
+const composerStyle = new MessageComposerStyle({ background:'#fff', inputBackground:'#f5f7f7', inputBorder:'1px solid #dfe5e4', inputBorderRadius:'20px', textColor:'#17202a', placeHolderTextColor:'#88928f', attachIcontint:'#58746e', emojiIconTint:'#58746e', voiceRecordingIconTint:'#58746e', sendIconTint:'#16a085', dividerTint:'transparent' })
+const composerConfig = new MessageComposerConfiguration({ messageComposerStyle:composerStyle })
+const messageListConfig = new MessageListConfiguration({ showAvatar:true, messageListStyle:new MessageListStyle({ background:'#f8faf9', nameTextColor:'#687570', threadReplyTextColor:'#0f766e', threadReplyIconTint:'#0f766e', TimestampTextColor:'#8a9591', emptyStateTextColor:'#7b8883' }) })
+const threadConfig = computed(() => new ThreadedMessagesConfiguration({ hideMessageComposer: props.closed, messageComposerConfiguration:composerConfig, messageListConfiguration:messageListConfig, threadedMessagesStyle:new ThreadedMessagesStyle({ background:'#f5f6f8', titleColor:'#17202a', titleFont:'700 17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', closeIconTint:'#51635e' }) }))
 const isWechat = /MicroMessenger/i.test(navigator.userAgent)
 const hintSeen = ref(!!localStorage.getItem(`event_float_hint_seen_${props.eventId}`))
 const showHint = ref(false)
@@ -101,6 +117,7 @@ async function connect() {
   try {
     const data = props.sessionData || await api.chatSession({ event_id: props.eventId, chat_access_token: props.token })
     stage = '初始化 CometChat'
+    CometChatLocalize.init('zh', chineseResources)
     const settings = new UIKitSettingsBuilder().setAppId(data.app_id).setRegion(data.region).setAutoEstablishSocketConnection(true).build()
     await CometChatUIKit.init(settings)
     stage = '登录 CometChat'
@@ -143,7 +160,7 @@ defineExpose({ refresh })
 
 <style scoped>
 .discussion-host { min-width:0; }.discussion-state { padding:28px; text-align:center; background:#fff; border-radius:16px; }.discussion-state button { margin-left:12px; }.discussion-head { background:#f5f6f8; }.notice { padding:16px; margin-bottom:12px; border:1px solid #f4e5aa; border-radius:17px; background:#fff7df; white-space:pre-wrap; }.notice>div { display:flex; justify-content:space-between; gap:8px; }.notice span { color:#8a6b10; font-size:12px; }.notice p { margin:8px 0 0; font-size:14px; line-height:1.7; }.archive { padding:12px; margin-bottom:12px; background:#eceff1; border-radius:10px; text-align:center; }.chat-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:15px 16px; border-radius:17px 17px 0 0; background:#fff; border-bottom:1px solid #e8ebef; }.chat-head strong { display:block; font-size:16px; }.chat-head span { display:block; margin-top:2px; color:#6b7280; font-size:11px; }.chat-head small { color:#0f766e; font-size:12px; }.chat-shell { height:min(72vh,720px); min-height:480px; background:#f8faf9; overflow:hidden; border-radius:0 0 17px 17px; }.hint-banner { display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:12px; padding:11px 13px; border:0; border-radius:13px; background:#e9f7f3; color:#0f766e; text-align:left; font-size:12px; }.hint-banner strong { white-space:nowrap; }.sheet-backdrop { position:fixed; inset:0; z-index:200; background:#0008; display:flex; align-items:flex-end; justify-content:center; }.hint-sheet { width:min(100%,430px); max-height:90dvh; overflow:auto; padding:24px 20px max(24px,env(safe-area-inset-bottom)); border-radius:20px 20px 0 0; background:#fff; }.hint-sheet button { display:block; width:100%; padding:12px; margin-top:12px; border:0; border-radius:10px; background:#16a085; color:#fff; }.hint-sheet button.later { background:#f5f6f8; color:#17202a; }
-.chat-shell :deep(.cc-messages-wrapper),.chat-shell :deep(.cc-messages-wrapper__messages),.chat-shell :deep(.cc-messages-wrapper__messages-list),.chat-shell :deep(.cc-messagelist) { background:#f8faf9!important; }.chat-shell :deep(.cc-messages-wrapper__header) { display:none!important; }.chat-shell :deep(.cc-messagelist__wrapper) { padding:10px 6px; }.chat-shell :deep(.cc-messagebubble-wrapper) { padding:4px 8px; }.chat-shell :deep(.cc-messagebubble-wrapper[style*="flex-end"] .cc-messagebubble-wrapper__content>div) { background:#dff4ee!important; border-radius:14px 4px 14px 14px!important; box-shadow:0 2px 8px #17202a0f; }.chat-shell :deep(.cc-messagebubble-wrapper[style*="flex-start"] .cc-messagebubble-wrapper__content>div) { background:#fff!important; border-radius:4px 14px 14px 14px!important; box-shadow:0 2px 8px #17202a0f; }.chat-shell :deep(.cc__messagelist__threadreplies) { color:#0f766e!important; font-weight:700!important; }.chat-shell :deep(.cc-messages-wrapper__composer) { background:#fff!important; border-top:1px solid #e8ebef; padding-bottom:env(safe-area-inset-bottom); }.chat-shell :deep(.cc-messagecomposer-wrapper) { background:#fff!important; }.chat-shell :deep(.messageinput) { background:#f5f7f7!important; border:1px solid #dfe5e4; border-radius:18px!important; }.chat-shell :deep(.cc-threadedmessages-wrapper) { background:#f5f6f8!important; }.chat-shell :deep(.cc-threadedmessages-wrapper__header) { background:#fff!important; }.chat-shell :deep(.cc-threadedmessages-wrapper__close) { min-width:34px; min-height:34px; border-radius:50%; background:#f1f4f3; }
+.chat-shell :deep(.cc-messages-wrapper),.chat-shell :deep(.cc-messages-wrapper__messages),.chat-shell :deep(.cc-messages-wrapper__messages-list),.chat-shell :deep(.cc-messagelist) { background:#f8faf9!important; }.chat-shell :deep(.cc-messages-wrapper__header) { display:none!important; }.chat-shell :deep(.cc-messagelist__wrapper) { padding:14px 8px 10px; }.chat-shell :deep(.cc-messagebubble-wrapper) { padding:5px 8px; }.chat-shell :deep(.cc-messagebubble-wrapper[style*="center"]) { display:none!important; }.chat-shell :deep(.cc-messagebubble-wrapper__avatar:not(.hidden)) { margin:0 3px; }.chat-shell :deep(.cc-messagebubble-wrapper[style*="flex-end"] .cc-messagebubble-wrapper__content>div) { background:#dff4ee!important; border-radius:15px 5px 15px 15px!important; box-shadow:0 2px 8px #17202a0f; }.chat-shell :deep(.cc-messagebubble-wrapper[style*="flex-start"] .cc-messagebubble-wrapper__content>div) { background:#fff!important; border-radius:5px 15px 15px 15px!important; box-shadow:0 2px 8px #17202a0f; }.chat-shell :deep(.cc-messagelist__bubbleheader) { color:#687570!important; font-size:11px!important; }.chat-shell :deep(.cc__messagelist__threadreplies) { margin-top:6px!important; padding:7px 10px!important; border:1px solid #cae4dd; border-radius:10px; background:#f2fbf8!important; color:#0f766e!important; font-weight:700!important; }.chat-shell :deep(.cc-messagelist__date__container) { color:#6b7773!important; background:#edf1f0!important; border-radius:999px!important; box-shadow:none!important; }.chat-shell :deep(.cc-messages-wrapper__composer) { background:#fff!important; border-top:1px solid #e8ebef; padding:10px 11px calc(10px + env(safe-area-inset-bottom)); }.chat-shell :deep(.cc-messagecomposer-wrapper) { background:#fff!important; border-radius:22px; }.chat-shell :deep(.messageinput) { background:#f5f7f7!important; border:1px solid #dfe5e4; border-radius:20px!important; }.chat-shell :deep(.cc-threadedmessages-wrapper) { background:#f5f6f8!important; }.chat-shell :deep(.cc-threadedmessages-wrapper__header) { min-height:58px; background:#fff!important; border-bottom:1px solid #e8ebef; }.chat-shell :deep(.cc-threadedmessages-wrapper__title) { font-weight:700!important; }.chat-shell :deep(.cc-threadedmessages-wrapper__close) { min-width:34px; min-height:34px; border-radius:50%; background:#f1f4f3; }
 .chat-shell.closed :deep(.cc-threadedmessages-wrapper__composer),.chat-shell.closed :deep(.cc-messages-wrapper__composer){display:none!important}
 @media(max-width:640px){.chat-shell {height:calc(100dvh - 225px);min-height:420px}.chat-shell :deep(.cc-messages-wrapper__threadedmessages){position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;z-index:100;background:#fff}.chat-shell :deep(.cc-threadedmessages-wrapper){height:100%!important}.chat-shell :deep(.cc-threadedmessages-wrapper__composer){bottom:env(safe-area-inset-bottom)!important}.chat-shell :deep(.cc__messagelist__threadreplies){color:#0f766e!important;font-weight:700!important}}
 </style>
