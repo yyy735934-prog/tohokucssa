@@ -27,7 +27,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { CometChat } from '@cometchat/chat-sdk-javascript'
 import { CometChatMessages, CometChatUIKit, MessageComposerConfiguration, MessageComposerStyle, MessageListConfiguration, MessageListStyle, ThreadedMessagesConfiguration, ThreadedMessagesStyle, UIKitSettingsBuilder } from '@cometchat/chat-uikit-vue'
 import '@cometchat/chat-uikit-vue/dist/style.css'
@@ -163,6 +163,7 @@ async function connect() {
   finally { loading.value = false }
 }
 function interact() {
+  setTimeout(localizeDates, 250)
   if (!isWechat || !props.active) return
   const eventDay = props.eventDate.slice(0, 10)
   const today = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Tokyo', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date())
@@ -181,6 +182,9 @@ onMounted(() => {
 })
 onBeforeUnmount(() => { alive = false; clearTimeout(refreshTimer); dateObserver?.disconnect(); CometChat.removeMessageListener(listenerId) })
 watch(() => props.active, active => { if (active) { opened.value = true; setTimeout(refresh, 600) } else scheduleRefresh() })
+watch(loading, value => {
+  if (!value) nextTick(() => { localizeDates(); setTimeout(localizeDates, 800) })
+})
 defineExpose({ refresh })
 </script>
 
