@@ -85,6 +85,7 @@ export default function AdminClient({
   const [posterTitle, setPosterTitle] = useState("东北集市 · 本周精选");
   const [creatingPoster, setCreatingPoster] = useState(false);
   const [deletingListingId, setDeletingListingId] = useState<string | null>(null);
+  const [contactingListingId, setContactingListingId] = useState<string | null>(null);
 
   const visibleListings = useMemo(
     () => (filter === "all" ? listingRows : listingRows.filter((listing) => listing.status === filter)),
@@ -174,8 +175,33 @@ export default function AdminClient({
       setListingRows((current) => current.filter((row) => row.id !== listing.id));
       setSelectedListingIds((current) => current.filter((id) => id !== listing.id));
       setMessage("已永久删除已售商品记录。");
+    } catch {
+      setMessage("删除失败，请稍后重试。");
     } finally {
       setDeletingListingId(null);
+    }
+  };
+
+  const contactSellerForReview = async (listing: AdminListing) => {
+    if (listing.status !== "pending") return;
+    setContactingListingId(listing.id);
+    setMessage("");
+    try {
+      const response = await fetch("/api/chat/conversations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ listingId: listing.id, purpose: "moderation" }),
+      });
+      const result = await response.json().catch(() => null) as { id?: string; error?: string } | null;
+      if (!response.ok || !result?.id) {
+        setMessage(result?.error ?? "暂时无法联系卖家，请稍后重试。");
+        return;
+      }
+      window.location.assign(`/messages/${encodeURIComponent(result.id)}?from=admin`);
+    } catch {
+      setMessage("聊天服务暂时不可用，请稍后重试。");
+    } finally {
+      setContactingListingId(null);
     }
   };
 
@@ -248,6 +274,7 @@ export default function AdminClient({
                   )}
                   {listing.status === "pending" && (
                     <>
+                      <button className="review-contact" disabled={contactingListingId === listing.id} onClick={() => void contactSellerForReview(listing)}>{contactingListingId === listing.id ? "正在连接…" : "联系卖家核实"}</button>
                       <button className="approve" onClick={() => moderate("listing", listing.id, "active")}>通过</button>
                       <button onClick={() => moderate("listing", listing.id, "rejected")}>拒绝</button>
                     </>

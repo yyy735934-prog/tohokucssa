@@ -96,10 +96,16 @@ export async function ensureChatIdentity(email: string, config: ChatConfiguratio
   return { userEmail: email, providerUid: uid, publicAlias: alias, authToken, createdAt: existing[0]?.createdAt ?? new Date().toISOString(), updatedAt: new Date().toISOString() };
 }
 
-export async function ensureListingConversation(listingId: string, buyerEmail: string, config: ChatConfiguration) {
+export async function ensureListingConversation(
+  listingId: string,
+  buyerEmail: string,
+  config: ChatConfiguration,
+  options: { moderation?: boolean } = {},
+) {
   const db = await getDb();
   const [listing] = await db.select().from(listings).where(eq(listings.id, listingId)).limit(1);
-  if (!listing || listing.status !== "active") throw new Error("LISTING_UNAVAILABLE");
+  const allowedStatus = options.moderation ? "pending" : "active";
+  if (!listing || listing.status !== allowedStatus) throw new Error("LISTING_UNAVAILABLE");
   if (listing.ownerEmail === buyerEmail) throw new Error("SELF_CHAT");
 
   const prior = await db.select().from(chatConversations).where(and(
@@ -113,13 +119,13 @@ export async function ensureListingConversation(listingId: string, buyerEmail: s
     ensureChatIdentity(buyerEmail, config),
     ensureChatIdentity(listing.ownerEmail, config),
   ]);
-  const id = crypto.randomUUID();
+  const id = `${options.moderation ? "review_" : ""}${crypto.randomUUID()}`;
   const groupId = `tm_${(await digest(`${listing.id}:${buyer.providerUid}:${seller.providerUid}`)).slice(0, 32)}`;
 
   try {
     await cometChatRequest(config, "/groups", {
       method: "POST",
-      body: JSON.stringify({ guid: groupId, name: "匿名交易会话", type: "private", owner: seller.providerUid }),
+      body: JSON.stringify({ guid: groupId, name: options.moderation ? "商品审核核实" : "匿名交易会话", type: "private", owner: seller.providerUid }),
     });
   } catch (error) {
     if (!(error instanceof Error) || !/already|exist|duplicate|409/i.test(error.message)) throw error;

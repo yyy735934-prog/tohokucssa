@@ -25,7 +25,10 @@ export async function GET() {
     id: conversation.id,
     providerGroupId: conversation.providerGroupId,
     role: conversation.buyerEmail === member.email ? "buyer" : "seller",
-    counterpart: conversation.buyerEmail === member.email ? "卖家" : `买家 ${aliasByEmail.get(conversation.buyerEmail) ?? ""}`.trim(),
+    counterpart: conversation.buyerEmail === member.email
+      ? "卖家"
+      : conversation.id.startsWith("review_") ? "平台管理员" : `买家 ${aliasByEmail.get(conversation.buyerEmail) ?? ""}`.trim(),
+    purpose: conversation.id.startsWith("review_") ? "moderation" : "trade",
     listing: listingSummary(listing),
     createdAt: conversation.createdAt,
   })) });
@@ -34,17 +37,20 @@ export async function GET() {
 export async function POST(request: Request) {
   const member = await requireMemberAccess("/");
   if (!canUseMarketplace(member.academicStatus, member.isAdmin)) return Response.json({ error: "完成成员认证后即可联系卖家。" }, { status: 403 });
-  const body = await request.json().catch(() => null) as { listingId?: unknown } | null;
+  const body = await request.json().catch(() => null) as { listingId?: unknown; purpose?: unknown } | null;
   if (typeof body?.listingId !== "string" || body.listingId.length > 100) return Response.json({ error: "商品参数无效。" }, { status: 400 });
+  if (body.purpose !== undefined && body.purpose !== "trade" && body.purpose !== "moderation") return Response.json({ error: "会话用途无效。" }, { status: 400 });
+  const moderation = body.purpose === "moderation";
+  if (moderation && !member.isAdmin) return Response.json({ error: "仅管理员可发起商品审核核实。" }, { status: 403 });
   const config = await getChatConfiguration();
   if (!config) return Response.json({ error: "聊天服务尚未完成配置。" }, { status: 503 });
   try {
-    const conversation = await ensureListingConversation(body.listingId, member.email, config);
+    const conversation = await ensureListingConversation(body.listingId, member.email, config, { moderation });
     return Response.json({ id: conversation.id }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message === "SELF_CHAT") return Response.json({ error: "不能与自己发布的商品发起聊天。" }, { status: 400 });
-    if (message === "LISTING_UNAVAILABLE") return Response.json({ error: "该商品当前不可发起新聊天。" }, { status: 409 });
+    if (message === "LISTING_UNAVAILABLE") return Response.json({ error: body.purpose === "moderation" ? "只有待审核商品可以发起审核核实。" : "该商品当前不可发起新聊天。" }, { status: 409 });
     console.error("chat conversation failed", error);
     return Response.json({ error: "聊天服务暂时不可用，请稍后再试。" }, { status: 502 });
   }

@@ -15,15 +15,18 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   const row = rows[0];
   if (!row) return Response.json({ error: "会话不存在或无权访问。" }, { status: 404 });
   const isBuyer = row.conversation.buyerEmail === member.email;
+  const purpose = row.conversation.id.startsWith("review_") ? "moderation" : "trade";
   let counterpart = "卖家";
   if (!isBuyer) {
     const [identity] = await db.select({ alias: chatIdentities.publicAlias }).from(chatIdentities).where(eq(chatIdentities.userEmail, row.conversation.buyerEmail)).limit(1);
-    counterpart = `买家 ${identity?.alias ?? ""}`.trim();
+    counterpart = purpose === "moderation" ? "平台管理员" : `买家 ${identity?.alias ?? ""}`.trim();
   }
   return Response.json({
     id: row.conversation.id,
     providerGroupId: row.conversation.providerGroupId,
     counterpart,
+    purpose,
+    viewerIsAdmin: member.isAdmin,
     listing: { id: row.listing.id, title: row.listing.title, price: row.listing.price, status: row.listing.status, icon: row.listing.icon, imageUrl: row.listing.imageKey ? `/api/images?key=${encodeURIComponent(row.listing.imageKey)}` : null },
   });
 }
