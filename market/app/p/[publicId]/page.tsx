@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -7,6 +7,7 @@ import { getDb } from "../../../db";
 import { listingPosterItems, listingPosters, listings, users } from "../../../db/schema";
 import { publicMemberName } from "../../../lib/public-identity";
 import BatchPoster, { type PosterItem } from "../../b/[publicId]/BatchPoster";
+import { DEFAULT_SHARE_IMAGE, MARKET_ORIGIN } from "../../../lib/listing-share";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,17 @@ async function findPoster(publicId: string) {
 export async function generateMetadata({ params }: { params: Promise<{ publicId: string }> }): Promise<Metadata> {
   const { publicId } = await params;
   const poster = await findPoster(publicId);
-  return poster ? { title: `${poster.title}｜东北集市`, description: "扫码查看海报内商品的实时状态与详情。" } : { title: "海报不存在" };
+  if (!poster) return { title: "海报不存在" };
+  const db = await getDb();
+  const items = await db.select({ imageKey: listings.imageKey }).from(listingPosterItems)
+    .innerJoin(listings, eq(listingPosterItems.listingId, listings.id))
+    .where(and(eq(listingPosterItems.posterId, poster.id), ne(listings.status, "rejected"))).orderBy(asc(listingPosterItems.position));
+  const title = `${poster.title}｜东北集市`;
+  const description = `共 ${items.length} 件闲置商品 · 查看实时状态与详情`;
+  const url = `${MARKET_ORIGIN}/p/${encodeURIComponent(publicId)}`;
+  const firstImageKey = items.find((item) => item.imageKey)?.imageKey;
+  const image = firstImageKey ? `${MARKET_ORIGIN}/api/images?key=${encodeURIComponent(firstImageKey)}` : DEFAULT_SHARE_IMAGE;
+  return { title, description, alternates: { canonical: url }, openGraph: { type: "website", siteName: "东北集市", title, description, url, images: [{ url: image }] }, twitter: { card: "summary_large_image", title, description, images: [image] } };
 }
 
 const statusText: Record<string, string> = { active: "出售中", pending: "审核中", sold: "已售出", withdrawn: "已下架", rejected: "未通过" };
@@ -70,7 +81,7 @@ export default async function PosterPage({ params }: { params: Promise<{ publicI
               <div className="batch-live-photo">{item.imageKey ? <Image src={`/api/images?key=${encodeURIComponent(item.imageKey)}`} alt={item.title} fill sizes="82px" unoptimized /> : <span>{item.icon}</span>}<i>{String(index + 1).padStart(2, "0")}</i></div>
               <div><span>{item.category}</span><h3>{item.title}</h3><p>{item.description}</p><small>⌖ {item.place}</small></div>
               <strong>{item.price === 0 ? "免费" : `¥${item.price.toLocaleString()}`}</strong>
-              {item.status === "active" ? <Link href={`/?listing=${item.id}`}>查看并联系</Link> : <button disabled>{statusText[item.status] ?? item.status}</button>}
+              {item.status === "active" ? <Link href={`/item/${encodeURIComponent(item.id)}`}>查看并联系</Link> : <button disabled>{statusText[item.status] ?? item.status}</button>}
             </article>
           ))}
         </div>

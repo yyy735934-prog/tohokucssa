@@ -12,6 +12,8 @@ import { isRecentPriceReduction, isReducedPrice } from "../lib/listing-price";
 import PublishLocationMap, { type PublishLocation } from "./PublishLocationMap";
 import PwaInstallPrompt from "./PwaInstallPrompt";
 import MobileNav from "./MobileNav";
+import ShareButton from "./item/[id]/ShareButton";
+import { listingShareUrl, type ShareListing } from "../lib/listing-share";
 
 type Viewer = {
   displayName: string;
@@ -42,6 +44,10 @@ type MarketItem = {
   createdAt?: string;
   isOwner?: boolean;
 };
+
+function marketItemShare(item: MarketItem): ShareListing {
+  return { id:item.id, title:item.title, price:item.price, description:item.note, place:item.place, category:item.category, status:item.status ?? "active", imageUrl:item.imageUrl, icon:item.icon };
+}
 
 const categories = ["全部", ...LISTING_CATEGORIES];
 
@@ -175,6 +181,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
   const [favorites, setFavorites] = useState<string[]>([]);
   const [publishOpen, setPublishOpen] = useState(false);
   const [published, setPublished] = useState(false);
+  const [publishedListing, setPublishedListing] = useState<MarketItem | null>(null);
   const [publicationMessage, setPublicationMessage] = useState("");
   const [notice, setNotice] = useState("");
   const [publishStep, setPublishStep] = useState(1);
@@ -294,6 +301,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
   const resetPublisher = () => {
     setPublishStep(1);
     setPublished(false);
+    setPublishedListing(null);
     setPublicationMessage("");
     setAiLoading(false);
     setPhotoName("");
@@ -392,6 +400,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
       if (result.listing?.status === "active") {
         setItems((current) => shuffleMarketItems([...current, result.listing!]));
       }
+      setPublishedListing(result.listing ?? null);
       setPublished(true);
       setPublicationMessage(result.message ?? "商品信息已提交。");
       setNotice(result.message ?? "已提交审核。");
@@ -428,6 +437,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
         return;
       }
       const dismissedAt = Number(localStorage.getItem("chat-push-prompt-dismissed-at") || 0);
+      // eslint-disable-next-line react-hooks/purity -- evaluated only inside the click handler
       if (Date.now() - dismissedAt > 30 * 24 * 60 * 60 * 1000) {
         let subscription: PushSubscription | null = null;
         if (Notification.permission === "granted") {
@@ -476,6 +486,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
     const listingId = pushPromptListingId;
     setPushPromptListingId(null);
     if (!listingId) return;
+    // eslint-disable-next-line react-hooks/purity -- evaluated only inside the click handler
     if (!enable) localStorage.setItem("chat-push-prompt-dismissed-at", String(Date.now()));
     if (enable && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window) {
       try {
@@ -768,6 +779,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
                   ? "正在连接…"
                   : "联系卖家"}
               </button>
+              <ShareButton compact listing={marketItemShare(selectedItem)} />
             </div>
             <small className="safety-note">请勿提前转账；当面验货确认后再完成交易。</small>
           </div>
@@ -819,7 +831,7 @@ export default function HomeClient({ viewer, chatEnabled = false }: { viewer: Vi
       {publishOpen && <div className="modal-backdrop publish-backdrop" role="presentation" onClick={closePublisher}>
         <section className="publish-modal" role="dialog" aria-modal="true" aria-label="发布闲置" onClick={(e) => e.stopPropagation()}>
           <button className="modal-close" aria-label="关闭发布窗口" onClick={closePublisher}>×</button>
-          {published ? <div className="publish-success"><span>✓</span><h2>提交成功</h2><p>{publicationMessage} 之后可以在“我的发布”中查看状态或标记为已出。</p><button onClick={closePublisher}>完成</button></div> : <>
+          {published && publishedListing ? <div className="publish-success"><span>{publishedListing.status === "active" ? "🎉" : "✓"}</span><h2>{publishedListing.status === "active" ? "发布成功" : "已提交审核"}</h2><p>{publishedListing.status === "active" ? "分享出去，更快找到新主人" : `${publicationMessage} 审核通过后会自动开放完整交易入口。`}</p><div className="publish-share-actions"><ShareButton listing={marketItemShare(publishedListing)} /><a href={listingShareUrl(publishedListing.id)}>查看商品</a><button className="secondary" onClick={closePublisher}>继续逛逛</button></div></div> : <>
             <div className="wizard-header">
               <div className="modal-title"><span className="kicker">AI QUICK LISTING</span><h2>发布闲置</h2></div>
               <ol className="wizard-steps" aria-label="发布进度">

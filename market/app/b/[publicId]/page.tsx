@@ -7,6 +7,7 @@ import { getDb } from "../../../db";
 import { listingBatches, listings, users } from "../../../db/schema";
 import { publicMemberName } from "../../../lib/public-identity";
 import BatchPoster, { type PosterItem } from "./BatchPoster";
+import { DEFAULT_SHARE_IMAGE, MARKET_ORIGIN } from "../../../lib/listing-share";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +22,18 @@ export async function generateMetadata({ params }: { params: Promise<{ publicId:
   const batch = await findBatch(publicId);
   if (!batch) return { title: "批次不存在" };
   const db = await getDb();
-  const pending = await db.select({ id: listings.id }).from(listings)
-    .where(and(eq(listings.batchId, batch.id), eq(listings.status, "pending"))).limit(1);
+  const items = await db.select({ status: listings.status, imageKey: listings.imageKey }).from(listings)
+    .where(and(eq(listings.batchId, batch.id), ne(listings.status, "rejected"))).orderBy(asc(listings.batchPosition));
+  const title = `${batch.title}｜东北集市`;
+  const description = `${batch.place} · 共 ${items.length} 件闲置商品 · 查看实时状态与详情`;
+  const url = `${MARKET_ORIGIN}/b/${encodeURIComponent(publicId)}`;
+  const firstImageKey = items.find((item) => item.imageKey)?.imageKey;
+  const image = firstImageKey ? `${MARKET_ORIGIN}/api/images?key=${encodeURIComponent(firstImageKey)}` : DEFAULT_SHARE_IMAGE;
   return {
-    title: `${batch.title}｜东北集市`,
-    description: `${batch.place}的一批二手物品`,
-    robots: pending.length ? { index: false, follow: false } : { index: true, follow: true },
+    title, description, alternates: { canonical: url },
+    robots: items.some((item) => item.status === "pending") ? { index: false, follow: false } : { index: true, follow: true },
+    openGraph: { type: "website", siteName: "东北集市", title, description, url, images: [{ url: image }] },
+    twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }
 
@@ -80,7 +87,7 @@ export default async function BatchPage({ params }: { params: Promise<{ publicId
               </div>
               <div><span>{item.category}</span><h3>{item.title}</h3><p>{item.description}</p><small>⌖ {item.place}</small></div>
               <strong>{item.price === 0 ? "免费" : `¥${item.price.toLocaleString()}`}</strong>
-              {item.status === "active" ? <Link href={`/?listing=${item.id}`}>查看并联系</Link> : <button disabled>{statusText[item.status] ?? item.status}</button>}
+              {item.status === "active" ? <Link href={`/item/${encodeURIComponent(item.id)}`}>查看并联系</Link> : <button disabled>{statusText[item.status] ?? item.status}</button>}
             </article>
           ))}
         </div>

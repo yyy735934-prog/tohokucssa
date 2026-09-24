@@ -55,7 +55,7 @@ export default function BatchPoster({
   const filename = `${title.replace(/[\\/:*?"<>|]/g, "-") || "东北集市海报"}.png`;
 
   useEffect(() => {
-    void QRCode.toDataURL(window.location.href, { width: 360, margin: 1, color: { dark: "#193d31", light: "#ffffff" } }).then(setQr);
+    void QRCode.toDataURL(window.location.href, { width: 720, margin: 2, errorCorrectionLevel: "H", color: { dark: "#193d31", light: "#ffffff" } }).then(setQr);
     void fetch("/icons/pwa-192.png")
       .then((response) => {
         if (!response.ok) throw new Error("Logo unavailable");
@@ -85,8 +85,11 @@ export default function BatchPoster({
 
   const createPosterFile = async () => {
     if (!posterRef.current) throw new Error("Poster is not ready");
+    await document.fonts.ready;
     await waitForPosterImages();
-    const dataUrl = await toPng(posterRef.current, { pixelRatio: 2, cacheBust: true, backgroundColor: "#f3f0e5" });
+    const renderedWidth = posterRef.current.getBoundingClientRect().width;
+    if (!renderedWidth) throw new Error("Poster is not visible");
+    const dataUrl = await toPng(posterRef.current, { pixelRatio: 2400 / renderedWidth, cacheBust: true, backgroundColor: "#f3f0e5" });
     const blob = await fetch(dataUrl).then((response) => response.blob());
     return new File([blob], filename, { type: "image/png" });
   };
@@ -160,6 +163,16 @@ export default function BatchPoster({
     }
   };
 
+  const sharePage = async () => {
+    setShareNotice("");
+    try {
+      if (navigator.share) await navigator.share({ url: window.location.href });
+      else await copyPosterLink();
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) await copyPosterLink();
+    }
+  };
+
   return (
     <div className="poster-panel">
       <div className="batch-poster-scale">
@@ -197,14 +210,18 @@ export default function BatchPoster({
           className="poster-share"
           type="button"
           disabled={!qr || preparingShare || sharing}
-          aria-label="分享或转发海报"
-          title="分享或转发海报"
+          aria-label="分享海报图片"
+          title="分享海报图片"
           onClick={() => void share()}
         >
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M12 16V3m0 0L7.5 7.5M12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
           </svg>
-          <span>{preparingShare ? "准备中" : sharing ? "分享中" : "分享 / 转发"}</span>
+          <span>{preparingShare ? "准备中" : sharing ? "分享中" : "分享海报"}</span>
+        </button>
+        <button className="poster-share poster-card-share" type="button" aria-label="分享网页快捷卡片" title="分享网页快捷卡片" onClick={() => void sharePage()}>
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 5h14v14H5zM8 9h8M8 12h6M8 15h4" /></svg>
+          <span>分享网页卡片</span>
         </button>
       </div>
       {shareNotice && <div className="poster-share-notice" role="status">{shareNotice}</div>}
