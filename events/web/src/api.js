@@ -1,7 +1,7 @@
 import { auth } from './auth.js'
 
-async function request(method, path, body) {
-  const headers = { 'content-type': 'application/json' }
+async function request(method, path, body, extraHeaders = {}) {
+  const headers = { 'content-type': 'application/json', ...extraHeaders }
   if (auth.token) headers['authorization'] = `Bearer ${auth.token}`
 
   const res = await fetch(`/api${path}`, {
@@ -21,7 +21,10 @@ export const api = {
   getSignupByToken: (token) => request('GET', `/signups/by-token/${token}`),
   checkinByToken: (token) => request('POST', '/signups/checkin-by-token', { token }),
   checkinByEmail: (eventId, email) => request('POST', '/signups/checkin', { event_id: eventId, email }),
-  myEvents: (email) => request('GET', `/participant/my-events?email=${encodeURIComponent(email)}`),
+  myEvents: (lookupToken) => request('GET', '/participant/my-events', undefined, lookupToken ? { 'x-lookup-token': lookupToken } : {}),
+  sendLookupCode: (email) => request('POST', '/participant/lookup-code', { email }),
+  verifyLookupCode: (email, code) => request('POST', '/participant/lookup-verify', { email, code }),
+  lookupLogout: (lookupToken) => request('POST', '/participant/lookup-logout', undefined, { 'x-lookup-token': lookupToken }),
   myCreatedEvents: () => request('GET', '/events'),
   cancelSignup: (token) => request('POST', '/participant/cancel', { token }),
   updateSignup: (token, data) => request('POST', '/participant/update', { token, ...data }),

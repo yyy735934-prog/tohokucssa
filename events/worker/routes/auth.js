@@ -1,18 +1,34 @@
 import { Hono } from 'hono'
+import { getCount, increment, reset, clientIp } from '../lib/ratelimit.js'
 import { hashPassword, verifyPassword } from '../lib/password.js'
 import { createSession, deleteSession, getSession, extractToken } from '../lib/session.js'
 
 const auth = new Hono()
+
+const LOGIN_WINDOW = 15 * 60
+const LOGIN_MAX_PER_EMAIL = 5
+const LOGIN_MAX_PER_IP = 30
 
 // POST /api/auth/login  {email, password}
 auth.post('/login', async (c) => {
   const { email, password } = await c.req.json()
   if (!email || !password) return c.json({ ok: false, message: '请输入邮箱和密码' }, 400)
 
-  const user = await c.env.DB.prepare('SELECT * FROM admin_users WHERE email = ?').bind(email.trim().toLowerCase()).first()
+  const normalized = email.trim().toLowerCase()
+  const kv = c.env.SESSIONS
+  const ip = clientIp(c)
+  if (await getCount(kv, 'login-fail-email', normalized, LOGIN_WINDOW) >= LOGIN_MAX_PER_EMAIL
+    || await getCount(kv, 'login-fail-ip', ip, LOGIN_WINDOW) >= LOGIN_MAX_PER_IP) {
+    return c.json({ ok: false, message: '登录失败次数过多，请 15 分钟后再试' }, 429)
+  }
+
+  const user = await c.env.DB.prepare('SELECT * FROM admin_users WHERE email = ?').bind(normalized).first()
   if (!user || !(await verifyPassword(password, user.password_hash))) {
+    await increment(kv, 'login-fail-email', normalized, LOGIN_WINDOW)
+    await increment(kv, 'login-fail-ip', ip, LOGIN_WINDOW)
     return c.json({ ok: false, message: '邮箱或密码错误' }, 401)
   }
+  await reset(kv, 'login-fail-email', normalized, LOGIN_WINDOW)
 
   const token = await createSession(c.env.SESSIONS, user)
   return c.json({ ok: true, token, email: user.email, role: user.role, is_super: !!user.is_super })

@@ -180,14 +180,35 @@
     <div class="section">
       <h2 class="section-title">参加的活动</h2>
 
-      <!-- Search bar: only for anonymous users -->
-      <form v-if="!auth.isLoggedIn" class="search-bar" @submit.prevent="searchSignups">
-        <input v-model="email" type="email" required placeholder="输入报名邮箱查询" />
-        <button type="submit" class="btn btn-primary btn-sm" :disabled="loading" style="flex-shrink:0">
-          {{ loading ? '查询中…' : '查询' }}
-        </button>
-        <button v-if="savedEmail" type="button" class="btn btn-outline btn-sm" @click="clearSaved" style="flex-shrink:0">换人</button>
-      </form>
+      <!-- Anonymous users prove they own the email with a one-time code -->
+      <template v-if="!auth.isLoggedIn">
+        <div v-if="savedEmail" class="search-bar verified-bar">
+          <span class="verified-email">{{ savedEmail }}</span>
+          <button type="button" class="btn btn-outline btn-sm" @click="clearSaved" style="flex-shrink:0">换邮箱</button>
+        </div>
+        <template v-else>
+          <form v-if="!codeSent" class="search-bar" @submit.prevent="requestCode">
+            <input v-model="email" type="email" required placeholder="输入报名时填写的邮箱" />
+            <button type="submit" class="btn btn-primary btn-sm" :disabled="sendingCode" style="flex-shrink:0">
+              {{ sendingCode ? '发送中…' : '获取验证码' }}
+            </button>
+          </form>
+          <form v-else class="search-bar" @submit.prevent="verifyCode">
+            <input v-model="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required placeholder="6 位验证码" />
+            <button type="submit" class="btn btn-primary btn-sm" :disabled="loading" style="flex-shrink:0">
+              {{ loading ? '验证中…' : '验证并查询' }}
+            </button>
+          </form>
+          <p v-if="codeSent" class="lookup-hint">
+            验证码已发往 {{ email }}（若该邮箱有报名记录）。
+            <button type="button" class="link-btn" :disabled="resendIn > 0 || sendingCode" @click="requestCode">
+              {{ resendIn > 0 ? `${resendIn} 秒后可重发` : '重新发送' }}
+            </button>
+            <button type="button" class="link-btn" @click="resetLookup">换邮箱</button>
+          </p>
+          <p v-if="lookupError" class="lookup-error">{{ lookupError }}</p>
+        </template>
+      </template>
 
       <div v-if="searched && !signups.length" class="empty">
         <p>暂无报名记录</p>
@@ -275,6 +296,14 @@ import { showToast } from '../lib/toast.js'
 
 const email = ref('')
 const savedEmail = ref('')
+const code = ref('')
+const codeSent = ref(false)
+const sendingCode = ref(false)
+const lookupError = ref('')
+const resendIn = ref(0)
+let resendTimer = null
+const LOOKUP_KEY = 'lookup_token'
+function getLookupToken() { try { return localStorage.getItem(LOOKUP_KEY) || '' } catch { return '' } }
 const signups = ref([])
 const createdEvents = ref([])
 const myGatherings = ref([])
@@ -333,12 +362,8 @@ function loadForCurrentUser() {
     syncPendingRequests()
     loadProfile()
   } else {
-    const stored = localStorage.getItem('user_email')
-    if (stored) {
-      email.value = stored
-      savedEmail.value = stored
-      searchSignups()
-    }
+    email.value = localStorage.getItem('user_email') || ''
+    if (getLookupToken()) searchSignups()
   }
 }
 
@@ -393,12 +418,70 @@ async function searchSignups() {
   loading.value = true
   searched.value = true
   try {
-    const data = await api.myEvents(email.value)
+    const data = await api.myEvents(auth.isLoggedIn ? '' : getLookupToken())
     signups.value = data.events
-    localStorage.setItem('user_email', email.value)
-    savedEmail.value = email.value
-  } catch { signups.value = [] }
+    savedEmail.value = data.email || ''
+  } catch {
+    signups.value = []
+    if (!auth.isLoggedIn) {
+      // lookup token expired or revoked: fall back to the verification form
+      localStorage.removeItem(LOOKUP_KEY)
+      savedEmail.value = ''
+      searched.value = false
+    }
+  }
   loading.value = false
+}
+
+function startResendCountdown() {
+  clearInterval(resendTimer)
+  resendIn.value = 60
+  resendTimer = setInterval(() => {
+    resendIn.value -= 1
+    if (resendIn.value <= 0) clearInterval(resendTimer)
+  }, 1000)
+}
+
+async function requestCode() {
+  lookupError.value = ''
+  sendingCode.value = true
+  try {
+    await api.sendLookupCode(email.value)
+    codeSent.value = true
+    code.value = ''
+    startResendCountdown()
+  } catch (err) { lookupError.value = err.message }
+  sendingCode.value = false
+}
+
+async function verifyCode() {
+  lookupError.value = ''
+  loading.value = true
+  try {
+    const data = await api.verifyLookupCode(email.value, code.value)
+    localStorage.setItem(LOOKUP_KEY, data.lookupToken)
+    localStorage.setItem('user_email', data.email)
+    codeSent.value = false
+    code.value = ''
+    loading.value = false
+    await searchSignups()
+    return
+  } catch (err) { lookupError.value = err.message }
+  loading.value = false
+}
+
+function resetLookup() {
+  codeSent.value = false
+  code.value = ''
+  lookupError.value = ''
+  clearInterval(resendTimer)
+  resendIn.value = 0
+}
+
+function revokeLookup() {
+  const t = getLookupToken()
+  if (t) api.lookupLogout(t).catch(() => {})
+  localStorage.removeItem(LOOKUP_KEY)
 }
 
 async function loadCreatedEvents() {
@@ -424,6 +507,8 @@ function gatheringSignupLabel(value) {
 }
 
 function clearSaved() {
+  revokeLookup()
+  resetLookup()
   localStorage.removeItem('user_email')
   localStorage.removeItem('user_name')
   savedEmail.value = ''
@@ -434,6 +519,7 @@ function clearSaved() {
 
 function logout() {
   auth.clear()
+  revokeLookup()
   localStorage.removeItem('user_email')
   localStorage.removeItem('user_name')
   savedEmail.value = ''
@@ -537,6 +623,12 @@ async function cancelSignup(e) {
 
 .search-bar { display: flex; gap: 8px; margin-bottom: 12px; }
 .search-bar input { flex: 1; }
+.verified-bar { align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--c-bg); border-radius: 8px; }
+.verified-email { font-size: 14px; color: var(--c-text-2); overflow-wrap: anywhere; }
+.lookup-hint { font-size: 13px; color: var(--c-text-2); margin: -4px 0 12px; line-height: 1.8; }
+.lookup-error { font-size: 13px; color: var(--c-danger); margin: -4px 0 12px; }
+.link-btn { background: none; border: none; padding: 0 0 0 8px; color: var(--c-primary); font-size: 13px; cursor: pointer; }
+.link-btn:disabled { color: var(--c-text-2); cursor: default; }
 
 .event-list { display: flex; flex-direction: column; gap: 12px; }
 .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }

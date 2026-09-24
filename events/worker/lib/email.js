@@ -432,3 +432,17 @@ export function eventAnnounceEmail(event, signup, subject, message, imageUrl) {
     `),
   }
 }
+
+export function lookupCodeEmail(code) {
+  return {
+    subject: `报名查询验证码：${code}`,
+    html: baseHtml('报名查询验证码', `
+      <h1>你的验证码</h1>
+      <p class="sub">你正在查询自己在活动平台上的报名记录</p>
+      <div class="info" style="text-align:center">
+        <div style="font-size:32px;font-weight:700;letter-spacing:8px">${esc(code)}</div>
+      </div>
+      <p style="font-size:14px;color:#8e8e93">验证码 10 分钟内有效。如果不是你本人操作，请忽略这封邮件，你的信息不会被他人看到。</p>
+    `),
+  }
+}

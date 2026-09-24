@@ -3,6 +3,12 @@ main = "worker/index.js"
 compatibility_date = "2026-09-06"
 workers_dev = true
 
+# Workers Logs: keep console output and uncaught errors from production
+# requests and cron runs, searchable in Dashboard → event-platform → Observability.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [assets]
 directory = "dist"
 binding = "ASSETS"
