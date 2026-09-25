@@ -674,6 +674,69 @@ events.patch('/:id/plan', async (c) => {
   return c.json({ ok: true })
 })
 
+// Normalize user-submitted expense rows; drop empties and cap size
+function normalizeExpenses(raw) {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter(e => e && typeof e.item === 'string' && e.item.trim())
+    .slice(0, 100)
+    .map(e => ({
+      item: e.item.trim().slice(0, 100),
+      amount: Math.max(0, Number(e.amount) || 0),
+      note: typeof e.note === 'string' ? e.note.trim().slice(0, 200) : '',
+    }))
+}
+
+// AI settlement report generation (post-event)
+events.post('/:id/ai-settlement', async (c) => {
+  const session = await requireAuth(c)
+  const id = Number(c.req.param('id'))
+  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
+  if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
+  if (!await canOperateEvent(c.env.DB, event, session)) {
+    return c.json({ ok: false, message: '无权限' }, 403)
+  }
+  if (!['active', 'closed'].includes(event.status)) {
+    return c.json({ ok: false, message: '活动开始后才能生成决算书' }, 400)
+  }
+
+  const { expenses, userInput } = await c.req.json().catch(() => ({}))
+  const expenseList = normalizeExpenses(expenses)
+
+  const gatheringClause = event.event_mode === 'gathering'
+    ? " AND signup_status IN ('joined', 'ride_assigned')"
+    : ''
+  const row = await c.env.DB.prepare(
+    `SELECT COUNT(*) as total, SUM(CASE WHEN checked_in = 1 THEN 1 ELSE 0 END) as checkedIn FROM signups WHERE event_id = ?${gatheringClause}`
+  ).bind(id).first()
+  const stats = { total: row?.total || 0, checkedIn: row?.checkedIn || 0 }
+
+  const { generateSettlement } = await import('../lib/ai.js')
+  try {
+    const settlement = await generateSettlement(c.env, event, stats, expenseList, typeof userInput === 'string' ? userInput.slice(0, 2000) : '')
+    await c.env.DB.prepare('UPDATE events SET settlement = ?, settlement_expenses = ? WHERE id = ?')
+      .bind(settlement, JSON.stringify(expenseList), id).run()
+    return c.json({ ok: true, settlement, expenses: expenseList })
+  } catch (e) {
+    return c.json({ ok: false, message: e.message || 'AI 生成失败' }, 500)
+  }
+})
+
+// Save/update settlement manually
+events.patch('/:id/settlement', async (c) => {
+  const session = await requireAuth(c)
+  const id = Number(c.req.param('id'))
+  const event = await c.env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(id).first()
+  if (!event) return c.json({ ok: false, message: '活动不存在' }, 404)
+  if (!await canOperateEvent(c.env.DB, event, session)) {
+    return c.json({ ok: false, message: '无权限' }, 403)
+  }
+  const { settlement } = await c.req.json().catch(() => ({}))
+  if (typeof settlement !== 'string') return c.json({ ok: false, message: '决算书内容格式错误' }, 400)
+  await c.env.DB.prepare('UPDATE events SET settlement = ? WHERE id = ?').bind(settlement, id).run()
+  return c.json({ ok: true })
+})
+
 function parseEmails(raw) {
   if (!raw) return []
   return [...new Set(

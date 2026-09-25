@@ -124,3 +124,57 @@ export async function generatePlan(env, event, userInput) {
   if (!text) throw new Error('AI 返回为空')
   return text
 }
+
+function buildSettlementPrompt(event, stats, expenses, userInput) {
+  const expenseLines = (expenses || []).filter(e => e.item)
+  const totalExpense = expenseLines.reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+  const expenseTable = expenseLines.length
+    ? expenseLines.map(e => `- ${e.item}：${Number(e.amount) || 0} 円${e.note ? `（${e.note}）` : ''}`).join('\n')
+    : '（无支出记录）'
+  const rate = stats.total ? Math.round(stats.checkedIn / stats.total * 100) : 0
+
+  return `你是东北地区中国学友会的活动决算书（活动总结报告）起草助手。活动已经结束，
+请根据活动信息、实际参加数据和支出明细，生成一份结构完整的活动决算书，供主理人后续修改。
+
+【输出结构】严格按六节：
+一、活动概要  二、参加情况  三、活动实施情况  四、收支决算  五、活动效果与总结  六、问题与改进建议
+
+【已知信息】（直接填入对应位置，不要改动、不要编造）
+标题：${event.title}
+时间：${event.event_date}
+地点：${event.location || '【待补充】'}
+报名人数：${stats.total} 人
+实际签到：${stats.checkedIn} 人（签到率 ${rate}%）
+
+【支出明细】（用于"四、收支决算"，按下列数据制成 Markdown 表格，合计 ${totalExpense} 円，不要改动金额、不要编造新条目）
+${expenseTable}
+
+【活动计划书】（供参考实施内容，对比计划与实际）
+${event.plan ? event.plan.slice(0, 2000) : '（无计划书）'}
+
+【用户补充说明】
+${userInput || '（无额外补充）'}
+
+【重要规则】
+1. 已知信息（标题/时间/地点/人数/金额）直接用，不要编造或改写。
+2. "二、参加情况"写报名人数、签到人数和签到率，可简要评价参与度。
+3. "四、收支决算"用 Markdown 表格列出每笔支出（项目/金额/备注），最后一行写合计。若无支出记录则写「本次活动无经费支出」。
+4. "三、活动实施情况"参考计划书描述实际流程；计划书没有的细节**留空并标注「【待补充】」**，绝不编造。
+5. "五、六"两节按活动类型写通用性总结与改进建议，文风参照计划书风格：客观、简洁、条目化。系统中没有参与者反馈、满意度或问卷数据，**不得声称参与者反馈良好、满意度高等**；需要此类内容时写「参与者反馈：【待补充】」。只能依据上面给出的数据和用户补充说明做评价。
+6. 输出为完整的决算书正文（Markdown 格式），标题格式为「活动决算书（${event.title}）」，不要额外解释。`
+}
+
+export async function generateSettlement(env, event, stats, expenses, userInput) {
+  if (!env.AI) throw new Error('AI 未配置')
+
+  const prompt = buildSettlementPrompt(event, stats, expenses, userInput)
+
+  const res = await env.AI.run('@cf/meta/llama-4-scout-17b-16e-instruct', {
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: 4096,
+  })
+
+  const text = res.response
+  if (!text) throw new Error('AI 返回为空')
+  return text
+}

@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS events (
   status          TEXT    NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'pending', 'open', 'active', 'closed')),
   custom_fields   TEXT    NOT NULL DEFAULT '[]',
   plan            TEXT,
+  settlement      TEXT,
+  settlement_expenses TEXT NOT NULL DEFAULT '[]',
   activity_type   TEXT,
   image_key       TEXT,
   pinned          INTEGER DEFAULT 0,

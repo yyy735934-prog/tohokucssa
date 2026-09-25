@@ -75,6 +75,8 @@ export const api = {
 
   generatePlan: (id, userInput) => request('POST', `/events/${id}/ai-draft`, { userInput }),
   savePlan: (id, plan) => request('PATCH', `/events/${id}/plan`, { plan }),
+  generateSettlement: (id, expenses, userInput) => request('POST', `/events/${id}/ai-settlement`, { expenses, userInput }),
+  saveSettlement: (id, settlement) => request('PATCH', `/events/${id}/settlement`, { settlement }),
 
   requestRole: (role) => request('POST', '/users/request-role', { role }),
   listUsers: () => request('GET', '/users'),

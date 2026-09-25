@@ -262,6 +262,39 @@
       <div v-else-if="event.plan" class="ai-preview" v-html="renderedPlan"></div>
     </div>
 
+    <!-- Settlement Section (post-event) -->
+    <div v-if="['active', 'closed'].includes(event.status)" class="plan-card mb-16">
+      <div class="plan-header">
+        <div class="plan-title-row">
+          <span class="plan-icon">&#128202;</span>
+          <span class="plan-title">活动决算书</span>
+          <span v-if="event.settlement" class="plan-badge">已生成</span>
+          <span v-else class="plan-badge plan-badge-empty">未生成</span>
+        </div>
+        <div class="flex gap-8 flex-wrap">
+          <button v-if="event.settlement && !editingSettlement" class="btn btn-outline btn-sm" @click="startEditSettlement">编辑</button>
+          <button v-if="editingSettlement" class="btn btn-primary btn-sm" @click="saveSettlement" :disabled="busy">保存</button>
+          <button v-if="editingSettlement" class="btn btn-outline btn-sm" @click="editingSettlement = false">取消</button>
+          <button class="btn btn-sm" :class="event.settlement ? 'btn-outline' : 'btn-primary'" @click="openSettlementModal" :disabled="settlementLoading">
+            {{ settlementLoading ? '生成中…' : event.settlement ? '重新生成' : 'AI 生成决算书' }}
+          </button>
+          <button v-if="event.settlement" class="btn btn-outline btn-sm" @click="copySettlement">复制</button>
+          <button v-if="event.settlement" class="btn btn-outline btn-sm" @click="downloadSettlement">下载 .md</button>
+        </div>
+      </div>
+      <div v-if="!event.settlement && !settlementLoading" class="plan-empty">
+        <div class="plan-empty-icon">&#129518;</div>
+        <div class="plan-empty-text">暂无决算书</div>
+        <div class="plan-empty-hint">活动结束后，填入实际支出明细，AI 结合计划书和签到数据自动生成决算书草稿</div>
+      </div>
+      <div v-if="settlementLoading" class="plan-loading">
+        <div class="plan-spinner"></div>
+        <div>AI 正在生成决算书，请稍候…</div>
+      </div>
+      <textarea v-if="editingSettlement" v-model="settlementEditText" rows="20" class="plan-editor"></textarea>
+      <div v-else-if="event.settlement" class="ai-preview" v-html="renderedSettlement"></div>
+    </div>
+
     <div v-if="event.submitter_name && !event.created_by" class="card mb-16" style="border-left:3px solid var(--c-primary)">
       <div class="label" style="margin-bottom:8px">公开申请信息</div>
       <div style="font-size:14px;display:grid;grid-template-columns:auto 1fr;gap:4px 16px">
@@ -501,6 +534,41 @@
     </div>
 
     <EventPosterModal v-if="showPoster" :event="event" @close="showPoster = false" />
+
+    <!-- Settlement input modal -->
+    <div v-if="showSettlementModal" class="modal-overlay" @click.self="showSettlementModal = false">
+      <div class="modal">
+        <h3 class="modal-title">{{ event.settlement ? '重新生成决算书' : 'AI 生成决算书' }}</h3>
+        <p v-if="event.settlement" style="font-size:13px;color:var(--c-danger);margin-bottom:8px">
+          重新生成将覆盖当前已保存的决算书
+        </p>
+        <p style="font-size:13px;color:var(--c-text-2);margin-bottom:12px">
+          AI 会读取活动信息、报名/签到数据和已有计划书。<br>
+          请填入实际支出明细（没有支出可留空）。
+        </p>
+        <div class="field">
+          <label class="label">支出明细</label>
+          <div v-for="(ex, i) in expenseRows" :key="i" class="expense-row">
+            <input v-model="ex.item" placeholder="项目（如：食材）" class="expense-item" />
+            <input v-model="ex.amount" type="number" min="0" placeholder="金额（円）" class="expense-amount" />
+            <input v-model="ex.note" placeholder="备注（选填）" class="expense-note" />
+            <button type="button" class="btn btn-outline btn-sm" @click="expenseRows.splice(i, 1)" :disabled="expenseRows.length === 1">✕</button>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" @click="expenseRows.push({ item: '', amount: '', note: '' })" style="margin-top:8px">+ 添加一行</button>
+          <div v-if="expenseTotal > 0" style="font-size:13px;color:var(--c-text-2);margin-top:8px;text-align:right">合计：{{ expenseTotal.toLocaleString() }} 円</div>
+        </div>
+        <div class="field">
+          <label class="label">补充说明（可选）</label>
+          <textarea v-model="settlementUserInput" rows="3" placeholder="例如：实际到场比报名少了几人，因下雨提前一小时结束"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-outline" @click="showSettlementModal = false">取消</button>
+          <button class="btn btn-primary" @click="generateSettlement" :disabled="settlementLoading">
+            {{ settlementLoading ? '正在生成…' : '开始生成' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Announce modal -->
     <div v-if="showAnnounceModal" class="modal-overlay" @click.self="showAnnounceModal = false">
@@ -807,6 +875,106 @@ const renderedPlan = computed(() => {
     .replace(/【待补充】/g, '<mark style="background:#fef3c7;padding:1px 4px;border-radius:3px">【待补充】</mark>')
     .replace(/\n/g, '<br>')
 })
+
+const showSettlementModal = ref(false)
+const settlementUserInput = ref('')
+const settlementLoading = ref(false)
+const editingSettlement = ref(false)
+const settlementEditText = ref('')
+const expenseRows = ref([{ item: '', amount: '', note: '' }])
+const expenseTotal = computed(() => expenseRows.value.reduce((s, e) => s + (Number(e.amount) || 0), 0))
+function renderMdTables(escaped) {
+  // Convert GitHub-style pipe tables (header row + --- separator) into <table>; input is already HTML-escaped
+  const lines = escaped.split('\n')
+  const out = []
+  const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim())
+  const isSep = (l) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(l)
+  for (let k = 0; k < lines.length; k++) {
+    if (lines[k].includes('|') && k + 1 < lines.length && isSep(lines[k + 1])) {
+      const head = cells(lines[k])
+      const rows = []
+      k += 2
+      while (k < lines.length && lines[k].includes('|') && lines[k].trim()) { rows.push(cells(lines[k])); k++ }
+      k--
+      out.push('<table class="md-table"><thead><tr>' + head.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>'
+        + rows.map(r => '<tr>' + r.map(c => `<td>${c}</td>`).join('') + '</tr>').join('') + '</tbody></table>')
+    } else {
+      out.push(lines[k])
+    }
+  }
+  return out.join('\n')
+}
+
+const renderedSettlement = computed(() => {
+  const src = event.value?.settlement || ''
+  const escaped = src.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return renderMdTables(escaped)
+    .replace(/^={3,}\s*$/gm, '')
+    .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/【待补充】/g, '<mark style="background:#fef3c7;padding:1px 4px;border-radius:3px">【待补充】</mark>')
+    .replace(/\n/g, '<br>')
+    .replace(/<br>(<table)/g, '$1').replace(/(<\/table>)<br>/g, '$1')
+})
+
+function openSettlementModal() {
+  try {
+    const saved = JSON.parse(event.value?.settlement_expenses || '[]')
+    if (saved.length) expenseRows.value = saved.map(e => ({ item: e.item || '', amount: e.amount ?? '', note: e.note || '' }))
+  } catch {}
+  showSettlementModal.value = true
+}
+
+async function generateSettlement() {
+  settlementLoading.value = true
+  showSettlementModal.value = false
+  editingSettlement.value = false
+  const expenses = expenseRows.value
+    .filter(e => e.item)
+    .map(e => ({ item: e.item.trim(), amount: Number(e.amount) || 0, note: (e.note || '').trim() }))
+  try {
+    const data = await api.generateSettlement(event.value.id, expenses, settlementUserInput.value)
+    event.value.settlement = data.settlement
+    event.value.settlement_expenses = JSON.stringify(data.expenses || expenses)
+    showToast('决算书已生成并保存')
+  } catch (e) {
+    showToast(e.message, 'error')
+  }
+  settlementLoading.value = false
+}
+
+function startEditSettlement() {
+  settlementEditText.value = event.value.settlement || ''
+  editingSettlement.value = true
+}
+
+async function saveSettlement() {
+  busy.value = true
+  try {
+    await api.saveSettlement(event.value.id, settlementEditText.value)
+    event.value.settlement = settlementEditText.value
+    editingSettlement.value = false
+    showToast('决算书已保存')
+  } catch (e) { showToast(e.message, 'error') }
+  busy.value = false
+}
+
+function copySettlement() {
+  navigator.clipboard.writeText(event.value.settlement || '')
+  showToast('决算书已复制到剪贴板')
+}
+
+function downloadSettlement() {
+  const blob = new Blob([event.value.settlement || ''], { type: 'text/markdown;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${event.value.title}-决算书.md`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 const isLocked = computed(() => event.value?.lock_at !== null && event.value?.lock_at !== undefined)
 
@@ -1168,6 +1336,23 @@ function copyCheckinLink() {
   width: 100%; font-size: 13px; font-family: monospace; line-height: 1.6;
   padding: 12px; border: 1px solid var(--c-border); border-radius: 8px;
   background: var(--c-bg); resize: vertical;
+}
+
+.expense-row {
+  display: flex; gap: 8px; margin-bottom: 8px; align-items: center;
+}
+.expense-item { flex: 2; min-width: 0; }
+.expense-amount { flex: 1; min-width: 0; }
+.expense-note { flex: 2; min-width: 0; }
+.ai-preview .md-table { border-collapse: collapse; margin: 8px 0; font-size: 13px; line-height: 1.5; }
+.ai-preview .md-table th, .ai-preview .md-table td { border: 1px solid var(--c-border); padding: 6px 12px; text-align: left; }
+.ai-preview .md-table th { background: var(--c-surface, #fff); font-weight: 600; }
+.ai-preview .md-table tr:last-child td { font-weight: 600; }
+@media (max-width: 600px) {
+  .expense-row { flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px dashed var(--c-border); }
+  .expense-item { flex: 1 1 55%; }
+  .expense-amount { flex: 1 1 30%; }
+  .expense-note { flex: 1 1 calc(100% - 56px); }
 }
 
 .info-grid {
