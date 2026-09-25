@@ -23,7 +23,8 @@
 </template>
 
 <script setup>
-import { watch } from 'vue'
+import { watch, onMounted } from 'vue'
+import { api } from './api.js'
 import { useRoute, useRouter } from 'vue-router'
 import { auth } from './auth.js'
 import { toasts, showToast } from './lib/toast.js'
@@ -46,6 +47,16 @@ watch(() => route.query.google_token, (token) => {
   showToast(q.new === '1' ? '注册成功，欢迎加入！' : '登录成功')
   router.replace(route.path)
 }, { immediate: true })
+
+// Confirm a stored login is still valid on the server. Expired logins are
+// cleared by api.js; valid ones pick up any role or name change.
+onMounted(async () => {
+  if (!auth.isLoggedIn || new URLSearchParams(window.location.search).has('google_token')) return
+  try {
+    const me = await api.me()
+    auth.save({ token: auth.token, email: me.email, role: me.role, is_super: me.is_super, display_name: me.display_name, login_method: me.login_method || auth.login_method })
+  } catch {}
+})
 </script>
 
 <style scoped>

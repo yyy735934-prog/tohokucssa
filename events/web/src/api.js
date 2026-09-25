@@ -1,8 +1,22 @@
 import { auth } from './auth.js'
+import { showToast } from './lib/toast.js'
+
+let expiryNotified = false
+function handleExpiredLogin(tokenUsed) {
+  // Another login may have replaced the token while this request was in flight
+  if (auth.token !== tokenUsed) return
+  auth.clear()
+  if (!expiryNotified) {
+    expiryNotified = true
+    showToast('登录已过期，请重新登录', 'error')
+    setTimeout(() => { expiryNotified = false }, 3000)
+  }
+}
 
 async function request(method, path, body, extraHeaders = {}) {
   const headers = { 'content-type': 'application/json', ...extraHeaders }
-  if (auth.token) headers['authorization'] = `Bearer ${auth.token}`
+  const tokenUsed = auth.token
+  if (tokenUsed) headers['authorization'] = `Bearer ${tokenUsed}`
 
   const res = await fetch(`/api${path}`, {
     method,
@@ -10,11 +24,20 @@ async function request(method, path, body, extraHeaders = {}) {
     body: body ? JSON.stringify(body) : undefined
   })
   const data = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }))
+  // A stored login the server no longer recognises: drop it so the page
+  // stops pretending the user is signed in.
+  if (res.status === 401 && tokenUsed && !path.startsWith('/auth/login')) {
+    handleExpiredLogin(tokenUsed)
+    const err = new Error('登录已过期，请重新登录')
+    err.status = 401
+    throw err
+  }
   if (!res.ok || data.ok === false) throw new Error(data.message || '请求失败')
   return data
 }
 
 export const api = {
+  me: () => request('GET', '/auth/me'),
   getEvent: (id) => request('GET', `/events/${id}`),
   listEvents: () => request('GET', '/events?scope=public'),
   signup: (data) => request('POST', '/signups', data),
