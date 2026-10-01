@@ -1,0 +1,8 @@
+<template><div class="page"><div class="card panel"><div v-if="loading">加载中…</div><template v-else-if="item"><h1>活动时间已经发生变化</h1><p>{{ item.name }}，请确认是否仍能参加「{{ item.title }}」。</p><div class="time">当前时间：<strong>{{ item.event_date }}</strong></div><p v-if="message" :class="{ error: failed }">{{ message }}</p><div v-if="!done" class="actions"><button class="btn btn-primary" :disabled="busy" @click="submit('keep')">继续参加</button><button class="btn btn-outline" :disabled="busy" @click="submit('leave')">无法参加</button></div><router-link v-else :to="`/g/${item.event_id}`" class="btn btn-primary">返回活动详情</router-link></template><p v-else class="error">{{ message }}</p></div></div></template>
+<script setup>
+import { onMounted, ref } from 'vue'; import { useRoute } from 'vue-router'; import { api } from '../api.js'
+const route=useRoute(), item=ref(null), loading=ref(true), busy=ref(false), done=ref(false), failed=ref(false), message=ref('')
+onMounted(async()=>{try{item.value=(await api.getReconfirm(route.query.token)).reconfirm}catch(e){message.value=e.message;failed.value=true}loading.value=false})
+async function submit(action){busy.value=true;try{await api.submitReconfirm(route.query.token,action);done.value=true;message.value=action==='keep'?'已确认继续参加。':'已退出本次活动，不会计入普通取消记录。'}catch(e){message.value=e.message;failed.value=true}busy.value=false}
+</script>
+<style scoped>.panel{max-width:620px;margin:40px auto;padding:28px}.panel h1{font-size:22px}.panel p,.time{margin-top:14px}.time{padding:14px;background:var(--c-bg);border-radius:8px}.actions{display:flex;gap:12px;margin-top:22px}.error{color:var(--c-danger)}</style>

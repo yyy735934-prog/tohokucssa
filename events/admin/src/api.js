@@ -1,0 +1,149 @@
+import { auth } from './lib/auth.js'
+
+let _loginAt = 0
+
+async function request(method, path, body, _retry = false) {
+  const headers = { 'content-type': 'application/json' }
+  const token = auth.token
+  if (token) headers['authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`/api${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined
+  })
+
+  if (res.headers.get('content-type')?.includes('text/csv')) return res
+
+  const data = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }))
+  if (res.status === 401 && path !== '/auth/login') {
+    if (!_retry && Date.now() - _loginAt < 5000) {
+      await new Promise(r => setTimeout(r, 800))
+      return request(method, path, body, true)
+    }
+    auth.clear()
+    if (window.__vueRouter) window.__vueRouter.push('/admin/login')
+    throw new Error('登录已过期')
+  }
+  if (path === '/auth/login' && data.ok) _loginAt = Date.now()
+  if (!res.ok || data.ok === false) throw new Error(data.message || '请求失败')
+  return data
+}
+
+export const api = {
+  login: (email, password) => request('POST', '/auth/login', { email, password }),
+  logout: () => request('POST', '/auth/logout'),
+  me: () => request('GET', '/auth/me'),
+  changePassword: (old_password, new_password) => request('POST', '/auth/change-password', { old_password, new_password }),
+  resetPassword: (user_id, new_password) => request('POST', '/auth/reset-password', { user_id, new_password }),
+
+  listEvents: () => request('GET', '/events'),
+  getEvent: (id) => request('GET', `/events/${id}`),
+  createEvent: (data) => request('POST', '/events', data),
+  updateEvent: (id, data) => request('PATCH', `/events/${id}`, data),
+  setSignupLock: (id, locked) => request('POST', `/events/${id}/signup-lock`, { locked }),
+  deleteEvent: (id) => request('DELETE', `/events/${id}`),
+  submitEvent: (id) => request('POST', `/events/${id}/submit`),
+  approveEvent: (id) => request('POST', `/events/${id}/approve`),
+  rejectEvent: (id, reason) => request('POST', `/events/${id}/reject`, { reason }),
+  withdrawEvent: (id) => request('POST', `/events/${id}/withdraw`),
+  activateEvent: (id) => request('POST', `/events/${id}/activate`),
+  deactivateEvent: (id) => request('POST', `/events/${id}/deactivate`),
+  togglePin: (id) => request('POST', `/events/${id}/toggle-pin`),
+  closeEvent: (id) => request('POST', `/events/${id}/close`),
+  duplicateEvent: (id) => request('POST', `/events/${id}/duplicate`),
+
+  listSignups: (event_id) => request('GET', `/signups?event_id=${event_id}`),
+  exportSignups: (event_id, format = 'csv') => request('GET', `/signups/export?event_id=${event_id}&format=${format}`),
+  exportAllEvents: (format = 'csv') => request('GET', `/signups/export-all?format=${format}`),
+  checkinSignup: (id) => request('POST', `/signups/${id}/checkin`),
+  batchCheckin: (event_id) => request('POST', '/signups/batch-checkin', { event_id }),
+  deleteSignup: (id) => request('DELETE', `/signups/${id}`),
+
+  checkinByToken: (token) => request('POST', '/signups/checkin-by-token', { token }),
+  manualSignup: (data) => request('POST', '/signups/manual', data),
+  dashboardStats: () => request('GET', '/events/dashboard-stats'),
+
+  notifyParticipants: (id, message) => request('POST', `/events/${id}/notify`, { message }),
+  announceEvent: (id, data) => request('POST', `/events/${id}/announce`, data),
+  remindParticipants: (id) => request('POST', `/events/${id}/remind`),
+
+  getNotifications: () => request('GET', '/notifications'),
+  getUnreadCount: () => request('GET', '/notifications/unread-count'),
+  markAllRead: () => request('POST', '/notifications/read-all'),
+  markRead: (id) => request('POST', `/notifications/${id}/read`),
+
+  generatePlan: (id, userInput) => request('POST', `/events/${id}/ai-draft`, { userInput }),
+  savePlan: (id, plan) => request('PATCH', `/events/${id}/plan`, { plan }),
+
+  requestRole: (role) => request('POST', '/users/request-role', { role }),
+  listUsers: () => request('GET', '/users'),
+  createUser: (data) => request('POST', '/users', data),
+  updateUser: (id, data) => request('PATCH', `/users/${id}`, data),
+  deleteUser: (id) => request('DELETE', `/users/${id}`),
+
+  listRoleRequests: () => request('GET', '/users/role-requests'),
+  approveRole: (email, role) => request('POST', '/users/approve-role', { email, role }),
+  rejectRole: (email, role) => request('POST', '/users/reject-role', { email, role }),
+  listRoleHistory: () => request('GET', '/users/role-history'),
+  revokeRole: (email, role) => request('POST', '/users/revoke-role', { email, role }),
+  inviteUsers: (emails, role) => request('POST', '/users/invite', { emails, role }),
+  inviteSignup: (eventId, emails) => request('POST', `/events/${eventId}/invite-signup`, { emails }),
+  listEventHostAssignments: (eventId) => request('GET', `/events/${eventId}/host-invites`),
+  inviteEventHosts: (eventId, user_ids) => request('POST', `/events/${eventId}/host-invites`, { user_ids }),
+  removeEventHost: (eventId, userId) => request('DELETE', `/events/${eventId}/host-invites/${userId}`),
+  syncEventChat: (eventId) => request('POST', `/chat/events/${eventId}/sync`),
+  getAuditLogs: (limit = 50) => request('GET', `/events/audit-logs?limit=${limit}`),
+
+  uploadEventImage: async (eventId, file) => {
+    const form = new FormData()
+    form.append('file', file)
+    const headers = {}
+    if (auth.token) headers['authorization'] = `Bearer ${auth.token}`
+    const res = await fetch(`/api/images/upload/${eventId}`, { method: 'POST', headers, body: form })
+    const data = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }))
+    if (!res.ok || data.ok === false) throw new Error(data.message || '上传失败')
+    return data
+  },
+  deleteEventImage: (eventId) => request('DELETE', `/images/${eventId}`),
+  uploadAnnounceImage: async (eventId, file) => {
+    const form = new FormData()
+    form.append('file', file)
+    const headers = {}
+    if (auth.token) headers['authorization'] = `Bearer ${auth.token}`
+    const res = await fetch(`/api/images/announce-upload/${eventId}`, { method: 'POST', headers, body: form })
+    const data = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }))
+    if (!res.ok || data.ok === false) throw new Error(data.message || '上传失败')
+    return data
+  },
+  uploadGatheringTemplateImage: async (templateId, file) => {
+    const form = new FormData()
+    form.append('file', file)
+    const headers = {}
+    if (auth.token) headers.authorization = `Bearer ${auth.token}`
+    const res = await fetch(`/api/images/template-upload/${templateId}`, { method: 'POST', headers, body: form })
+    const data = await res.json().catch(() => ({ ok: false, message: `HTTP ${res.status}` }))
+    if (!res.ok || data.ok === false) throw new Error(data.message || '上传失败')
+    return data
+  },
+  deleteGatheringTemplateImage: (templateId) => request('DELETE', `/images/template/${templateId}`),
+
+  listGatheringTemplates: () => request('GET', '/gathering-templates'),
+  listGatheringJobs: (limit = 30) => request('GET', `/gathering-templates/jobs?limit=${limit}`),
+  createGatheringTemplate: (data) => request('POST', '/gathering-templates', data),
+  updateGatheringTemplate: (id, data) => request('PATCH', `/gathering-templates/${id}`, data),
+  approveGatheringTemplate: (id) => request('POST', `/gathering-templates/${id}/approve`),
+  publishGatheringNow: (id) => request('POST', `/gathering-templates/${id}/publish-now`),
+  pauseGatheringTemplate: (id) => request('POST', `/gathering-templates/${id}/pause`),
+  getGatheringManage: (id) => request('GET', `/gatherings/${id}/manage`),
+  changeGatheringSchedule: (id, event_date) => request('POST', `/gatherings/${id}/change-schedule`, { event_date }),
+  getGatheringHistory: (id) => request('GET', `/gatherings/${id}/history`),
+  stepDownGatheringHost: (id) => request('POST', `/gatherings/${id}/host/step-down`),
+  finalizeGathering: (id, data) => request('POST', `/gatherings/${id}/finalize`, data),
+  assignCarpool: (id, passenger_signup_id, driver_signup_id) => request('POST', `/gatherings/${id}/carpool/assign`, { passenger_signup_id, driver_signup_id }),
+  unassignCarpool: (id, passenger_signup_id) => request('POST', `/gatherings/${id}/carpool/unassign`, { passenger_signup_id }),
+  cancelGatheringEvent: (id, reason) => request('POST', `/gatherings/${id}/cancel-event`, { reason }),
+  startGathering: (id) => request('POST', `/gatherings/${id}/start`),
+  completeGathering: (id) => request('POST', `/gatherings/${id}/complete`),
+  updateGatheringAttendance: (id, signup_id, attendance_status) => request('POST', `/gatherings/${id}/attendance`, { signup_id, attendance_status }),
+}

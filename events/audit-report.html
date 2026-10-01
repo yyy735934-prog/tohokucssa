@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event Platform - Feature Inventory</title>
+<style>
+  :root {
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1a202c;
+    --text2: #4a5568;
+    --primary: #4f46e5;
+    --success: #059669;
+    --danger: #dc2626;
+    --warning: #d97706;
+    --purple: #7c3aed;
+    --blue: #2563eb;
+    --teal: #0d9488;
+    --pink: #db2777;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 1.5rem;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+  h1 {
+    font-size: 1.75rem;
+    margin-bottom: .25rem;
+    color: var(--primary);
+  }
+  .subtitle {
+    color: var(--text2);
+    margin-bottom: 2rem;
+    font-size: .95rem;
+  }
+  h2 {
+    font-size: 1.3rem;
+    margin: 2rem 0 1rem;
+    padding-bottom: .5rem;
+    border-bottom: 2px solid var(--primary);
+    color: var(--primary);
+  }
+  h3 {
+    font-size: 1.05rem;
+    margin: 1.5rem 0 .75rem;
+    color: var(--text);
+  }
+  h4 {
+    font-size: .95rem;
+    margin: 1rem 0 .5rem;
+    color: var(--text2);
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .card-header {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: .75rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .85rem;
+    margin-bottom: 1rem;
+  }
+  .table-wrap { overflow-x: auto; }
+  th, td {
+    border: 1px solid var(--border);
+    padding: .5rem .65rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #f1f5f9;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  tr:nth-child(even) td { background: #fafbfc; }
+  .badge {
+    display: inline-block;
+    padding: .15rem .5rem;
+    border-radius: 4px;
+    font-size: .75rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .b-yes { background: #d1fae5; color: #065f46; }
+  .b-no { background: #fee2e2; color: #991b1b; }
+  .b-partial { background: #fef3c7; color: #92400e; }
+  .b-public { background: #dbeafe; color: #1e40af; }
+  .b-auth { background: #ede9fe; color: #5b21b6; }
+  .b-reviewer { background: #f3e8ff; color: #6b21a8; }
+  .b-super { background: #fef9c3; color: #854d0e; }
+  .b-host { background: #cffafe; color: #155e75; }
+  .b-draft { background: #f1f5f9; color: #475569; }
+  .b-pending { background: #f5f3ff; color: #6d28d9; }
+  .b-open { background: #dbeafe; color: #1d4ed8; }
+  .b-active { background: #d1fae5; color: #047857; }
+  .b-closed { background: #f1f5f9; color: #64748b; }
+  .lifecycle {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    margin: 1rem 0;
+    font-size: .85rem;
+  }
+  .lifecycle .step {
+    padding: .35rem .75rem;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+  .lifecycle .arrow { color: var(--text2); font-size: 1.2rem; }
+  .note {
+    background: #fffbeb;
+    border-left: 3px solid var(--warning);
+    padding: .75rem 1rem;
+    margin: .75rem 0;
+    font-size: .85rem;
+    border-radius: 0 6px 6px 0;
+  }
+  .warn {
+    background: #fef2f2;
+    border-left: 3px solid var(--danger);
+    padding: .75rem 1rem;
+    margin: .75rem 0;
+    font-size: .85rem;
+    border-radius: 0 6px 6px 0;
+  }
+  .grid2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+  }
+  .stat-num { font-size: 1.75rem; font-weight: 700; color: var(--primary); }
+  .stat-label { font-size: .8rem; color: var(--text2); }
+  code {
+    background: #f1f5f9;
+    padding: .15rem .35rem;
+    border-radius: 3px;
+    font-size: .8rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+  }
+  ul, ol { padding-left: 1.5rem; margin: .5rem 0; }
+  li { margin: .25rem 0; }
+  .toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 2rem;
+  }
+  .toc a {
+    color: var(--primary);
+    text-decoration: none;
+    font-size: .9rem;
+  }
+  .toc a:hover { text-decoration: underline; }
+  .toc ol { margin: .5rem 0 0; }
+  .toc li { margin: .3rem 0; }
+  @media (max-width: 600px) {
+    body { padding: .75rem; }
+    h1 { font-size: 1.3rem; }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Event Platform -- 功能清单审计报告</h1>
+<p class="subtitle">项目路径: /Users/m1/WeChatProjects/event-platform/ &nbsp;|&nbsp; 审计日期: 2026-06-19</p>
+
+<!-- TOC -->
+<div class="toc">
+<strong>目录</strong>
+<ol>
+  <li><a href="#overview">项目概览与技术栈</a></li>
+  <li><a href="#lifecycle">活动生命周期</a></li>
+  <li><a href="#public">公开端功能 (web/ SPA)</a></li>
+  <li><a href="#admin">管理端功能 (admin/ SPA)</a></li>
+  <li><a href="#roles">角色权限矩阵</a></li>
+  <li><a href="#api">API 端点总表 (43 条)</a></li>
+  <li><a href="#email">邮件通知</a></li>
+  <li><a href="#data">数据模型 (D1 数据库)</a></li>
+  <li><a href="#drift">Schema 偏移警告</a></li>
+  <li><a href="#issues">发现的问题与风险</a></li>
+</ol>
+</div>
+
+<!-- 1. OVERVIEW -->
+<h2 id="overview">1. 项目概览与技术栈</h2>
+<div class="grid2">
+  <div class="card">
+    <div class="card-header">后端 (Worker)</div>
+    <ul>
+      <li><strong>运行时:</strong> Cloudflare Workers</li>
+      <li><strong>框架:</strong> Hono</li>
+      <li><strong>数据库:</strong> Cloudflare D1 (SQLite)</li>
+      <li><strong>会话:</strong> Cloudflare KV (7 天 TTL)</li>
+      <li><strong>密码:</strong> PBKDF2-SHA256, 100k 迭代</li>
+      <li><strong>邮件:</strong> Resend API</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header">前端</div>
+    <ul>
+      <li><strong>框架:</strong> Vue 3 + Vue Router (History 模式)</li>
+      <li><strong>构建:</strong> Vite (双入口: web/ + admin/)</li>
+      <li><strong>状态管理:</strong> 无 (localStorage + 组件内 ref)</li>
+      <li><strong>样式:</strong> 纯 CSS, CSS 变量主题</li>
+      <li><strong>QR 码:</strong> qrcode npm 包</li>
+      <li><strong>扫码:</strong> BarcodeDetector API (浏览器原生)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- 2. LIFECYCLE -->
+<h2 id="lifecycle">2. 活动生命周期</h2>
+<div class="lifecycle">
+  <span class="step b-draft">草稿 draft</span>
+  <span class="arrow">&rarr;</span>
+  <span class="step b-pending">待审核 pending</span>
+  <span class="arrow">&rarr;</span>
+  <span class="step b-open">报名中 open</span>
+  <span class="arrow">&rarr;</span>
+  <span class="step b-active">进行中 active</span>
+  <span class="arrow">&rarr;</span>
+  <span class="step b-closed">已结束 closed</span>
+</div>
+<div class="card" style="font-size:.85rem">
+  <ul>
+    <li><strong>提交审核:</strong> draft &rarr; pending (主理人操作)</li>
+    <li><strong>审核员自己的活动:</strong> draft &rarr; open (跳过 pending, 自动批准)</li>
+    <li><strong>审批通过:</strong> pending &rarr; open (审核员操作, 触发邮件)</li>
+    <li><strong>驳回:</strong> pending &rarr; draft (审核员操作, 附驳回原因, 触发邮件)</li>
+    <li><strong>撤回:</strong> pending &rarr; draft (主理人自行撤回)</li>
+    <li><strong>开始活动:</strong> open &rarr; active</li>
+    <li><strong>结束活动:</strong> active &rarr; closed</li>
+    <li><strong>复制活动:</strong> 任意状态 &rarr; 生成新 draft (标题加 "(副本)")</li>
+    <li><strong>删除活动:</strong> 仅限 draft 且无报名记录</li>
+  </ul>
+</div>
+
+<!-- 3. PUBLIC FEATURES -->
+<h2 id="public">3. 公开端功能 (web/ SPA)</h2>
+<p style="color:var(--text2);font-size:.9rem;margin-bottom:1rem;">8 个页面, 无需登录即可使用。路由前缀: 无 (根路径)</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>页面</th><th>路由</th><th>功能描述</th><th>调用 API</th><th>状态</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>活动广场</strong><br>Home.vue</td>
+  <td><code>/</code></td>
+  <td>展示所有 open/active 活动列表, 含标题、时间、地点、报名人数/容量、进度条。点击进入详情。</td>
+  <td><code>GET /api/events?scope=public</code></td>
+  <td><span class="badge b-yes">完整</span></td>
+</tr>
+<tr>
+  <td><strong>活动详情 + 报名</strong><br>EventDetail.vue</td>
+  <td><code>/e/:id</code></td>
+  <td>显示活动详情, 含报名表单 (姓名、假名、学号、邮箱、手机、微信、自定义字段)。支持容量限制和重复报名检测。WeChat 分享有 OG meta。</td>
+  <td><code>GET /api/events/:id</code><br><code>POST /api/signups</code></td>
+  <td><span class="badge b-yes">完整</span></td>
+</tr>
+<tr>
+  <td><strong>报名成功 + QR 码</strong><br>SignupSuccess.vue</td>
+  <td><code>/signup-ok/:id</code></td>
+  <td>展示报名成功信息、QR 码 (Canvas 渲染), 提示截图保存。显示签到状态。</td>
+  <td><code>GET /api/signups/by-token/:token</code></td>
+  <td><span class="badge b-yes">完整</span></td>
+</tr>
+<tr>
+  <td><strong>QR 自动签到</strong><br>QrCheckin.vue</td>
+  <td><code>/qr/:token</code></td>
+  <td>扫码后自动签到, 显示成功/已签到/失败。</td>
+  <td><code>POST /api/signups/checkin-by-token</code></td>
+  <td><span class="badge b-yes">完整</span></td>
+</tr>
+<tr>
+  <td><strong>邮箱签到</strong><br>Checkin.vue</td>
+  <td><code>/checkin/:id</code></td>
+  <td>无 QR 码时, 输入邮箱签到。</td>
+  <td><code>GET /api/events/:id</code><br><code>POST /api/signups/checkin</code></td>
+  <td><span class="badge b-yes">完整</span></td>
+</tr>
+<tr>
+  <td><strong>我的活动</strong><br>MyEvents.vue</td>
+  <td><code>/my</code></td>
+  <td>输入邮箱查看报名记录, 含签到状态、签到码查看、取消报名。支持邮箱记忆 (localStorage)。</td>
+  <td><code>GET /api/participant/my-events</code><br><code>POST /api/participant/cancel</code></td>
+  <td><span class="badge b-yes">完整</span></td>
+</tr>
+<tr>
+  <td><strong>活动申请</strong><br>ApplyEvent.vue</td>
+  <td><code>/apply</code></td>
+  <td>外部用户提交活动提案 (无需登录), 含申请人信息 + 活动信息。提交后进入 pending 待审核。</td>
+  <td><code>POST /api/events/propose</code></td>
+  <td><span class="badge b-yes">完整</span></td>
+</tr>
+<tr>
+  <td><strong>邀请注册</strong><br>RegisterInvite.vue</td>
+  <td><code>/register?token=xxx</code></td>
+  <td>审核通过公开提案后, 外部提交者收到邮件邀请链接, 在此设置密码成为主理人。</td>
+  <td><code>GET /api/auth/invite-info</code><br><code>POST /api/auth/register-invite</code></td>
+  <td><span class="badge b-yes">完整</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3>内置报名字段 (硬编码)</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>字段</th><th>必填</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>姓名</td><td>是</td><td>localStorage 记忆</td></tr>
+<tr><td>姓名假名 (カタカナ)</td><td>是</td><td>面向東北大学学友</td></tr>
+<tr><td>学号/工号</td><td>否</td><td>"仅東北大学学友需要填写"</td></tr>
+<tr><td>邮箱</td><td>是</td><td>localStorage 记忆, 用于签到和查询</td></tr>
+<tr><td>手机号</td><td>否</td><td></td></tr>
+<tr><td>微信号</td><td>否</td><td></td></tr>
+<tr><td>自定义字段</td><td>按需</td><td>由活动创建者配置, 支持 text/select/textarea/number 类型</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- 4. ADMIN FEATURES -->
+<h2 id="admin">4. 管理端功能 (admin/ SPA)</h2>
+<p style="color:var(--text2);font-size:.9rem;margin-bottom:1rem;">9 个页面, 需要登录。路由前缀: /admin/</p>
+
+<h3>4.1 所有角色可用</h3>
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>页面</th><th>路由</th><th>功能描述</th><th>调用 API</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>登录</strong><br>Login.vue</td>
+  <td><code>/admin/login</code></td>
+  <td>邮箱 + 密码登录, 成功后跳转活动列表。</td>
+  <td><code>POST /api/auth/login</code></td>
+</tr>
+<tr>
+  <td><strong>修改密码</strong><br>ChangePassword.vue</td>
+  <td><code>/admin/password</code></td>
+  <td>旧密码 + 新密码修改。客户端校验密码一致。</td>
+  <td><code>POST /api/auth/change-password</code></td>
+</tr>
+<tr>
+  <td><strong>我的活动 / 所有活动</strong><br>Dashboard.vue</td>
+  <td><code>/admin/events</code></td>
+  <td>主理人: 仅看自己的活动 + 新手引导; 审核员: 看全部活动 + 导出。含状态过滤、搜索、统计卡片。</td>
+  <td><code>GET /api/events</code><br><code>GET /api/signups/export-all</code></td>
+</tr>
+<tr>
+  <td><strong>创建/编辑活动</strong><br>EventForm.vue</td>
+  <td><code>/admin/events/new</code><br><code>/admin/events/:id/edit</code></td>
+  <td>活动表单: 标题、日期、地点、详情、备注、容量、自定义字段编辑器 (动态增删, 支持 text/select/textarea 类型)。</td>
+  <td><code>POST /api/events</code><br><code>GET /api/events/:id</code><br><code>PATCH /api/events/:id</code></td>
+</tr>
+<tr>
+  <td><strong>活动详情管理</strong><br>EventDetail.vue</td>
+  <td><code>/admin/events/:id</code></td>
+  <td>
+    <strong>核心管理页面。</strong>包含:
+    <ul>
+      <li>5 步工作流进度条 (草稿 &rarr; 审核中 &rarr; 报名中 &rarr; 进行中 &rarr; 已结束)</li>
+      <li>驳回原因展示 (红色卡片)</li>
+      <li>公开提案人信息展示</li>
+      <li>报名统计: 总人数、已签到、签到率</li>
+      <li>报名列表表格 (含自定义字段数据)</li>
+      <li>操作按钮: 提交审核、撤回、开始、结束、复制、删除</li>
+      <li>单人签到 / 全部签到</li>
+      <li>手动添加报名 (弹窗)</li>
+      <li>导出 CSV / JSON</li>
+      <li>链接卡片: 报名页 URL + 签到页 URL (可复制/新窗口打开)</li>
+    </ul>
+  </td>
+  <td><code>GET /api/events/:id</code><br><code>GET /api/signups?event_id=</code><br>+ 全部生命周期 API<br>+ 签到/删除/导出 API</td>
+</tr>
+<tr>
+  <td><strong>扫码签到</strong><br>QrScanner.vue</td>
+  <td><code>/admin/scan</code></td>
+  <td>
+    调用摄像头扫描 QR 码, 自动签到。含手动输入 token, 扫码历史。
+    <br>使用 BarcodeDetector API (Chrome/Edge/Safari 17.2+)。
+  </td>
+  <td><code>POST /api/signups/checkin-by-token</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3>4.2 审核员 (reviewer) 专有</h3>
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>页面</th><th>路由</th><th>功能描述</th><th>调用 API</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>数据总览</strong><br>Overview.vue</td>
+  <td><code>/admin/overview</code></td>
+  <td>
+    仪表盘: 待审核/报名中/进行中/已结束数量; 总报名/总签到/签到率; 签到进度条。
+    <br>4 个快捷入口: 审核队列、创建活动、扫码签到、用户管理。
+  </td>
+  <td><code>GET /api/events/dashboard-stats</code></td>
+</tr>
+<tr>
+  <td><strong>审核队列</strong><br>ReviewQueue.vue</td>
+  <td><code>/admin/review</code></td>
+  <td>
+    显示所有 pending 活动卡片, 含提交者信息 (管理员或外部申请人)。
+    <br>操作: 通过 (触发邮件) / 驳回 (弹窗填理由, 触发邮件) / 查看详情。
+    <br>操作后刷新侧边栏待审核数字。
+  </td>
+  <td><code>GET /api/events</code><br><code>POST /api/events/:id/approve</code><br><code>POST /api/events/:id/reject</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3>4.3 超级管理员 (is_super) 专有</h3>
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>页面</th><th>路由</th><th>功能描述</th><th>调用 API</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>用户管理</strong><br>UserManagement.vue</td>
+  <td><code>/admin/users</code></td>
+  <td>
+    用户列表 (ID, 邮箱, 昵称, 角色, 创建时间)。
+    <br>角色标签: 超级管理员 (金) / 审核员 (紫) / 主理人 (蓝)。
+    <br>操作: 创建用户 (邮箱+密码+角色弹窗)、编辑角色/昵称、重置密码、删除用户。
+    <br>保护: 不能编辑/删除超级管理员, 不能删除自己。
+    <br><strong>注意:</strong> 路由 meta 仅要求 reviewer, 但编辑/删除/重置按钮由 <code>auth.isSuper</code> 控制。
+  </td>
+  <td><code>GET /api/users</code><br><code>POST /api/users</code><br><code>PATCH /api/users/:id</code><br><code>DELETE /api/users/:id</code><br><code>POST /api/auth/reset-password</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3>4.4 管理端侧边栏</h3>
+<div class="card" style="font-size:.85rem">
+<ul>
+  <li><strong>活动区:</strong> 我的活动、创建活动、扫码签到 (所有角色)</li>
+  <li><strong>管理区</strong> (仅 reviewer 可见): 数据总览、审核队列 (带待审核 badge)、用户管理</li>
+  <li><strong>公开页面:</strong> 活动列表首页 (外链)、参与者查询 (外链)</li>
+  <li><strong>账户区:</strong> 修改密码、退出登录</li>
+  <li><strong>底部:</strong> 显示用户昵称/邮箱 + 角色标签</li>
+  <li><strong>响应式:</strong> 768px 以下隐藏侧边栏, 显示汉堡菜单</li>
+</ul>
+</div>
+
+<!-- 5. ROLE MATRIX -->
+<h2 id="roles">5. 角色权限矩阵</h2>
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>功能</th><th><span class="badge b-host">主理人 host</span></th><th><span class="badge b-reviewer">审核员 reviewer</span></th><th><span class="badge b-super">超级管理员 is_super</span></th></tr>
+</thead>
+<tbody>
+<tr><td>登录 / 修改密码</td><td>是</td><td>是</td><td>是</td></tr>
+<tr><td>创建 / 编辑自己的活动</td><td>是</td><td>是</td><td>是</td></tr>
+<tr><td>提交活动审核</td><td>是 (进 pending)</td><td>是 (自动通过)</td><td>是 (自动通过)</td></tr>
+<tr><td>查看活动列表</td><td>仅自己的</td><td>全部</td><td>全部</td></tr>
+<tr><td>管理报名 (签到/删除/导出)</td><td>仅自己的活动</td><td>全部</td><td>全部</td></tr>
+<tr><td>扫码签到</td><td>是</td><td>是</td><td>是</td></tr>
+<tr><td>复制活动</td><td>仅自己的</td><td>全部</td><td>全部</td></tr>
+<tr><td>开始 / 结束活动</td><td>仅自己的</td><td>全部</td><td>全部</td></tr>
+<tr><td>审核通过 / 驳回</td><td style="color:var(--danger)">否</td><td>是</td><td>是</td></tr>
+<tr><td>数据总览仪表盘</td><td style="color:var(--danger)">否</td><td>是</td><td>是</td></tr>
+<tr><td>审核队列</td><td style="color:var(--danger)">否</td><td>是</td><td>是</td></tr>
+<tr><td>导出全部活动 CSV/JSON</td><td style="color:var(--danger)">否</td><td>是</td><td>是</td></tr>
+<tr><td>用户管理 (查看列表)</td><td style="color:var(--danger)">否</td><td>是</td><td>是</td></tr>
+<tr><td>用户管理 (创建/编辑/删除/重置)</td><td style="color:var(--danger)">否</td><td style="color:var(--danger)">否</td><td>是</td></tr>
+<tr><td>创建审核员角色用户</td><td style="color:var(--danger)">否</td><td style="color:var(--danger)">否</td><td>是</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- 6. API ENDPOINTS -->
+<h2 id="api">6. API 端点总表 (43 条)</h2>
+
+<h3>6.1 认证 (7 条) -- <code>/api/auth/*</code></h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>路径</th><th>权限</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>POST</td><td><code>/api/auth/login</code></td><td><span class="badge b-public">公开</span></td><td>邮箱+密码登录, 返回 session token</td></tr>
+<tr><td>2</td><td>POST</td><td><code>/api/auth/logout</code></td><td><span class="badge b-public">公开</span></td><td>销毁 KV session</td></tr>
+<tr><td>3</td><td>GET</td><td><code>/api/auth/me</code></td><td><span class="badge b-auth">登录</span></td><td>获取当前用户 (id, email, role, display_name, is_super)</td></tr>
+<tr><td>4</td><td>POST</td><td><code>/api/auth/change-password</code></td><td><span class="badge b-auth">登录</span></td><td>修改自己的密码 (验证旧密码)</td></tr>
+<tr><td>5</td><td>POST</td><td><code>/api/auth/reset-password</code></td><td><span class="badge b-super">超管</span></td><td>重置他人密码</td></tr>
+<tr><td>6</td><td>POST</td><td><code>/api/auth/register-invite</code></td><td><span class="badge b-public">公开</span></td><td>邀请链接注册 (创建 host 账户, 绑定活动)</td></tr>
+<tr><td>7</td><td>GET</td><td><code>/api/auth/invite-info</code></td><td><span class="badge b-public">公开</span></td><td>验证邀请 token, 返回邮箱/姓名</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>6.2 活动管理 (14 条) -- <code>/api/events/*</code></h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>路径</th><th>权限</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>8</td><td>POST</td><td><code>/api/events/propose</code></td><td><span class="badge b-public">公开</span></td><td>外部用户提交活动提案 (无需登录)</td></tr>
+<tr><td>9</td><td>GET</td><td><code>/api/events/dashboard-stats</code></td><td><span class="badge b-reviewer">审核员</span></td><td>仪表盘统计 (pending/open/active/closed/signups/checkins)</td></tr>
+<tr><td>10</td><td>GET</td><td><code>/api/events/</code></td><td><span class="badge b-public">公开</span> / <span class="badge b-auth">登录</span></td><td>列出活动 (scope=public 公开; 否则按角色过滤)</td></tr>
+<tr><td>11</td><td>GET</td><td><code>/api/events/:id</code></td><td><span class="badge b-public">公开</span> / <span class="badge b-auth">登录</span></td><td>活动详情 (公开看精简字段; 管理员看全部)</td></tr>
+<tr><td>12</td><td>POST</td><td><code>/api/events/</code></td><td><span class="badge b-auth">登录</span></td><td>创建活动 (默认 draft)</td></tr>
+<tr><td>13</td><td>PATCH</td><td><code>/api/events/:id</code></td><td><span class="badge b-auth">owner/reviewer</span></td><td>编辑活动 (仅 draft 可编辑)</td></tr>
+<tr><td>14</td><td>POST</td><td><code>/api/events/:id/submit</code></td><td><span class="badge b-auth">owner</span></td><td>提交审核 (reviewer 自动通过)</td></tr>
+<tr><td>15</td><td>POST</td><td><code>/api/events/:id/approve</code></td><td><span class="badge b-reviewer">审核员</span></td><td>审批通过 + 发邮件 (+ 外部提案生成邀请链接)</td></tr>
+<tr><td>16</td><td>POST</td><td><code>/api/events/:id/reject</code></td><td><span class="badge b-reviewer">审核员</span></td><td>驳回 + 发邮件 (附理由)</td></tr>
+<tr><td>17</td><td>POST</td><td><code>/api/events/:id/withdraw</code></td><td><span class="badge b-auth">owner</span></td><td>撤回审核 (pending &rarr; draft)</td></tr>
+<tr><td>18</td><td>POST</td><td><code>/api/events/:id/activate</code></td><td><span class="badge b-auth">owner/reviewer</span></td><td>开始活动 (open &rarr; active)</td></tr>
+<tr><td>19</td><td>POST</td><td><code>/api/events/:id/close</code></td><td><span class="badge b-auth">owner/reviewer</span></td><td>结束活动 (active &rarr; closed)</td></tr>
+<tr><td>20</td><td>POST</td><td><code>/api/events/:id/duplicate</code></td><td><span class="badge b-auth">owner/reviewer</span></td><td>复制活动 (生成新 draft)</td></tr>
+<tr><td>21</td><td>DELETE</td><td><code>/api/events/:id</code></td><td><span class="badge b-auth">owner/reviewer</span></td><td>删除活动 (仅 draft 且无报名)</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>6.3 报名管理 (12 条) -- <code>/api/signups/*</code></h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>路径</th><th>权限</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>22</td><td>POST</td><td><code>/api/signups/</code></td><td><span class="badge b-public">公开</span></td><td>公开报名 (含容量/重复检查, 发确认邮件)</td></tr>
+<tr><td>23</td><td>GET</td><td><code>/api/signups/</code></td><td><span class="badge b-auth">owner/reviewer</span></td><td>列出报名 (按 event_id)</td></tr>
+<tr><td>24</td><td>GET</td><td><code>/api/signups/export</code></td><td><span class="badge b-auth">owner/reviewer</span></td><td>导出单活动报名 (CSV/JSON)</td></tr>
+<tr><td>25</td><td>GET</td><td><code>/api/signups/export-all</code></td><td><span class="badge b-reviewer">审核员</span></td><td>导出全部活动汇总 (CSV/JSON)</td></tr>
+<tr><td>26</td><td>GET</td><td><code>/api/signups/by-token/:token</code></td><td><span class="badge b-public">公开</span></td><td>按 token 查报名信息 (用于 QR 码页)</td></tr>
+<tr><td>27</td><td>POST</td><td><code>/api/signups/checkin-by-token</code></td><td><span class="badge b-public">公开</span></td><td>QR 码自助签到</td></tr>
+<tr><td>28</td><td>POST</td><td><code>/api/signups/checkin</code></td><td><span class="badge b-public">公开</span></td><td>邮箱签到 (无 QR 码备用)</td></tr>
+<tr><td>29</td><td>POST</td><td><code>/api/signups/:id/checkin</code></td><td><span class="badge b-auth">owner/reviewer</span></td><td>管理员手动签到</td></tr>
+<tr><td>30</td><td>POST</td><td><code>/api/signups/batch-checkin</code></td><td><span class="badge b-auth">owner/reviewer</span></td><td>全部签到 (批量)</td></tr>
+<tr><td>31</td><td>POST</td><td><code>/api/signups/manual</code></td><td><span class="badge b-auth">owner/reviewer</span></td><td>手动添加报名 (不检查容量)</td></tr>
+<tr><td>32</td><td>DELETE</td><td><code>/api/signups/:id</code></td><td><span class="badge b-auth">owner/reviewer</span></td><td>删除报名记录</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>6.4 用户管理 (4 条) -- <code>/api/users/*</code></h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>路径</th><th>权限</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>33</td><td>GET</td><td><code>/api/users/</code></td><td><span class="badge b-reviewer">审核员</span></td><td>列出所有管理员用户</td></tr>
+<tr><td>34</td><td>POST</td><td><code>/api/users/</code></td><td><span class="badge b-reviewer">审核员</span></td><td>创建用户 (super 才能创 reviewer)</td></tr>
+<tr><td>35</td><td>PATCH</td><td><code>/api/users/:id</code></td><td><span class="badge b-super">超管</span></td><td>修改用户角色/昵称</td></tr>
+<tr><td>36</td><td>DELETE</td><td><code>/api/users/:id</code></td><td><span class="badge b-reviewer">审核员</span></td><td>删除用户 (不能删超管/自己)</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>6.5 参与者 (2 条) -- <code>/api/participant/*</code></h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>路径</th><th>权限</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>37</td><td>GET</td><td><code>/api/participant/my-events</code></td><td><span class="badge b-public">公开</span></td><td>按邮箱查询报名记录</td></tr>
+<tr><td>38</td><td>POST</td><td><code>/api/participant/cancel</code></td><td><span class="badge b-public">公开</span></td><td>取消报名 (需 token, 不能已签到/已结束)</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>6.6 静态页面 (5 条)</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>路径</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>39</td><td>GET</td><td><code>/e/:id</code></td><td>Bot/爬虫: 返回 OG meta HTML; 否则: 公开 SPA</td></tr>
+<tr><td>40</td><td>GET</td><td><code>/qr/:token</code></td><td>公开 SPA</td></tr>
+<tr><td>41</td><td>GET</td><td><code>/admin</code></td><td>管理端 SPA</td></tr>
+<tr><td>42</td><td>GET</td><td><code>/admin/*</code></td><td>管理端 SPA / 静态资源</td></tr>
+<tr><td>43</td><td>GET</td><td><code>*</code></td><td>公开 SPA (兜底)</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- 7. EMAIL -->
+<h2 id="email">7. 邮件通知</h2>
+<p style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">邮件服务: Resend API | 发件地址: <code>EMAIL_FROM</code> 环境变量 (默认 <code>活动平台 &lt;onboarding@resend.dev&gt;</code>)</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>邮件类型</th><th>函数名</th><th>主题</th><th>触发时机</th><th>收件人</th><th>内容</th><th>状态</th></tr></thead>
+<tbody>
+<tr>
+  <td>报名确认</td>
+  <td><code>signupConfirmEmail</code></td>
+  <td>报名成功 -- {活动名}</td>
+  <td>POST /api/signups/ 成功后</td>
+  <td>报名者邮箱</td>
+  <td>活动详情 + 签到码链接</td>
+  <td><span class="badge b-yes">已接入</span></td>
+</tr>
+<tr>
+  <td>审批通过 (已注册主理人)</td>
+  <td><code>eventApprovedEmail</code></td>
+  <td>活动已通过审核 -- {活动名}</td>
+  <td>POST /api/events/:id/approve (有 created_by)</td>
+  <td>主理人邮箱</td>
+  <td>通过通知</td>
+  <td><span class="badge b-yes">已接入</span></td>
+</tr>
+<tr>
+  <td>审批通过 + 邀请注册</td>
+  <td><code>eventApprovedInviteEmail</code></td>
+  <td>活动已通过审核 -- {活动名}</td>
+  <td>POST /api/events/:id/approve (公开提案, 无 created_by)</td>
+  <td>外部申请人邮箱</td>
+  <td>通过通知 + 注册链接 (7 天有效)</td>
+  <td><span class="badge b-yes">已接入</span></td>
+</tr>
+<tr>
+  <td>驳回通知</td>
+  <td><code>eventRejectedEmail</code></td>
+  <td>活动未通过审核 -- {活动名}</td>
+  <td>POST /api/events/:id/reject</td>
+  <td>主理人 / 外部申请人</td>
+  <td>驳回通知 + 可选原因</td>
+  <td><span class="badge b-yes">已接入</span></td>
+</tr>
+<tr>
+  <td>签到确认</td>
+  <td><code>checkinConfirmEmail</code></td>
+  <td>签到成功 -- {活动名}</td>
+  <td>--</td>
+  <td>--</td>
+  <td>签到确认详情</td>
+  <td><span class="badge b-no">死代码</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="note">
+  <strong>checkinConfirmEmail</strong> 已在 email.js 中定义并在 signups.js 中导入, 但从未实际调用。签到不会发送邮件。
+</div>
+
+<!-- 8. DATA MODEL -->
+<h2 id="data">8. 数据模型 (D1 数据库)</h2>
+
+<h3>8.1 admin_users 表 -- 管理员用户</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>列名</th><th>类型</th><th>约束</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>id</code></td><td>INTEGER</td><td>PRIMARY KEY AUTOINCREMENT</td><td>自增 ID</td></tr>
+<tr><td><code>email</code></td><td>TEXT</td><td>UNIQUE NOT NULL</td><td>邮箱 (小写归一化)</td></tr>
+<tr><td><code>password_hash</code></td><td>TEXT</td><td>NOT NULL</td><td>PBKDF2 salt:hash</td></tr>
+<tr><td><code>role</code></td><td>TEXT</td><td>NOT NULL DEFAULT 'host', CHECK ('host','reviewer')</td><td>角色</td></tr>
+<tr><td><code>display_name</code></td><td>TEXT</td><td>NOT NULL DEFAULT ''</td><td>显示名称</td></tr>
+<tr><td><code>is_super</code></td><td>INTEGER</td><td>(布尔)</td><td>超级管理员标志</td></tr>
+<tr><td><code>created_at</code></td><td>INTEGER</td><td>DEFAULT (unixepoch()*1000)</td><td>创建时间戳 (毫秒)</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>8.2 events 表 -- 活动</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>列名</th><th>类型</th><th>约束</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>id</code></td><td>INTEGER</td><td>PRIMARY KEY AUTOINCREMENT</td><td>自增 ID</td></tr>
+<tr><td><code>title</code></td><td>TEXT</td><td>NOT NULL</td><td>活动标题</td></tr>
+<tr><td><code>event_date</code></td><td>TEXT</td><td>NOT NULL</td><td>活动日期 (自由文本)</td></tr>
+<tr><td><code>location</code></td><td>TEXT</td><td>DEFAULT ''</td><td>地点</td></tr>
+<tr><td><code>content</code></td><td>TEXT</td><td>DEFAULT ''</td><td>活动详情</td></tr>
+<tr><td><code>notes</code></td><td>TEXT</td><td>DEFAULT ''</td><td>参与者须知</td></tr>
+<tr><td><code>capacity</code></td><td>INTEGER</td><td>nullable</td><td>报名上限 (null=不限)</td></tr>
+<tr><td><code>custom_fields</code></td><td>TEXT</td><td>JSON 字符串</td><td>自定义报名字段配置</td></tr>
+<tr><td><code>status</code></td><td>TEXT</td><td>CHECK (draft/pending/open/active/closed)</td><td>活动状态</td></tr>
+<tr><td><code>created_by</code></td><td>INTEGER</td><td>REFERENCES admin_users(id), nullable</td><td>创建者 (公开提案为 null)</td></tr>
+<tr><td><code>submitted_at</code></td><td>INTEGER</td><td>nullable</td><td>提交审核时间</td></tr>
+<tr><td><code>reviewed_by</code></td><td>INTEGER</td><td>REFERENCES admin_users(id)</td><td>审核人</td></tr>
+<tr><td><code>reviewed_at</code></td><td>INTEGER</td><td>nullable</td><td>审核时间</td></tr>
+<tr><td><code>reject_reason</code></td><td>TEXT</td><td>nullable</td><td>驳回原因</td></tr>
+<tr><td><code>submitter_name</code></td><td>TEXT</td><td>nullable</td><td>外部提案人姓名</td></tr>
+<tr><td><code>submitter_email</code></td><td>TEXT</td><td>nullable</td><td>外部提案人邮箱</td></tr>
+<tr><td><code>submitter_phone</code></td><td>TEXT</td><td>nullable</td><td>外部提案人手机</td></tr>
+<tr><td><code>submitter_note</code></td><td>TEXT</td><td>nullable</td><td>外部提案人补充说明</td></tr>
+<tr><td><code>created_at</code></td><td>INTEGER</td><td>DEFAULT (unixepoch()*1000)</td><td>创建时间戳</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>8.3 signups 表 -- 报名记录</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>列名</th><th>类型</th><th>约束</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>id</code></td><td>INTEGER</td><td>PRIMARY KEY AUTOINCREMENT</td><td>自增 ID</td></tr>
+<tr><td><code>event_id</code></td><td>INTEGER</td><td>NOT NULL REFERENCES events(id)</td><td>关联活动</td></tr>
+<tr><td><code>name</code></td><td>TEXT</td><td>NOT NULL</td><td>姓名</td></tr>
+<tr><td><code>email</code></td><td>TEXT</td><td>NOT NULL</td><td>邮箱 (小写归一化)</td></tr>
+<tr><td><code>phone</code></td><td>TEXT</td><td>DEFAULT ''</td><td>手机号</td></tr>
+<tr><td><code>data</code></td><td>TEXT</td><td>DEFAULT '{}', JSON</td><td>自定义字段数据 (假名/学号/微信等)</td></tr>
+<tr><td><code>token</code></td><td>TEXT</td><td>UUID</td><td>QR 码签到 token</td></tr>
+<tr><td><code>checked_in</code></td><td>INTEGER</td><td>DEFAULT 0</td><td>签到状态 (0/1)</td></tr>
+<tr><td><code>checked_in_at</code></td><td>INTEGER</td><td>nullable</td><td>签到时间戳</td></tr>
+<tr><td><code>created_at</code></td><td>INTEGER</td><td>DEFAULT (unixepoch()*1000)</td><td>报名时间戳</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>8.4 索引</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>索引名</th><th>表</th><th>列</th></tr></thead>
+<tbody>
+<tr><td><code>idx_events_status</code></td><td>events</td><td>status</td></tr>
+<tr><td><code>idx_events_created_by</code></td><td>events</td><td>created_by</td></tr>
+<tr><td><code>idx_signups_event</code></td><td>signups</td><td>event_id</td></tr>
+<tr><td><code>idx_signups_email</code></td><td>signups</td><td>event_id, email</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>8.5 KV 存储</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>键模式</th><th>TTL</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td><code>session:{uuid}</code></td><td>7 天</td><td>用户会话: {id, email, role, display_name, is_super}</td></tr>
+<tr><td><code>invite:{uuid}</code></td><td>7 天</td><td>邀请信息: {email, name, event_id}</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- 9. SCHEMA DRIFT -->
+<h2 id="drift">9. Schema 偏移警告</h2>
+<div class="warn">
+  <strong>schema.sql 已过期!</strong> 以下列在代码中使用但未出现在 schema.sql 中 (需通过 ALTER TABLE 添加到线上数据库):
+</div>
+<div class="table-wrap">
+<table>
+<thead><tr><th>表</th><th>缺失列</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td>admin_users</td><td><code>is_super</code></td><td>超级管理员标志, 决定最高权限操作</td></tr>
+<tr><td>events</td><td><code>custom_fields</code></td><td>自定义报名字段 JSON 配置</td></tr>
+<tr><td>events</td><td><code>submitter_name</code></td><td>外部活动提案人姓名</td></tr>
+<tr><td>events</td><td><code>submitter_email</code></td><td>外部活动提案人邮箱</td></tr>
+<tr><td>events</td><td><code>submitter_phone</code></td><td>外部活动提案人手机</td></tr>
+<tr><td>events</td><td><code>submitter_note</code></td><td>外部活动提案人备注</td></tr>
+<tr><td>signups</td><td><code>token</code></td><td>QR 码签到 UUID token</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- 10. ISSUES -->
+<h2 id="issues">10. 发现的问题与风险</h2>
+
+<div class="card">
+<div class="card-header" style="color:var(--danger)">安全 / 隐私问题</div>
+<ol>
+  <li><strong>参与者邮箱查询无限制:</strong> <code>GET /api/participant/my-events?email=xxx</code> 无需认证, 且返回包含 token 字段, 意味着知道任意邮箱就能获取该人的所有 QR 签到码。</li>
+  <li><strong>公开签到接口无认证:</strong> <code>POST /api/signups/checkin-by-token</code> 和 <code>POST /api/signups/checkin</code> 完全公开, 理论上可被批量调用进行虚假签到。</li>
+</ol>
+</div>
+
+<div class="card">
+<div class="card-header" style="color:var(--warning)">功能缺陷</div>
+<ol>
+  <li><strong>手动添加报名不检查容量:</strong> <code>POST /api/signups/manual</code> 允许管理员添加报名时不受容量限制, 可能导致超额。</li>
+  <li><strong>签到确认邮件是死代码:</strong> <code>checkinConfirmEmail</code> 已定义并导入但从未调用, 签到不会发送任何邮件通知。</li>
+  <li><strong>schema.sql 严重滞后:</strong> 7 个列在生产代码中使用但 schema.sql 未更新, 新部署需手动添加。</li>
+</ol>
+</div>
+
+<div class="card">
+<div class="card-header" style="color:var(--text2)">架构观察</div>
+<ol>
+  <li><strong>无共享组件:</strong> web/ 和 admin/ 均无 components/ 目录, 所有 UI 在 views 内自包含, 代码复用有限。</li>
+  <li><strong>无状态管理库:</strong> 仅使用 localStorage + 组件内 ref, 对当前规模足够。</li>
+  <li><strong>事件日期为自由文本:</strong> <code>event_date</code> 是 TEXT 类型, 无日期格式校验。</li>
+  <li><strong>邮件发送静默失败:</strong> email.js 捕获所有异常且不抛出, 邮件发送失败不会报错。</li>
+</ol>
+</div>
+
+</div><!-- container -->
+</body>
+</html>

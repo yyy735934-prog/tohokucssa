@@ -1,0 +1,1 @@
+ALTER TABLE events ADD COLUMN lock_at INTEGER;
