@@ -1,0 +1,28 @@
+name = "cumt-alumni"
+main = "worker/index.js"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+not_found_handling = "none"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cumt-alumni-db"
+database_id = "7aaf5bab-c30b-4b3e-8556-22edf683f461"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "07cb5427435c4ac986071493a7cf6a1b"
+
+[ai]
+binding = "AI"
+
+[triggers]
+crons = ["0 0 * * *"]
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "cumt-alumni-images"
