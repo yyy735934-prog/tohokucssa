@@ -23,54 +23,54 @@
 - **部署**：用管理员提供的 Cloudflare Token 部署（见下方"部署到线上"章节）
 
 ### 协作者 B — 生活服务中心框架维护
-- **仓库**：`yyy735934-prog/tohokucssa-services`
-- **分支**：`feature/services-framework`
+- **仓库**：`yyy735934-prog/tohokucssa`（子目录 `services/`）
+- **分支**：`services/feature/services-framework`
 - **域名**：`services.tohokucssa.org`
 - **做什么**：维护整体框架、首页体验、审核合并 C 和 E 的 PR、部署上线
 - **上手**：
 ```bash
-git clone https://github.com/yyy735934-prog/tohokucssa-services.git
-cd tohokucssa-services
-git checkout feature/services-framework
+git clone https://github.com/yyy735934-prog/tohokucssa.git
+cd tohokucssa/services
+git checkout services/feature/services-framework
 cat TASK.md    # 阅读详细任务说明
 npm install && npm run dev
 ```
 
 ### 协作者 C — 生活指南内容填充
-- **仓库**：`yyy735934-prog/tohokucssa-services`（fork 或直接在分支上改）
-- **分支**：`feature/local-guide`
+- **仓库**：`yyy735934-prog/tohokucssa`（子目录 `services/`）（fork 或直接在分支上改）
+- **分支**：`services/feature/local-guide`
 - **做什么**：补充医疗/租房/VPN/驾照/美食各板块的具体内容
 - **上手**：
 ```bash
-git clone https://github.com/yyy735934-prog/tohokucssa-services.git
-cd tohokucssa-services
-git checkout feature/local-guide
+git clone https://github.com/yyy735934-prog/tohokucssa.git
+cd tohokucssa/services
+git checkout services/feature/local-guide
 cat TASK.md    # 阅读详细任务说明
 npm install && npm run dev
 # 主要编辑 src/views/LocalGuide.vue
 ```
 
 ### 协作者 D — 物资租赁系统（独立子项目）
-- **仓库**：`yyy735934-prog/tohoku-rental`
+- **仓库**：`yyy735934-prog/tohokucssa`（子目录 `rental/`）
 - **域名**：`rental.tohokucssa.org`
 - **做什么**：实现完整的物资借用预约系统（前端 + 后端 + 数据库）
 - **上手**：
 ```bash
-git clone https://github.com/yyy735934-prog/tohoku-rental.git
-cd tohoku-rental
+git clone https://github.com/yyy735934-prog/tohokucssa.git
+cd tohokucssa/rental
 cat TASK.md    # 阅读详细任务说明（含数据库设计、API 规范）
 npm install && npm run dev
 ```
 
 ### 协作者 E — 灾害应急 + 新生指南
-- **仓库**：`yyy735934-prog/tohokucssa-services`（fork 或直接在分支上改）
-- **分支**：`feature/emergency-newcomer`
+- **仓库**：`yyy735934-prog/tohokucssa`（子目录 `services/`）（fork 或直接在分支上改）
+- **分支**：`services/feature/emergency-newcomer`
 - **做什么**：完善灾害应急页面、新建新生入学指南页面
 - **上手**：
 ```bash
-git clone https://github.com/yyy735934-prog/tohokucssa-services.git
-cd tohokucssa-services
-git checkout feature/emergency-newcomer
+git clone https://github.com/yyy735934-prog/tohokucssa.git
+cd tohokucssa/services
+git checkout services/feature/emergency-newcomer
 cat TASK.md    # 阅读详细任务说明
 npm install && npm run dev
 # 主要编辑 src/views/Emergency.vue，新建 src/views/NewcomerGuide.vue
