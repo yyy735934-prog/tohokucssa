@@ -1,0 +1,235 @@
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { getDb } from "../../../db";
+import { listingAnalyses, listings, users } from "../../../db/schema";
+import { getMemberAccess } from "../../../lib/auth";
+import { inferListingIntelligence, isListingCategory } from "../../../lib/listing-intelligence";
+import { listingToMarketItem } from "../../../lib/listings";
+import { publicMemberName } from "../../../lib/public-identity";
+import { canUseMarketplace } from "../../../lib/member-status";
+import { listingPublicationStatus, type ListingRiskLevel } from "../../../lib/listing-moderation";
+import { listingPriceUpdate, PRICE_PROMOTION_DURATION_MS } from "../../../lib/listing-price";
+
+function errorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "Unexpected error";
+  return message.includes("no such table")
+    ? "数据库正在初始化，请稍后刷新。"
+    : "服务暂时不可用，请稍后再试。";
+}
+
+export async function GET() {
+  try {
+    const member = await getMemberAccess();
+    const db = await getDb();
+    const recentReductionCutoff = new Date(Date.now() - PRICE_PROMOTION_DURATION_MS).toISOString();
+    const rows = await db
+      .select()
+      .from(listings)
+      .where(eq(listings.status, "active"))
+      .orderBy(
+        desc(sql`CASE WHEN ${listings.priceReducedAt} >= ${recentReductionCutoff} THEN 1 ELSE 0 END`),
+        desc(listings.createdAt),
+      )
+      .limit(60);
+    let soldRows: typeof rows = [];
+    let soldCount = 0;
+    try {
+      const [soldCountRow, soldCandidates] = await Promise.all([
+        db.select({ value: count() }).from(listings).where(eq(listings.status, "sold")),
+        db.select()
+          .from(listings)
+          .where(eq(listings.status, "sold"))
+          .orderBy(desc(sql`coalesce(${listings.soldAt}, ${listings.updatedAt})`))
+          .limit(8),
+      ]);
+      soldCount = Number(soldCountRow[0]?.value ?? 0);
+      soldRows = soldCandidates;
+    } catch {
+      // The active market remains usable while an older database is waiting for the soldAt migration.
+    }
+    const ownerEmails = Array.from(new Set([...rows, ...soldRows].map((listing) => listing.ownerEmail)));
+    const sellerProfiles = ownerEmails.length
+      ? await db.select({
+          email: users.email,
+          academicStatus: users.academicStatus,
+          publicNameMode: users.publicNameMode,
+          publicNickname: users.publicNickname,
+        }).from(users).where(inArray(users.email, ownerEmails))
+      : [];
+    const sellerByEmail = new Map(sellerProfiles.map((profile) => [profile.email, {
+      name: publicMemberName(profile.publicNameMode, profile.publicNickname),
+      verified: profile.academicStatus === "verified",
+    }]));
+    const serialize = (listing: typeof rows[number]) =>
+      listingToMarketItem(listing, member?.email, sellerByEmail.get(listing.ownerEmail));
+    return Response.json({
+      listings: rows.map(serialize),
+      recentlySold: soldRows.map(serialize),
+      soldCount,
+    });
+  } catch (error) {
+    return Response.json({ error: errorMessage(error) }, { status: 503 });
+  }
+}
+
+export async function POST(request: Request) {
+  const member = await getMemberAccess();
+  if (!member) {
+    return Response.json({ error: "请先登录后再发布。" }, { status: 401 });
+  }
+  if (!canUseMarketplace(member.academicStatus, member.isAdmin)) {
+    return Response.json(
+      { error: "账号尚未获得发布权限，请先在个人中心完成认证或申诉。" },
+      { status: 403 },
+    );
+  }
+
+  try {
+    const payload = (await request.json()) as {
+      title?: string;
+      description?: string;
+      price?: number;
+      place?: string;
+      lat?: number;
+      lng?: number;
+      imageKey?: string | null;
+      category?: string;
+    };
+    const title = payload.title?.trim() ?? "";
+    const description = payload.description?.trim() ?? "";
+    const place = payload.place?.trim() ?? "";
+    const price = Number.isFinite(payload.price) ? Math.max(0, Math.round(payload.price!)) : 0;
+    const latitude =
+      Number.isFinite(payload.lat) && payload.lat! >= -90 && payload.lat! <= 90
+        ? Math.round(payload.lat! * 1_000_000)
+        : null;
+    const longitude =
+      Number.isFinite(payload.lng) && payload.lng! >= -180 && payload.lng! <= 180
+        ? Math.round(payload.lng! * 1_000_000)
+        : null;
+    const imageKey =
+      typeof payload.imageKey === "string" && payload.imageKey.startsWith("listings/")
+        ? payload.imageKey.slice(0, 240)
+        : null;
+
+    if (!title) return Response.json({ error: "请填写商品标题。" }, { status: 400 });
+    if (title.length > 80) return Response.json({ error: "商品标题不能超过 80 个字符。" }, { status: 400 });
+    if (!description) return Response.json({ error: "请填写商品描述。" }, { status: 400 });
+    if (description.length > 800) return Response.json({ error: "商品描述不能超过 800 个字符。" }, { status: 400 });
+    if (!place) return Response.json({ error: "请填写交接地点名称。" }, { status: 400 });
+    if (latitude === null || longitude === null) {
+      return Response.json({ error: "请在地图上点击并标记交接地点。" }, { status: 400 });
+    }
+
+    const db = await getDb();
+    const [analysis] = imageKey
+      ? await db.select({ riskLevel: listingAnalyses.riskLevel })
+          .from(listingAnalyses)
+          .where(and(eq(listingAnalyses.imageKey, imageKey), eq(listingAnalyses.ownerEmail, member.email)))
+          .limit(1)
+      : [];
+    const visual = inferListingIntelligence(
+      title,
+      description,
+      isListingCategory(payload.category) ? payload.category : undefined,
+    );
+    const aiRisk: ListingRiskLevel | null = analysis?.riskLevel === "low" ? "low" : analysis ? "review" : null;
+    const status = listingPublicationStatus({
+      verifiedSeller: member.academicStatus === "verified",
+      isAdmin: member.isAdmin,
+      aiRisk,
+      title,
+      description,
+    });
+    const [created] = await db
+      .insert(listings)
+      .values({
+        id: crypto.randomUUID(),
+        ownerEmail: member.email,
+        ownerName: member.publicName,
+        title,
+        description,
+        price,
+        category: visual.category,
+        place,
+        latitude,
+        longitude,
+        status,
+        icon: visual.icon,
+        tone: visual.tone,
+        imageKey,
+      })
+      .returning();
+
+    return Response.json(
+      {
+        listing: listingToMarketItem(created, member.email, {
+          name: member.publicName,
+          verified: member.academicStatus === "verified",
+        }),
+        message: status === "active"
+          ? member.isAdmin ? "发布成功。" : "AI 低风险审核已通过，商品已公开展示。"
+          : "已提交人工审核，管理员通过后将公开展示。",
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    return Response.json({ error: errorMessage(error) }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  const member = await getMemberAccess();
+  if (!member) return Response.json({ error: "请先登录。" }, { status: 401 });
+
+  const payload = (await request.json()) as { id?: string; status?: string; price?: unknown };
+  if (!payload.id) {
+    return Response.json({ error: "无效的操作。" }, { status: 400 });
+  }
+
+  const db = await getDb();
+  const now = new Date().toISOString();
+  if (payload.price !== undefined) {
+    const nextPrice = typeof payload.price === "number" ? payload.price : Number.NaN;
+    if (!Number.isSafeInteger(nextPrice) || nextPrice < 0 || nextPrice > 100_000_000) {
+      return Response.json({ error: "请输入 0 至 100,000,000 日元之间的整数价格。" }, { status: 400 });
+    }
+    const [current] = await db
+      .select()
+      .from(listings)
+      .where(and(
+        eq(listings.id, payload.id),
+        eq(listings.ownerEmail, member.email),
+        inArray(listings.status, ["pending", "active"]),
+      ))
+      .limit(1);
+    if (!current) {
+      return Response.json({ error: "仅可修改自己待审核或展示中的商品价格。" }, { status: 404 });
+    }
+    const priceUpdate = listingPriceUpdate(current.price, current.originalPrice, nextPrice, now);
+    const [updated] = await db
+      .update(listings)
+      .set({ ...priceUpdate, updatedAt: now })
+      .where(and(
+        eq(listings.id, current.id),
+        eq(listings.ownerEmail, member.email),
+        inArray(listings.status, ["pending", "active"]),
+      ))
+      .returning();
+    return updated
+      ? Response.json({ listing: listingToMarketItem(updated, member.email), reduced: nextPrice < current.price })
+      : Response.json({ error: "商品状态已变化，请刷新后重试。" }, { status: 409 });
+  }
+
+  if (!["sold", "withdrawn"].includes(payload.status ?? "")) {
+    return Response.json({ error: "无效的操作。" }, { status: 400 });
+  }
+  const [updated] = await db
+    .update(listings)
+    .set({ status: payload.status, soldAt: payload.status === "sold" ? now : null, updatedAt: now })
+    .where(and(eq(listings.id, payload.id), eq(listings.ownerEmail, member.email)))
+    .returning();
+
+  return updated
+    ? Response.json({ listing: listingToMarketItem(updated) })
+    : Response.json({ error: "未找到该商品或没有操作权限。" }, { status: 404 });
+}

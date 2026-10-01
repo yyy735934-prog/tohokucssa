@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `users_academic_email_idx` ON `users` (`academic_email`);

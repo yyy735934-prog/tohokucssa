@@ -1,0 +1,231 @@
+"use client";
+
+import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
+import QRCode from "qrcode";
+import { toPng } from "html-to-image";
+
+export type PosterItem = {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  place: string;
+  createdAt: string;
+  imageUrl: string | null;
+  icon: string;
+  status: string;
+};
+
+const posterStatusText: Record<string, string> = {
+  pending: "审核中",
+  sold: "已售出",
+  withdrawn: "已下架",
+  rejected: "未通过",
+};
+
+function posterPublishedAt(value: string) {
+  const date = new Date(value.includes("T") ? value : `${value.replace(" ", "T")}Z`);
+  if (!Number.isFinite(date.getTime())) return "近期发布";
+  return `${new Intl.DateTimeFormat("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    timeZone: "Asia/Tokyo",
+  }).format(date)}发布`;
+}
+
+export default function BatchPoster({
+  title, sellerName, sellerVerified, place, items,
+}: {
+  title: string;
+  sellerName: string;
+  sellerVerified: boolean;
+  place: string;
+  items: PosterItem[];
+}) {
+  const posterRef = useRef<HTMLDivElement>(null);
+  const shareFileRef = useRef<File | null>(null);
+  const [qr, setQr] = useState("");
+  const [posterLogo, setPosterLogo] = useState("");
+  const [downloading, setDownloading] = useState(false);
+  const [preparingShare, setPreparingShare] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareNotice, setShareNotice] = useState("");
+
+  const filename = `${title.replace(/[\\/:*?"<>|]/g, "-") || "东北集市海报"}.png`;
+
+  useEffect(() => {
+    void QRCode.toDataURL(window.location.href, { width: 720, margin: 2, errorCorrectionLevel: "H", color: { dark: "#193d31", light: "#ffffff" } }).then(setQr);
+    void fetch("/icons/pwa-192.png")
+      .then((response) => {
+        if (!response.ok) throw new Error("Logo unavailable");
+        return response.blob();
+      })
+      .then((blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      }))
+      .then(setPosterLogo)
+      .catch(() => setPosterLogo(""));
+  }, []);
+
+  const waitForPosterImages = async () => {
+    if (!posterRef.current) return;
+    const images = Array.from(posterRef.current.querySelectorAll("img"));
+    await Promise.all(images.map(async (image) => {
+      if (!image.complete) await new Promise<void>((resolve) => {
+        image.addEventListener("load", () => resolve(), { once: true });
+        image.addEventListener("error", () => resolve(), { once: true });
+      });
+      try { await image.decode(); } catch { /* a text fallback remains visible */ }
+    }));
+  };
+
+  const createPosterFile = async () => {
+    if (!posterRef.current) throw new Error("Poster is not ready");
+    await document.fonts.ready;
+    await waitForPosterImages();
+    const renderedWidth = posterRef.current.getBoundingClientRect().width;
+    if (!renderedWidth) throw new Error("Poster is not visible");
+    const dataUrl = await toPng(posterRef.current, { pixelRatio: 2400 / renderedWidth, cacheBust: true, backgroundColor: "#f3f0e5" });
+    const blob = await fetch(dataUrl).then((response) => response.blob());
+    return new File([blob], filename, { type: "image/png" });
+  };
+
+  useEffect(() => {
+    if (!qr || !posterLogo) return;
+    let cancelled = false;
+    void Promise.resolve()
+      .then(() => {
+        if (!cancelled) setPreparingShare(true);
+        return createPosterFile();
+      })
+      .then((file) => {
+        if (!cancelled) shareFileRef.current = file;
+      })
+      .catch(() => {
+        if (!cancelled) shareFileRef.current = null;
+      })
+      .finally(() => {
+        if (!cancelled) setPreparingShare(false);
+      });
+    return () => { cancelled = true; };
+  }, [qr, posterLogo]);
+
+  const download = async () => {
+    if (!posterRef.current) return;
+    setDownloading(true);
+    try {
+      const file = shareFileRef.current ?? await createPosterFile();
+      shareFileRef.current = file;
+      const objectUrl = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.download = filename;
+      link.href = objectUrl;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } finally { setDownloading(false); }
+  };
+
+  const copyPosterLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setShareNotice("当前浏览器未开放系统分享面板，海报链接已复制。");
+    } catch {
+      setShareNotice("当前浏览器不支持系统分享，请使用下载按钮保存海报后转发。");
+    }
+  };
+
+  const share = async () => {
+    if (!qr || sharing) return;
+    if (!navigator.share) {
+      await copyPosterLink();
+      return;
+    }
+    setSharing(true);
+    setShareNotice("");
+    const file = shareFileRef.current;
+    const shareTitle = `${title}｜东北集市`;
+    const shareText = `${title}，扫码查看商品实时状态与详情。`;
+    try {
+      if (file && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file] });
+      } else {
+        await navigator.share({ title: shareTitle, text: shareText, url: window.location.href });
+        setShareNotice("此浏览器不支持直接分享 PNG，已改用微信可读取的网页卡片；也可先下载海报再发送图片。");
+      }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) await copyPosterLink();
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const sharePage = async () => {
+    setShareNotice("");
+    try {
+      if (navigator.share) await navigator.share({ url: window.location.href });
+      else await copyPosterLink();
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) await copyPosterLink();
+    }
+  };
+
+  return (
+    <div className="poster-panel">
+      <div className="batch-poster-scale">
+        <div className={`batch-poster poster-count-${items.length}`} ref={posterRef}>
+          <div className="poster-topline"><div className="poster-logo">{posterLogo ? <img src={posterLogo} alt="" width={40} height={40} /> : <span className="brand-mark">东</span>}<b>东北集市</b></div><span>TOHOKU STUDENT MARKET</span></div>
+          <div className="poster-seller"><b>{sellerName}</b>{sellerVerified && <em>✓ 学友身份已认证</em>}<span>⌖ {place}</span></div>
+          <div className="poster-item-grid">
+            {items.map((item) => (
+              <article key={item.id}>
+                <div className="poster-item-photo">
+                  {item.imageUrl ? <Image src={item.imageUrl} alt="" fill sizes="330px" unoptimized /> : <span>{item.icon}</span>}
+                  {item.status !== "active" && <small>{posterStatusText[item.status] ?? "暂不可用"}</small>}
+                </div>
+                <h2>{item.title}</h2>
+                <strong>{item.price === 0 ? "免费" : `¥${item.price.toLocaleString()}`}</strong>
+                <p title={item.description}><span>成色</span>{item.description}</p>
+                <div className="poster-item-meta">
+                  <span title={item.place}>⌖ {item.place}</span>
+                  <time dateTime={item.createdAt}>{posterPublishedAt(item.createdAt)}</time>
+                </div>
+              </article>
+            ))}
+          </div>
+          <footer>
+            <div><b>扫码查看实时状态与商品详情</b><span>商品状态以扫码页面为准</span></div>
+            {qr ? <Image src={qr} alt="批次网页二维码" width={360} height={360} unoptimized /> : <div className="poster-qr-placeholder" />}
+          </footer>
+        </div>
+      </div>
+      <div className="poster-actions">
+        <button className="poster-download" type="button" disabled={!qr || downloading} onClick={() => void download()}>
+          {downloading ? "正在生成高清海报…" : "↓ 下载高清海报 PNG"}
+        </button>
+        <button
+          className="poster-share"
+          type="button"
+          disabled={!qr || preparingShare || sharing}
+          aria-label="分享海报图片"
+          title="分享海报图片"
+          onClick={() => void share()}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M12 16V3m0 0L7.5 7.5M12 3l4.5 4.5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+          </svg>
+          <span>{preparingShare ? "准备中" : sharing ? "分享中" : "分享海报"}</span>
+        </button>
+        <button className="poster-share poster-card-share" type="button" aria-label="分享网页快捷卡片" title="分享网页快捷卡片" onClick={() => void sharePage()}>
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 5h14v14H5zM8 9h8M8 12h6M8 15h4" /></svg>
+          <span>分享网页卡片</span>
+        </button>
+      </div>
+      {shareNotice && <div className="poster-share-notice" role="status">{shareNotice}</div>}
+      <p>审核期间也可以下载转发；网页会同步显示最新审核和售出状态。</p>
+    </div>
+  );
+}
