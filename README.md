@@ -52,3 +52,5 @@ Worker 用到的密钥保存在 Cloudflare（`wrangler secret`），不在仓库
 | `services/feature/emergency-newcomer` | 协作者任务分支：灾害应急与新生指南 |
 
 `events/` 的 main 与 `events.tohokucssa.org` 线上版本一致（原仓库 `6b20f97`）。`services/COLLABORATION.md` 中的克隆命令和分支名已改为本仓库。
+
+旧仓库的 6 个 Pull Request（标题、作者、描述、对应提交）存档在 [`docs/pr-archive.md`](docs/pr-archive.md)。
