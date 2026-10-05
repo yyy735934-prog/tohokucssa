@@ -23,6 +23,6 @@
     "@vitejs/plugin-vue": "^5.2.4",
     "hono": "^4.7.10",
     "vite": "^6.3.5",
-    "wrangler": "^4.14.0"
+    "wrangler": "^4.147.0"
   }
 }
