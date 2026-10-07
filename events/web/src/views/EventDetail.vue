@@ -122,10 +122,12 @@
         <p v-if="consentNudge && !agreed" class="consent-hint">请先阅读《隐私政策》并勾选同意，再提交报名</p>
 
         <p v-if="formError" class="error">{{ formError }}</p>
-        <button type="submit" class="btn btn-primary submit-btn" :disabled="submitting"
-          :title="agreed ? '' : '请先勾选同意《隐私政策》'">
-          {{ submitting ? '提交中…' : '提交报名' }}
-        </button>
+        <div class="submit-bar">
+          <button type="submit" class="btn btn-primary" :disabled="submitting"
+            :title="agreed ? '' : '请先勾选同意《隐私政策》'">
+            {{ submitting ? '提交中…' : '提交报名' }}
+          </button>
+        </div>
       </form>
 
       <div v-else-if="isLocked" class="card result-card">
@@ -303,7 +305,13 @@ async function doSignup() {
 }
 .consent-row.consent-nudge input[type="checkbox"] { outline: 2px solid var(--c-danger); outline-offset: 1px; }
 .consent-hint { color: var(--c-danger); font-size: 12px; margin-top: 6px; }
-.submit-btn { margin-top: 16px; }
+/* 填表时按钮始终停在屏幕底部，滚到表单末尾时回到原位 */
+.submit-bar {
+  position: sticky; bottom: 0; z-index: 10;
+  margin: 16px -20px -20px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  background: var(--c-surface); border-top: 1px solid var(--c-border);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
 @keyframes consent-shake {
   0%, 100% { transform: translateX(0); }
   20%, 60% { transform: translateX(-4px); }
