@@ -122,7 +122,7 @@
         <p v-if="consentNudge && !agreed" class="consent-hint">请先阅读《隐私政策》并勾选同意，再提交报名</p>
 
         <p v-if="formError" class="error">{{ formError }}</p>
-        <button type="submit" class="btn btn-primary" :class="{ 'is-pending': !agreed }" :disabled="submitting"
+        <button type="submit" class="btn btn-primary submit-btn" :disabled="submitting"
           :title="agreed ? '' : '请先勾选同意《隐私政策》'">
           {{ submitting ? '提交中…' : '提交报名' }}
         </button>
@@ -303,12 +303,12 @@ async function doSignup() {
 }
 .consent-row.consent-nudge input[type="checkbox"] { outline: 2px solid var(--c-danger); outline-offset: 1px; }
 .consent-hint { color: var(--c-danger); font-size: 12px; margin-top: 6px; }
+.submit-btn { margin-top: 16px; }
 @keyframes consent-shake {
   0%, 100% { transform: translateX(0); }
   20%, 60% { transform: translateX(-4px); }
   40%, 80% { transform: translateX(4px); }
 }
-.btn-primary.is-pending { background: var(--c-border); color: var(--c-text-3); }
 .result-card { text-align: center; padding: 32px 20px; }
 .check-icon {
   width: 56px; height: 56px; background: var(--c-success-bg); color: var(--c-success);
