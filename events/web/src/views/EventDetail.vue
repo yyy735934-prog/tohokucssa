@@ -115,13 +115,15 @@
           <input v-else v-model="extra[f.key]" :required="f.required" :placeholder="f.placeholder || ''" />
         </div>
 
-        <label class="consent-row">
-          <input type="checkbox" v-model="agreed" />
+        <label ref="consentRow" class="consent-row" :class="{ 'consent-nudge': consentNudge && !agreed }">
+          <input ref="consentBox" type="checkbox" v-model="agreed" />
           <span>我已阅读并同意<router-link to="/privacy" target="_blank">《隐私政策》</router-link></span>
         </label>
+        <p v-if="consentNudge && !agreed" class="consent-hint">请先阅读《隐私政策》并勾选同意，再提交报名</p>
 
         <p v-if="formError" class="error">{{ formError }}</p>
-        <button type="submit" class="btn btn-primary" :disabled="submitting || !agreed">
+        <button type="submit" class="btn btn-primary" :class="{ 'is-pending': !agreed }" :disabled="submitting"
+          :title="agreed ? '' : '请先勾选同意《隐私政策》'">
           {{ submitting ? '提交中…' : '提交报名' }}
         </button>
       </form>
@@ -149,7 +151,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api.js'
 import { auth } from '../auth.js'
@@ -171,6 +173,9 @@ const done = ref(false)
 const signupToken = ref('')
 const externalRedirect = ref(null)
 const agreed = ref(false)
+const consentNudge = ref(false)
+const consentRow = ref(null)
+const consentBox = ref(null)
 const chatToken = ref(localStorage.getItem(`event_chat_access_${route.params.id}`) || '')
 const chatEntries = computed(() => chatToken.value ? [{
   eventId: Number(route.params.id),
@@ -228,7 +233,17 @@ onMounted(async () => {
   }
 })
 
+async function remindConsent() {
+  // 先清掉再加回，连续点击时抖动动画能重新播放
+  consentNudge.value = false
+  await nextTick()
+  consentNudge.value = true
+  consentRow.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  consentBox.value?.focus({ preventScroll: true })
+}
+
 async function doSignup() {
+  if (!agreed.value) return remindConsent()
   formError.value = ''
   submitting.value = true
   try {
@@ -281,6 +296,19 @@ async function doSignup() {
 }
 .consent-row input[type="checkbox"] { width: 16px; height: 16px; margin: 0; flex-shrink: 0; cursor: pointer; }
 .consent-row a { color: var(--c-primary); text-decoration: underline; }
+.consent-row.consent-nudge {
+  color: var(--c-danger); padding: 8px 10px; margin-left: -10px; margin-right: -10px;
+  background: var(--c-danger-bg); border-radius: var(--radius-sm);
+  animation: consent-shake .4s;
+}
+.consent-row.consent-nudge input[type="checkbox"] { outline: 2px solid var(--c-danger); outline-offset: 1px; }
+.consent-hint { color: var(--c-danger); font-size: 12px; margin-top: 6px; }
+@keyframes consent-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+.btn-primary.is-pending { background: var(--c-border); color: var(--c-text-3); }
 .result-card { text-align: center; padding: 32px 20px; }
 .check-icon {
   width: 56px; height: 56px; background: var(--c-success-bg); color: var(--c-success);
