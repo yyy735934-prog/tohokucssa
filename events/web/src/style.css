@@ -71,6 +71,11 @@ input, textarea, select {
   -webkit-appearance: none;
 }
 input:focus, textarea:focus, select:focus { border-color: var(--c-primary); }
+/* 上面的 appearance: none 会去掉复选框/单选框的勾选标记，这里恢复原生外观 */
+input[type="checkbox"], input[type="radio"] {
+  width: auto; padding: 0; border: none; border-radius: 0; background: none;
+  -webkit-appearance: auto; appearance: auto; accent-color: var(--c-primary);
+}
 
 .label { display: block; font-size: 13px; font-weight: 500; color: var(--c-text-2); margin-bottom: 6px; }
 .field { margin-bottom: 16px; }
