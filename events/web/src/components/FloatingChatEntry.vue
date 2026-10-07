@@ -16,9 +16,10 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { CometChat } from '@cometchat/chat-sdk-javascript'
-import { CometChatUIKit, UIKitSettingsBuilder } from '@cometchat/chat-uikit-vue'
 import { api } from '../api.js'
+
+// CometChat 约 2.6 MB，只在确实有聊天入口时才加载，避免拖慢首屏
+let CometChat = null
 
 const props = defineProps({
   entries: { type: Array, required: true },
@@ -41,6 +42,12 @@ async function connect() {
         chat_access_token: entry.token || undefined,
       })
       if (!resolved.length) {
+        const [sdk, uikit] = await Promise.all([
+          import('@cometchat/chat-sdk-javascript'),
+          import('@cometchat/chat-uikit-vue'),
+        ])
+        CometChat = sdk.CometChat
+        const { CometChatUIKit, UIKitSettingsBuilder } = uikit
         const settings = new UIKitSettingsBuilder()
           .setAppId(data.app_id)
           .setRegion(data.region)
@@ -75,7 +82,7 @@ function increaseUnread(message) {
 }
 
 onMounted(connect)
-onBeforeUnmount(() => CometChat.removeMessageListener(listenerId))
+onBeforeUnmount(() => CometChat?.removeMessageListener(listenerId))
 </script>
 
 <style scoped>

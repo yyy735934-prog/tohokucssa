@@ -6,10 +6,24 @@
   <meta name="format-detection" content="telephone=no">
   <title>学友会活动平台</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- 非阻塞加载：Google 字体连不上时页面照常显示，只是退回系统字体 -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 </head>
 <body>
   <div id="app"></div>
+  <div id="boot-hint" hidden style="margin:40px 20px;padding:16px;border-radius:12px;background:#fff;color:#3a3a3c;font-size:14px;line-height:1.7;font-family:-apple-system,sans-serif">
+    页面加载较慢。<span id="boot-hint-wx" hidden>如果一直打不开，请点击右上角「···」，选择「在浏览器打开」。</span><span id="boot-hint-other" hidden>如果一直打不开，请检查网络后刷新页面。</span>
+  </div>
+  <script>
+    // 10 秒后应用仍未渲染（脚本加载失败或网络太慢）时给出提示
+    setTimeout(function () {
+      var app = document.getElementById('app')
+      if (app && app.children.length) return
+      var wx = /MicroMessenger/i.test(navigator.userAgent)
+      document.getElementById(wx ? 'boot-hint-wx' : 'boot-hint-other').hidden = false
+      document.getElementById('boot-hint').hidden = false
+    }, 10000)
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

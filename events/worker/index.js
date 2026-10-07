@@ -35,24 +35,26 @@ app.route('/api/chat', chat)
 
 app.all('/api/*', (c) => c.json({ ok: false, message: 'Not Found' }, 404))
 
-// WeChat / bot OG meta for shared event links
+// Shared event links: put the event title / OG meta into the SPA page itself.
+// Do not branch on User-Agent: WeChat's in-app browser (MicroMessenger) is a
+// real user, and serving it a meta-only page left it blank after scanning a poster.
 app.get('/e/:id', async (c) => {
-  const ua = c.req.header('user-agent') || ''
-  const isBot = /bot|crawl|spider|MicroMessenger|WhatsApp|Telegram|facebook|twitter|slack/i.test(ua)
-  if (isBot) {
-    const event = await c.env.DB.prepare('SELECT title, event_date, location FROM events WHERE id = ?')
+  const res = await servePublicSPA(c)
+  let event = null
+  try {
+    event = await c.env.DB.prepare('SELECT title, event_date, location FROM events WHERE id = ?')
       .bind(Number(c.req.param('id'))).first()
-    if (event) {
-      const desc = [event.event_date, event.location].filter(Boolean).join(' · ')
-      return c.html(`<!DOCTYPE html><html><head>
-<meta charset="utf-8"><title>${esc(event.title)}</title>
-<meta property="og:title" content="${esc(event.title)}">
+  } catch {}
+  if (!event || !res.ok) return res
+  const desc = [event.event_date, event.location].filter(Boolean).join(' · ')
+  return new HTMLRewriter()
+    .on('title', { element(el) { el.setInnerContent(event.title) } })
+    .on('head', { element(el) {
+      el.append(`<meta property="og:title" content="${esc(event.title)}">
 <meta property="og:description" content="${esc(desc)}">
-<meta property="og:type" content="website">
-</head><body></body></html>`)
-    }
-  }
-  return servePublicSPA(c)
+<meta property="og:type" content="website">`, { html: true })
+    } })
+    .transform(res)
 })
 
 app.get('/qr/:token', (c) => servePublicSPA(c))
